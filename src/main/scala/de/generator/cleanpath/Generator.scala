@@ -53,7 +53,7 @@ object NadeefCleanPathRulesGenerator extends App {
   val template =
     s"""|{
         |    "source" : {
-        |        "type" : "tsv",
+        |        "type" : "csv",
         |        "file" : ["$noisyData"]
         |    },
         |    "rule" : [
