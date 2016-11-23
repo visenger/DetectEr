@@ -18,9 +18,7 @@
     <orderEntry type="library" name="Maven: org.scala-lang:scala-reflect:2.11.8" level="project" />
     <orderEntry type="library" name="Maven: org.scala-lang.modules:scala-xml_2.11:1.0.4" level="project" />
     <orderEntry type="library" name="Maven: org.scala-lang.modules:scala-parser-combinators_2.11:1.0.4" level="project" />
-    <orderEntry type="library" name="Maven: com.typesafe:config:1.2.1" level="project" />
-    <orderEntry type="library" name="Maven: org.scalatest:scalatest_2.10:3.0.0-M12" level="project" />
-    <orderEntry type="library" name="Maven: org.scalactic:scalactic_2.10:3.0.0-M12" level="project" />
+    <orderEntry type="library" name="Maven: com.typesafe:config:1.3.1" level="project" />
     <orderEntry type="library" name="Maven: org.apache.spark:spark-core_2.11:2.0.2" level="project" />
     <orderEntry type="library" name="Maven: org.apache.avro:avro-mapred:hadoop2:1.7.7" level="project" />
     <orderEntry type="library" name="Maven: org.apache.avro:avro-ipc:1.7.7" level="project" />
@@ -148,5 +146,10 @@
     <orderEntry type="library" name="Maven: org.apache.parquet:parquet-hadoop:1.7.0" level="project" />
     <orderEntry type="library" name="Maven: org.apache.parquet:parquet-format:2.3.0-incubating" level="project" />
     <orderEntry type="library" name="Maven: org.apache.parquet:parquet-jackson:1.7.0" level="project" />
+    <orderEntry type="library" name="Maven: org.postgresql:postgresql:9.4-1200-jdbc41" level="project" />
+    <orderEntry type="library" scope="RUNTIME" name="Maven: com.github.dblock.waffle:waffle-jna:1.7" level="project" />
+    <orderEntry type="library" scope="RUNTIME" name="Maven: net.java.dev.jna:jna:4.1.0" level="project" />
+    <orderEntry type="library" scope="RUNTIME" name="Maven: net.java.dev.jna:jna-platform:4.1.0" level="project" />
+    <orderEntry type="library" scope="RUNTIME" name="Maven: org.slf4j:slf4j-simple:1.7.7" level="project" />
   </component>
 </module>

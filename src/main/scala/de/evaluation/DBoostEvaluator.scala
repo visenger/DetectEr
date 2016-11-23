@@ -24,18 +24,21 @@ case class BlackOak(RecID: String,
 
 case class Eval(precision: Double, recall: Double, f1: Double)
 
-object Evaluator {
+object EvaluatorDBoost {
 
   def main(args: Array[String]): Unit = {
 
     val cleanData = "data.BlackOak.clean-data-path"
     val dirtyData = "data.BlackOak.dirty-data-path"
 
+    val config: Config = ConfigFactory.load()
+
     val sparkSession: SparkSession = SparkSession
       .builder()
       .master("local[4]")
       .appName("F1")
-      .config("spark.local.ip", "192.168.253.138")
+      .config("spark.local.ip",
+        config.getString("spark.config.local.ip.value"))
       .config("spark.driver.memory", "10g")
       .config("spark.executor.memory", "8g")
       .getOrCreate()
