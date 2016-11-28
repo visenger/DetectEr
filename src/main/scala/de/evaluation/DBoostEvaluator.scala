@@ -64,18 +64,18 @@ object EvaluatorDBoost {
     val goldStandard: Dataset[String] = getGoldStandard(sparkSession, dirtyBlackOakDF, cleanBlackOakDF)
     //goldStandard.show(12)
 
-    val pathHist = ConfigFactory.load().getString("dboost.BlackOak.result.hist")
-    val outliers: Dataset[String] = getOutliers(sparkSession, pathHist)
-
-    val pathGauss = ConfigFactory.load().getString("dboost.BlackOak.result.gaus")
-    val outliersG: Dataset[String] = getOutliers(sparkSession, pathGauss)
-
-    /* compute F1 measure*/
-    val resultH = evaluateResult(goldStandard, outliers)
-    val resultG: Eval = evaluateResult(goldStandard, outliersG)
-
-    println(s"Result dBoost hist 0.9 0.01: precision= ${resultH.precision} , recall = ${resultH.recall} , F1= ${resultH.f1} ")
-    println(s"Result dBoost gaus 3: precision = ${resultG.precision}, recall = ${resultG.recall}, F1= ${resultG.f1}")
+    //    val pathHist = ConfigFactory.load().getString("dboost.BlackOak.result.hist")
+    //    val outliers: Dataset[String] = getOutliers(sparkSession, pathHist)
+    //
+    //    val pathGauss = ConfigFactory.load().getString("dboost.BlackOak.result.gaus")
+    //    val outliersG: Dataset[String] = getOutliers(sparkSession, pathGauss)
+    //
+    //    /* compute F1 measure*/
+    //    val resultH = evaluateResult(goldStandard, outliers)
+    //    val resultG: Eval = evaluateResult(goldStandard, outliersG)
+    //
+    //    println(s"Result dBoost hist 0.9 0.01: precision= ${resultH.precision} , recall = ${resultH.recall} , F1= ${resultH.f1} ")
+    //    println(s"Result dBoost gaus 3: precision = ${resultG.precision}, recall = ${resultG.recall}, F1= ${resultG.f1}")
 
     sparkSession.stop()
   }
@@ -114,6 +114,10 @@ object EvaluatorDBoost {
           || cleanBlackOakDF.col("SSN") =!= dirtyBlackOakDF.col("SSN")
           || cleanBlackOakDF.col("DOB") =!= dirtyBlackOakDF.col("DOB"))
 
+    val columns = join.columns
+    columns.foreach(println)
+    val dtypes = join.dtypes
+    dtypes.foreach(println)
     //join.show(50)
 
     val goldStd: DataFrame = join.select(cleanBlackOakDF.col("RecID"))
