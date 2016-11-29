@@ -1,6 +1,4 @@
-package de.evaluation
-
-import java.util
+package de.evaluation.tools.dboost
 
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
@@ -9,18 +7,18 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
   * Created by visenger on 16/11/16.
   */
 
-case class BlackOak(RecID: String,
-                    FirstName: String,
-                    MiddleName: String,
-                    LastName: String,
-                    Address: String,
-                    City: String,
-                    State: String,
-                    ZIP: String,
-                    POBox: String,
-                    POCityStateZip: String,
-                    SSN: String,
-                    DOB: String)
+//case class BlackOak(RecID: String,
+//                    FirstName: String,
+//                    MiddleName: String,
+//                    LastName: String,
+//                    Address: String,
+//                    City: String,
+//                    State: String,
+//                    ZIP: String,
+//                    POBox: String,
+//                    POCityStateZip: String,
+//                    SSN: String,
+//                    DOB: String)
 
 case class Eval(precision: Double, recall: Double, f1: Double)
 
@@ -42,9 +40,6 @@ object EvaluatorDBoost {
       .config("spark.driver.memory", "10g")
       .config("spark.executor.memory", "8g")
       .getOrCreate()
-
-
-    import sparkSession.implicits._
 
     val schema = Seq("RecID", "FirstName", "MiddleName", "LastName", "Address", "City", "State", "ZIP", "POBox", "POCityStateZip", "SSN", "DOB")
 

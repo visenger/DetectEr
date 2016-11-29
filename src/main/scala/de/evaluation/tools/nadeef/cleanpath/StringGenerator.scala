@@ -1,4 +1,4 @@
-package de.generator.cleanpath
+package de.evaluation.tools.nadeef.cleanpath
 
 
 object StringGenerator extends App {

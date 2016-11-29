@@ -1,15 +1,16 @@
-package de.evaluation
+package de.evaluation.tools.nadeef
 
 import java.util.Properties
 
 import com.typesafe.config.ConfigFactory
+import de.evaluation.data.blackoak.BlackOakSchema
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 
 /**
   * Created by visenger on 23/11/16.
   */
-class NadeefEvaluator {
+class NadeefResultsWriter {
 
   val conf = ConfigFactory.load()
 
@@ -47,7 +48,7 @@ class NadeefEvaluator {
     val joinedTabs: Dataset[(Row, Row)] = violationColumns
       .joinWith(dirtyTabColumns, violationColumns.col("tupleid") === dirtyTabColumns.col("tid"))
 
-    joinedTabs.show(3)
+    //joinedTabs.show(3)
 
 
     val grouped: Dataset[(Int, String, String)] = joinedTabs.map(rows => {
@@ -56,50 +57,34 @@ class NadeefEvaluator {
 
       (violationVals.getAs[Int]("tupleid"), violationVals.getAs[String]("attribute"), dirtyVals.getAs[String]("recid"))
     })
-    grouped.show(3)
+    //grouped.show(3)
 
     val groupedByTupleId: RDD[(String, Iterable[(Int, String, String)])] = grouped.rdd.groupBy(row => row._3)
 
-    val dirtyRecIdAndAttributes: RDD[String] = groupedByTupleId.map(entry => {
+    val dirtyRecIdAndAttributes: RDD[String] = groupedByTupleId.flatMap(entry => {
       val recid = entry._1
-      val attributes: List[String] = entry._2.map(_._2).toList
-      val attsToString = attributes.mkString(",")
 
-      s"$recid,$attsToString"
+      val attributes: List[String] = entry._2.map(_._2).toList
+      val idx: List[Int] = BlackOakSchema.getIndexesByAttrNames(attributes)
+      val flattenIdx: List[String] = idx.map(id => s"$recid,$id")
+
+      flattenIdx
     })
 
 
-
-
-
-
     val f1: Dataset[String] = dirtyRecIdAndAttributes.toDS()
-    f1.show(34)
 
-
-    //violation.show(2)
-
-    val dirtyDataSchema = dirtyTable.schema
-
-    dirtyDataSchema.fields
-      .foreach(f => println(s"field name: ${f.name}, data type: ${f.dataType}, metadata= ${f.metadata}"))
-
-    println()
-    val schema = violation.schema
-
-    schema.fields
-      .foreach(f => println(s"field name: ${f.name}, data type: ${f.dataType}, metadata= ${f.metadata}"))
-
+    f1.write.text(conf.getString("output.nadeef.detect.result"))
 
     sparkSession.stop()
   }
 
 }
 
-object NadeefEvaluator {
+object NadeefResultsWriter {
 
   def main(args: Array[String]): Unit = {
-    new NadeefEvaluator().evaluate()
+    new NadeefResultsWriter().evaluate()
   }
 
 }
