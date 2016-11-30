@@ -1,4 +1,4 @@
-package de.evaluation.tools.dboost
+package de.evaluation.tools.outliers.dboost
 
 import com.google.common.base.Strings
 import com.typesafe.config.{Config, ConfigFactory}

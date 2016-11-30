@@ -1,4 +1,4 @@
-package de.evaluation.tools.nadeef
+package de.evaluation.tools.ruleviolations.nadeef
 
 import java.util.Properties
 

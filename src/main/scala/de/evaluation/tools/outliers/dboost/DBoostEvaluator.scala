@@ -1,4 +1,4 @@
-package de.evaluation.tools.dboost
+package de.evaluation.tools.outliers.dboost
 
 import com.typesafe.config.{Config, ConfigFactory}
 import de.evaluation.f1.Eval

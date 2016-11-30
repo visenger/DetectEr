@@ -1,4 +1,4 @@
-package de.evaluation.tools.nadeef.cleanpath
+package de.evaluation.tools.ruleviolations.nadeef.cleanpath
 
 /**
   * Created by visenger on 22/11/16.
