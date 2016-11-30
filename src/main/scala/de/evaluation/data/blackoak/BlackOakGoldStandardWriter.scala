@@ -49,7 +49,6 @@ class BlackOakGoldStandardWriter {
   val conf: Config = ConfigFactory.load()
 
 
-  //def main(args: Array[String]): Unit  = {
   def createGoldStandard(): Unit = {
 
     val sparkSession: SparkSession = SparkSession

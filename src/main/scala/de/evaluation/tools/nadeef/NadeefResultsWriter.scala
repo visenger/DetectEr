@@ -74,7 +74,7 @@ class NadeefResultsWriter {
 
     val f1: Dataset[String] = dirtyRecIdAndAttributes.toDS()
 
-    f1.write.text(conf.getString("output.nadeef.detect.result"))
+    f1.write.text(conf.getString("output.nadeef.detect.result.folder"))
 
     sparkSession.stop()
   }

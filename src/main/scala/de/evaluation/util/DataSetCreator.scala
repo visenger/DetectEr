@@ -23,6 +23,17 @@ object DataSetCreator {
     data
   }
 
+  def createDataSetNoHeader(sparkSession: SparkSession, dataPathStr: String, schema: String*): DataFrame = {
+
+    val config: Config = ConfigFactory.load()
+    val dataPath: String = config.getString(dataPathStr)
+
+    val df: DataFrame = sparkSession.read.csv(dataPath)
+    val namedDF: DataFrame = df.toDF(schema: _*)
+    namedDF
+  }
+
+
   def createDataSetWithoutFirstTwo(sparkSession: SparkSession, dataPathStr: String, schema: String*): DataFrame = {
     import sys.process._
 

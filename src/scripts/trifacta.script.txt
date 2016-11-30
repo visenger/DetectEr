@@ -1,0 +1,5 @@
+splitrows col: column1 on: '\r' quote: '\"'
+split col: column1 on: ',' limit: 11 quote: '\"'
+header
+delete row: mismatched(ZIP_varchar_55, ['Integer'])
+delete row: mismatched(SSN_varchar_255, ['SSN'])

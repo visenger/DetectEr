@@ -1,8 +1,9 @@
 package de.evaluation.tools.dboost
 
+import com.google.common.base.Strings
 import com.typesafe.config.{Config, ConfigFactory}
 import de.evaluation.data.blackoak.BlackOakSchema
-import de.evaluation.util.DataSetCreator
+import de.evaluation.util.{DataSetCreator, SparkSessionCreator}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 
@@ -14,8 +15,10 @@ class DBoostResultWriter {
   val conf: Config = ConfigFactory.load()
 
   def writeResults(): Unit = {
-    val sparkSession: SparkSession = createSession()
-    val path = "dboost.BlackOak.result.dir"
+    val sparkSession: SparkSession = SparkSessionCreator.createSession("DBOOST")
+    //createSession()
+    val path = "dboost.BlackOak.result.gaus"
+    val outputFolder = "output.dboost.gaus.result.folder"
 
     val resultDataSet: DataFrame = DataSetCreator
       .createDataSet(
@@ -38,15 +41,31 @@ class DBoostResultWriter {
 
     val outliers: RDD[String] = filter.rdd.flatMap(row => {
       val vals: Map[String, String] = row.getValuesMap[String](BlackOakSchema.schema)
-      val filtered = vals.filter(a => !a._2.isEmpty && a._2.contains("~"))
+      val filtered = vals.filter(a => !Strings.isNullOrEmpty(a._2) && a._2.contains("~"))
       val idx: List[Int] = BlackOakSchema.getIndexesByAttrNames(filtered.keySet.toList)
       val recID: String = row.getAs[String]("RecID").trim
       val outliersLines: List[String] = idx.map(i => s"$recID,$i")
       outliersLines
     })
 
+    val outliersDS: Dataset[String] = outliers.filter(!_.isEmpty).toDS()
+    outliersDS.show(3)
 
-    outliers.toDF().show(22)
+    //todo: write results to folder
+
+
+    outliersDS.write.text(conf.getString(outputFolder))
+    //.coalesce(1)
+    //      .write.format("com.databricks.spark.csv")
+    //      .save(conf.getString("output.dboost.result.folder"))
+
+
+    /*
+    * // place all data in a single partition
+   .coalesce(1)
+   .write.format("com.databricks.spark.csv")
+   .save("mydata.csv")
+    * */
 
 
     sparkSession.stop()
@@ -69,10 +88,7 @@ class DBoostResultWriter {
 }
 
 object DBoostResultWriter {
-
-
   def main(args: Array[String]): Unit = {
-
     new DBoostResultWriter().writeResults()
   }
 

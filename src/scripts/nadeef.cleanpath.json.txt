@@ -1,0 +1,207 @@
+{  "source" : {
+    "type" : "csv",
+    "file" : ["/Users/visenger/research/datasets/BlackOak/Archive/inputDB.csv"]
+  },
+  "rule" : [
+    {
+      "name" : "FD1",
+      "type" : "fd",
+      "value" :  [" RecID|Address "]
+    },
+    {
+      "name" : "FD2",
+      "type" : "fd",
+      "value" :  [" RecID|SSN "]
+    },
+    {
+      "name" : "FD3",
+      "type" : "fd",
+      "value" :  [" RecID|LastName "]
+    },
+    {
+      "name" : "FD4",
+      "type" : "fd",
+      "value" :  [" RecID|DOB "]
+    },
+    {
+      "name" : "FD5",
+      "type" : "fd",
+      "value" :  [" RecID|POBox "]
+    },
+    {
+      "name" : "FD6",
+      "type" : "fd",
+      "value" :  [" RecID|City "]
+    },
+    {
+      "name" : "FD7",
+      "type" : "fd",
+      "value" :  [" RecID|FirstName "]
+    },
+    {
+      "name" : "FD8",
+      "type" : "fd",
+      "value" :  [" RecID|POCityStateZip "]
+    },
+    {
+      "name" : "FD9",
+      "type" : "fd",
+      "value" :  [" RecID|ZIP "]
+    },
+    {
+      "name" : "FD10",
+      "type" : "fd",
+      "value" :  [" RecID|MiddleName "]
+    },
+    {
+      "name" : "FD11",
+      "type" : "fd",
+      "value" :  [" RecID|State "]
+    },
+    {
+      "name" : "FD12",
+      "type" : "fd",
+      "value" :  [" Address|State "]
+    },
+    {
+      "name" : "FD13",
+      "type" : "fd",
+      "value" :  [" ZIP|State "]
+    },
+    {
+      "name" : "FD14",
+      "type" : "fd",
+      "value" :  [" Address,LastName,POBox,SSN|POCityStateZip "]
+    },
+    {
+      "name" : "FD15",
+      "type" : "fd",
+      "value" :  [" Address,LastName,MiddleName,SSN|POCityStateZip "]
+    },
+    {
+      "name" : "FD16",
+      "type" : "fd",
+      "value" :  [" Address,FirstName,LastName,SSN|POBox "]
+    },
+    {
+      "name" : "FD17",
+      "type" : "fd",
+      "value" :  [" Address,LastName,POCityStateZip,SSN|POBox "]
+    },
+    {
+      "name" : "FD18",
+      "type" : "fd",
+      "value" :  [" Address,LastName,MiddleName,SSN|POBox "]
+    },
+    {
+      "name" : "FD19",
+      "type" : "fd",
+      "value" :  [" Address,City,DOB,POBox,SSN|POCityStateZip "]
+    },
+    {
+      "name" : "FD20",
+      "type" : "fd",
+      "value" :  [" Address,MiddleName,POBox,SSN|POCityStateZip "]
+    },
+    {
+      "name" : "FD21",
+      "type" : "fd",
+      "value" :  [" Address,FirstName,POCityStateZip,SSN|POBox "]
+    },
+    {
+      "name" : "FD22",
+      "type" : "fd",
+      "value" :  [" Address,FirstName,MiddleName,SSN|POBox "]
+    },
+    {
+      "name" : "FD23",
+      "type" : "fd",
+      "value" :  [" Address,FirstName,MiddleName,SSN|POCityStateZip "]
+    },
+    {
+      "name" : "FD24",
+      "type" : "fd",
+      "value" :  [" Address,DOB,LastName,POBox|POCityStateZip "]
+    },
+    {
+      "name" : "FD25",
+      "type" : "fd",
+      "value" :  [" Address,City,DOB,LastName,MiddleName,POCityStateZip|POBox "]
+    },
+    {
+      "name" : "FD26",
+      "type" : "fd",
+      "value" :  [" Address,DOB,FirstName,LastName|POBox "]
+    },
+    {
+      "name" : "FD27",
+      "type" : "fd",
+      "value" :  [" Address,LastName,MiddleName,POBox|POCityStateZip "]
+    },
+    {
+      "name" : "FD28",
+      "type" : "fd",
+      "value" :  [" Address,City,FirstName,LastName|POBox "]
+    },
+    {
+      "name" : "FD29",
+      "type" : "fd",
+      "value" :  [" Address,FirstName,LastName|POCityStateZip "]
+    },
+    {
+      "name" : "FD30",
+      "type" : "fd",
+      "value" :  [" Address,DOB,FirstName,POCityStateZip|POBox "]
+    },
+    {
+      "name" : "FD31",
+      "type" : "fd",
+      "value" :  [" Address,DOB,FirstName,MiddleName|POBox "]
+    },
+    {
+      "name" : "FD32",
+      "type" : "fd",
+      "value" :  [" Address,DOB,FirstName,MiddleName|POCityStateZip "]
+    },
+    {
+      "name" : "FD33",
+      "type" : "fd",
+      "value" :  [" Address,FirstName,POBox|POCityStateZip "]
+    },
+    {
+      "name" : "FD34",
+      "type" : "fd",
+      "value" :  [" Address,City,FirstName,POCityStateZip|POBox "]
+    },
+    {
+      "name" : "FD35",
+      "type" : "fd",
+      "value" :  [" City,DOB,FirstName,LastName,POCityStateZip,SSN|POBox "]
+    },
+    {
+      "name" : "FD36",
+      "type" : "fd",
+      "value" :  [" DOB,FirstName,LastName,POCityStateZip,SSN,ZIP|POBox "]
+    },
+    {
+      "name" : "FD37",
+      "type" : "fd",
+      "value" :  [" DOB,LastName,MiddleName,POCityStateZip,SSN,ZIP|POBox "]
+    },
+    {
+      "name" : "FD38",
+      "type" : "fd",
+      "value" :  [" FirstName,LastName,POBox,SSN,ZIP|POCityStateZip "]
+    },
+    {
+      "name" : "FD39",
+      "type" : "fd",
+      "value" :  [" DOB,FirstName,MiddleName,POBox,SSN,ZIP|POCityStateZip "]
+    },
+    {
+      "name" : "FD40",
+      "type" : "fd",
+      "value" :  [" DOB,FirstName,LastName,POBox,ZIP|POCityStateZip "]
+    }
+  ]
+}

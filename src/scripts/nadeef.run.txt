@@ -1,0 +1,1 @@
+cat args.txt | java  -cp out/bin/*:examples/:out/test qa.qcri.nadeef.console.Console

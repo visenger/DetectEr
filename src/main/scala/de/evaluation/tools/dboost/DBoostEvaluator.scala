@@ -1,14 +1,10 @@
 package de.evaluation.tools.dboost
 
 import com.typesafe.config.{Config, ConfigFactory}
+import de.evaluation.f1.Eval
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 
-/**
-  * Created by visenger on 16/11/16.
-  */
 
-
-case class Eval(precision: Double, recall: Double, f1: Double)
 
 object EvaluatorDBoost {
 
