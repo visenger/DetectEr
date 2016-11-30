@@ -2,6 +2,7 @@ package de.evaluation.data.blackoak
 
 import com.google.common.base.Strings
 import com.typesafe.config.{Config, ConfigFactory}
+import de.evaluation.util.DataSetCreator
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 
 /**
@@ -62,9 +63,9 @@ class BlackOakGoldStandardWriter {
       .getOrCreate()
 
 
-    val dirtyBlackOakDF: DataFrame = createDataSet(sparkSession, dirtyData, BlackOakSchema.schema: _*)
+    val dirtyBlackOakDF: DataFrame = DataSetCreator.createDataSet(sparkSession, dirtyData, BlackOakSchema.schema: _*)
 
-    val cleanBlackOakDF: DataFrame = createDataSet(sparkSession, cleanData, BlackOakSchema.schema: _*)
+    val cleanBlackOakDF: DataFrame = DataSetCreator.createDataSet(sparkSession, cleanData, BlackOakSchema.schema: _*)
 
     val goldStandard: Dataset[String] = createLogGoldStandard(sparkSession, dirtyBlackOakDF, cleanBlackOakDF)
 
@@ -140,7 +141,6 @@ class BlackOakGoldStandardWriter {
 
         /*flatten*/
         val flattenedRow: Seq[String] = nonEmptyAttrs.map(a => s"$id,$a") /**/
-
 
         flattenedRow
       })

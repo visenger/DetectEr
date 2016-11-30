@@ -7,18 +7,6 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
   * Created by visenger on 16/11/16.
   */
 
-//case class BlackOak(RecID: String,
-//                    FirstName: String,
-//                    MiddleName: String,
-//                    LastName: String,
-//                    Address: String,
-//                    City: String,
-//                    State: String,
-//                    ZIP: String,
-//                    POBox: String,
-//                    POCityStateZip: String,
-//                    SSN: String,
-//                    DOB: String)
 
 case class Eval(precision: Double, recall: Double, f1: Double)
 
