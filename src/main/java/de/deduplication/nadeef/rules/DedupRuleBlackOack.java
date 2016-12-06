@@ -1,12 +1,18 @@
 package de.deduplication.nadeef.rules;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import org.simmetrics.StringMetric;
+import org.simmetrics.builders.StringMetricBuilder;
+import org.simmetrics.metrics.JaroWinkler;
+import org.simmetrics.simplifiers.Simplifiers;
 import qa.qcri.nadeef.core.datamodel.*;
-import qa.qcri.nadeef.tools.Metrics;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * Created by visenger on 06/12/16.
@@ -14,9 +20,9 @@ import java.util.List;
 public class DedupRuleBlackOack extends PairTupleRule {
     //todo: finish names
     private String tableName = "inputDB";
-    private String colName1 = "";
-    private String colName2 = "";
-    private String columnName = "brand_name";
+    private String colName1 = "FirstName";
+    private String colName2 = "LastName";
+    private String colName3 = "Address";
 
     @Override
     public void initialize(String id, List<String> tableNames) {
@@ -26,7 +32,7 @@ public class DedupRuleBlackOack extends PairTupleRule {
     @Override
     public Collection<Table> block(Collection<Table> tables) {
         Table table = tables.iterator().next();
-        return table.groupOn(columnName);
+        return table.groupOn(colName1);
     }
 
     @Override
@@ -46,12 +52,34 @@ public class DedupRuleBlackOack extends PairTupleRule {
     }
 
     private boolean isTupleDuplicate(TuplePair tuplePair) {
-        boolean result = false;
+        //boolean result = true;
         int isLeft = 1;
         int isRight = 0;
-        String leftValue = getValue(tuplePair, tableName, colName1, isLeft);
-        String rightValue = getValue(tuplePair, tableName, colName1, isRight);
-        result = true && Metrics.getEqual(leftValue, rightValue) == 1;
+
+        StringMetric stringMetric = StringMetricBuilder.with(new JaroWinkler())
+                .simplify(Simplifiers.toLowerCase())
+                .simplify(Simplifiers.replaceNonWord())
+                .build();
+
+
+        List<String> columns = Arrays.asList(colName1, colName2, colName3);
+
+        Stream<Boolean> allComparison = columns.stream().map(c -> {
+            String leftValue = getValue(tuplePair, tableName, c, isLeft);
+            leftValue = Strings.nullToEmpty(leftValue);
+
+            String rightValue = getValue(tuplePair, tableName, c, isRight);
+            rightValue = Strings.nullToEmpty(rightValue);
+
+            boolean r = stringMetric.compare(leftValue, rightValue) > 0.9;
+            return r;
+        });
+
+        boolean result = allComparison.reduce(true, (a, b) -> a && b);
+
+//        String leftValue = getValue(tuplePair, tableName, colName1, isLeft);
+//        String rightValue = getValue(tuplePair, tableName, colName1, isRight);
+//        result = result && Metrics.getEqual(leftValue, rightValue) == 1;
 
 
         return result;

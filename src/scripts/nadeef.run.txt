@@ -1,1 +1,4 @@
 cat args.txt | java  -cp out/bin/*:examples/:out/test qa.qcri.nadeef.console.Console
+
+// with additional classpath folder
+java -cp out/bin/*:examples/:blackoak/:out/test qa.qcri.nadeef.console.Console
