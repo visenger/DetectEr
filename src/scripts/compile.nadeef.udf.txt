@@ -1,0 +1,1 @@
+javac blackoak/DedupRuleBlackOack.java -cp out/bin/*:
