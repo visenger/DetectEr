@@ -1,6 +1,7 @@
 package de.evaluation.f1.deduplication.nadeef
 
 import com.typesafe.config.ConfigFactory
+import de.evaluation.f1.F1
 import de.evaluation.util.{DatabaseProps, SparkSessionCreator}
 import org.apache.spark.sql._
 
@@ -66,10 +67,13 @@ class DeduplicationF1 {
     goldDuplicates.show(6)
     val countGoldDupli = goldDuplicates.count()
 
-    val inBoth: Dataset[List[String]] = goldDuplicates.intersect(dirtyDuplicates)
-    val countInBoth = inBoth.count()
-    println(s" intersection count:$countInBoth, dirty duplicates: $countDirtyDupli, clean duplicates: $countGoldDupli ")
+    //    val inBoth: Dataset[List[String]] = goldDuplicates.intersect(dirtyDuplicates)
+    //    val countInBoth = inBoth.count()
+    //    println(s" intersection count:$countInBoth, dirty duplicates: $countDirtyDupli, clean duplicates: $countGoldDupli ")
 
+    import session.implicits._
+    val dedupResult = F1.evaluateResult(goldDuplicates.toDF(), dirtyDuplicates.toDF())
+    dedupResult.printResult("deduplication")
 
     session.stop()
 
