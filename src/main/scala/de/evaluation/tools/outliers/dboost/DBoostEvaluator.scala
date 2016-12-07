@@ -5,7 +5,7 @@ import de.evaluation.f1.Eval
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 
 
-
+@Deprecated
 object EvaluatorDBoost {
 
   def main(args: Array[String]): Unit = {

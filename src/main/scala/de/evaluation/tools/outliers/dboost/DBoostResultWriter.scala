@@ -16,7 +16,7 @@ class DBoostResultWriter {
 
   def writeResults(): Unit = {
     val sparkSession: SparkSession = SparkSessionCreator.createSession("DBOOST")
-    //createSession()
+
     val path = "dboost.BlackOak.result.gaus"
     val outputFolder = "output.dboost.gaus.result.folder"
 
@@ -55,17 +55,6 @@ class DBoostResultWriter {
 
 
     outliersDS.write.text(conf.getString(outputFolder))
-    //.coalesce(1)
-    //      .write.format("com.databricks.spark.csv")
-    //      .save(conf.getString("output.dboost.result.folder"))
-
-
-    /*
-    * // place all data in a single partition
-   .coalesce(1)
-   .write.format("com.databricks.spark.csv")
-   .save("mydata.csv")
-    * */
 
 
     sparkSession.stop()
@@ -73,18 +62,7 @@ class DBoostResultWriter {
   }
 
 
-  // can be outsourced?
-  private def createSession() = {
-    SparkSession
-      .builder()
-      .master("local[4]")
-      .appName("F1")
-      .config("spark.local.ip",
-        conf.getString("spark.config.local.ip.value"))
-      .config("spark.driver.memory", "10g")
-      .config("spark.executor.memory", "8g")
-      .getOrCreate()
-  }
+
 }
 
 object DBoostResultWriter {

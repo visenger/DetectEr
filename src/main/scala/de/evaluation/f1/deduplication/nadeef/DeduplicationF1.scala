@@ -5,8 +5,6 @@ import de.evaluation.f1.F1
 import de.evaluation.util.{DatabaseProps, SparkSessionCreator}
 import org.apache.spark.sql._
 
-import scala.beans.BeanProperty
-
 
 class DeduplicationF1 {
 
@@ -42,8 +40,8 @@ class DeduplicationF1 {
 
 
     val dirtyDuplicates: Dataset[List[String]] = getDuplicatePairs(session, queryDirtyDedup)
-    dirtyDuplicates.show(5)
-    val countDirtyDupli = dirtyDuplicates.count()
+    //    dirtyDuplicates.show(5)
+    //    val countDirtyDupli = dirtyDuplicates.count()
 
     /** *********************************************/
 
@@ -64,14 +62,7 @@ class DeduplicationF1 {
          """.stripMargin
 
     val goldDuplicates: Dataset[List[String]] = getDuplicatePairs(session, queryGoldDedup)
-    goldDuplicates.show(6)
-    val countGoldDupli = goldDuplicates.count()
 
-    //    val inBoth: Dataset[List[String]] = goldDuplicates.intersect(dirtyDuplicates)
-    //    val countInBoth = inBoth.count()
-    //    println(s" intersection count:$countInBoth, dirty duplicates: $countDirtyDupli, clean duplicates: $countGoldDupli ")
-
-    import session.implicits._
     val dedupResult = F1.evaluateResult(goldDuplicates.toDF(), dirtyDuplicates.toDF())
     dedupResult.printResult("deduplication")
 

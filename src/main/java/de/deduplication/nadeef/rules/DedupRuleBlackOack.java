@@ -15,7 +15,11 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Created by visenger on 06/12/16.
+ * NADEEF UDF: Matching rule to spot duplicates
+ *
+ * 1.step: put this udf to nadeef directory
+ * 2.step: compile java class:
+ * javac blackoak/DedupRuleBlackOack.java -cp out/bin/*:
  */
 public class DedupRuleBlackOack extends PairTupleRule {
     //todo: finish names
@@ -76,11 +80,6 @@ public class DedupRuleBlackOack extends PairTupleRule {
         });
 
         boolean result = allComparison.reduce(true, (a, b) -> a && b);
-
-//        String leftValue = getValue(tuplePair, tableName, colName1, isLeft);
-//        String rightValue = getValue(tuplePair, tableName, colName1, isRight);
-//        result = result && Metrics.getEqual(leftValue, rightValue) == 1;
-
 
         return result;
     }

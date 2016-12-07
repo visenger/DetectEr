@@ -15,8 +15,12 @@ object DataSetCreator {
     val config: Config = ConfigFactory.load()
     val dataPath: String = config.getString(dataPathStr)
 
-    val df: DataFrame = sparkSession.read.csv(dataPath)
-    val namedDF: DataFrame = df.toDF(schema: _*)
+    val data: DataFrame = createDataSetFromFile(sparkSession, dataPath, schema: _*)
+    data
+  }
+
+  def createDataSetFromFile(sparkSession: SparkSession, dataPath: String, schema: String*): DataFrame = {
+    val namedDF: DataFrame = createDataSetFromFileNoHeader(sparkSession, dataPath, schema: _*)
 
     val head: Row = namedDF.head()
     val data: DataFrame = namedDF.filter(row => row != head).toDF()
@@ -28,11 +32,16 @@ object DataSetCreator {
     val config: Config = ConfigFactory.load()
     val dataPath: String = config.getString(dataPathStr)
 
+    val namedDF: DataFrame = createDataSetFromFileNoHeader(sparkSession, dataPath, schema: _*)
+    namedDF
+  }
+
+
+  def createDataSetFromFileNoHeader(sparkSession: SparkSession, dataPath: String, schema: String*): DataFrame = {
     val df: DataFrame = sparkSession.read.csv(dataPath)
     val namedDF: DataFrame = df.toDF(schema: _*)
     namedDF
   }
-
 
   def createDataSetWithoutFirstTwo(sparkSession: SparkSession, dataPathStr: String, schema: String*): DataFrame = {
     import sys.process._
