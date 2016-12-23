@@ -40,7 +40,7 @@ class DeduplicationF1 {
 
 
     val dirtyDuplicates: Dataset[List[String]] = getDuplicatePairs(session, queryDirtyDedup)
-    //    dirtyDuplicates.show(5)
+     //   dirtyDuplicates.show(5)
     //    val countDirtyDupli = dirtyDuplicates.count()
 
     /** *********************************************/
@@ -62,6 +62,7 @@ class DeduplicationF1 {
          """.stripMargin
 
     val goldDuplicates: Dataset[List[String]] = getDuplicatePairs(session, queryGoldDedup)
+    //goldDuplicates.show(4)
 
     val dedupResult = F1.evaluateResult(goldDuplicates.toDF(), dirtyDuplicates.toDF())
     dedupResult.printResult("deduplication")
@@ -74,6 +75,7 @@ class DeduplicationF1 {
     import session.implicits._
     val dedupDirtyData: DataFrame = session.sql(query)
     val dirtyGroupedByVID: KeyValueGroupedDataset[Int, Row] = dedupDirtyData.groupByKey(row => row.getAs[Int](0))
+
     val dirtyDuplicates: Dataset[List[String]] = dirtyGroupedByVID.mapGroups((k, v) => {
       val duplicates: List[String] = v.map(row => row.getAs[String](2)).toList
       duplicates

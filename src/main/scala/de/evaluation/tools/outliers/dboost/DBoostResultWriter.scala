@@ -56,8 +56,8 @@ class DBoostResultWriter {
       // todo: hack! sometimes we get the following exception:
       /*
       * java.lang.IllegalArgumentException: requirement failed: The number of columns doesn't match.
-Old column names (13): _c0, _c1, _c2, _c3, _c4, _c5, _c6, _c7, _c8, _c9, _c10, _c11, _c12
-New column names (12): RecID, FirstName, MiddleName, LastName, Address, City, State, ZIP, POBox, POCityStateZip, SSN, DOB
+        Old column names (13): _c0, _c1, _c2, _c3, _c4, _c5, _c6, _c7, _c8, _c9, _c10, _c11, _c12
+        New column names (12): RecID, FirstName, MiddleName, LastName, Address, City, State, ZIP, POBox, POCityStateZip, SSN, DOB
       *
       * */
       //todo: in case of Failure we can try to remove some couple of lines and try again

@@ -75,7 +75,7 @@ class BlackOakF1 {
 
 object BlackOakF1 {
   def main(args: Array[String]): Unit = {
-    //new BlackOakF1().produceEvaluationF1()
-    new BlackOakF1().produceEvalForMultipleFiles()
+    new BlackOakF1().produceEvaluationF1()
+    //new BlackOakF1().produceEvalForMultipleFiles()
   }
 }
