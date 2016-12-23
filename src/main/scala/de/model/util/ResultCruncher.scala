@@ -2,8 +2,9 @@ package de.model.util
 
 import com.typesafe.config.ConfigFactory
 import de.evaluation.data.blackoak.BlackOakSchema
-import de.evaluation.util.{DataSetCreator, DatabaseProps, SparkSessionCreator}
+import de.evaluation.util.{DataSetCreator, DatabaseProps, SparkLOAN, SparkSessionCreator}
 import org.apache.spark.sql._
+
 
 /**
   * Created by visenger on 22/12/16.
@@ -114,6 +115,52 @@ class ResultCruncher {
 
   }
 
+  def proofLoan() = {
+
+    SparkLOAN.withSparkSession("test") {
+      sparkSession => convertTrifactaResult(sparkSession)
+
+    }
+
+  }
+
+  def convertTrifactaResult(sparkSession: SparkSession) = {
+    import scala.collection.JavaConversions._
+    import sparkSession.implicits._
+
+
+    val attributesNames = conf.getStringList("trifacta.fields").toList
+    /** read attribute names from config file   */
+
+    /*what was cleaned*/
+    val trifactaDF: DataFrame = DataSetCreator
+      .createDataSet(sparkSession, trifactaData, BlackOakSchema.schema: _*)
+    val trifactaCols: List[Column] = getColumns(trifactaDF, attributesNames)
+    val trifactaProjection: DataFrame = trifactaDF.select(trifactaCols: _*)
+
+    /*what was dirty*/
+    val dirtyBlackOakDF: DataFrame = DataSetCreator.createDataSet(sparkSession, dirtyData, BlackOakSchema.schema: _*)
+    val dirtyDFCols: List[Column] = getColumns(dirtyBlackOakDF, attributesNames)
+    val dirtyDataProjection = dirtyBlackOakDF.select(dirtyDFCols: _*)
+
+
+    val whatTrifactaFound = dirtyDataProjection.except(trifactaProjection)
+
+    val recid = "RecID"
+    val nonIdAttributes = attributesNames.diff(Seq(recid))
+    val idxOfAttributes: List[Int] = nonIdAttributes
+      .map(attr => BlackOakSchema.indexedLowerCaseAttributes.getOrElse(attr.toLowerCase, 0))
+
+    val extendedPatternVioFields: Dataset[String] = whatTrifactaFound.toDF().flatMap(row => {
+      val id = row.getAs[String](recid)
+      val foundFields: List[String] = idxOfAttributes.map(attrIdx => s"$id,$attrIdx")
+      foundFields
+    })
+
+    /** todo: write extended duplicates into a file */
+    extendedPatternVioFields.show(3)
+  }
+
   private def getDuplicatePairs(session: SparkSession, query: String): Dataset[List[String]] = {
 
     /**
@@ -148,7 +195,8 @@ class ResultCruncher {
 
 object ResultCruncher {
   def main(args: Array[String]): Unit = {
-    new ResultCruncher().preparePatternVioResults()
+    //    new ResultCruncher().preparePatternVioResults()
+    new ResultCruncher().proofLoan()
   }
 
 }
