@@ -2,6 +2,7 @@ package de.evaluation.data.blackoak
 
 import com.google.common.base.Strings
 import com.typesafe.config.{Config, ConfigFactory}
+import de.evaluation.f1.DataF1
 import de.evaluation.util.{DataSetCreator, SparkSessionCreator}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 
@@ -40,7 +41,7 @@ object BlackOakSchema {
 }
 
 
-class BlackOakGoldStandardWriter {
+class BlackOakGoldStandard {
 
   val conf: Config = ConfigFactory.load()
 
@@ -48,14 +49,13 @@ class BlackOakGoldStandardWriter {
   //"data.BlackOak.clean-data-path"
   val dirtyData = "dboost.small.dirty.data"
   //"data.BlackOak.dirty-data-path"
-  val outputGoldStandard = conf.getString("dboost.small.gold.log.folder") //conf.getString("output.blackouak.goldstandard")
+  val outputGoldStandard = conf.getString("output.blackouak.goldstandard")
+  val goldStdFile: String = "output.blackouak.gold.file"
 
 
   def createGoldStandard(): Unit = {
 
     val sparkSession: SparkSession = SparkSessionCreator.createSession("GOLD")
-
-
 
     val dirtyBlackOakDF: DataFrame = DataSetCreator.createDataSet(sparkSession, dirtyData, BlackOakSchema.schema: _*)
 
@@ -63,12 +63,16 @@ class BlackOakGoldStandardWriter {
 
     val goldStandard: Dataset[String] = createLogGoldStandard(sparkSession, dirtyBlackOakDF, cleanBlackOakDF)
 
-
     goldStandard.write.text(outputGoldStandard)
     // always close your resources
     sparkSession.stop()
   }
 
+  def getGoldStandard(session: SparkSession): DataFrame = {
+
+    val goldStd: DataFrame = DataSetCreator.createDataSetNoHeader(session, goldStdFile, DataF1.schema: _*)
+    goldStd
+  }
 
 
   private def createLogGoldStandard(sparkSession: SparkSession, dirtyBlackOakDF: DataFrame, cleanBlackOakDF: DataFrame): Dataset[String] = {
@@ -109,9 +113,14 @@ class BlackOakGoldStandardWriter {
 
 }
 
-object BlackOakGoldStandardWriter {
+object BlackOakGoldStandard {
   def main(args: Array[String]): Unit = {
-    new BlackOakGoldStandardWriter().createGoldStandard()
+    new BlackOakGoldStandard().createGoldStandard()
+  }
+
+
+  def getGoldStandard(session: SparkSession): DataFrame = {
+    new BlackOakGoldStandard().getGoldStandard(session)
   }
 }
 

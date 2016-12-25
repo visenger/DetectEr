@@ -4,13 +4,15 @@ import java.util.Properties
 
 import com.typesafe.config.ConfigFactory
 import de.evaluation.data.blackoak.BlackOakSchema
+import de.evaluation.f1.DataF1
+import de.evaluation.util.{DataSetCreator, DatabaseProps}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 
 /**
   * Created by visenger on 23/11/16.
   */
-class NadeefResultsWriter {
+class NadeefRulesVioResults {
 
   val conf = ConfigFactory.load()
 
@@ -79,12 +81,26 @@ class NadeefResultsWriter {
     sparkSession.stop()
   }
 
+  def getRulesVioResults(sparkSession: SparkSession): DataFrame = {
+    import sparkSession.implicits._
+
+    val nadeefResultConf = "output.nadeef.detect.result.file"
+    val nadeefResult: DataFrame = DataSetCreator
+      .createDataSetNoHeader(sparkSession, nadeefResultConf, DataF1.schema: _*)
+
+    nadeefResult
+  }
+
 }
 
-object NadeefResultsWriter {
+object NadeefRulesVioResults {
 
   def main(args: Array[String]): Unit = {
-    new NadeefResultsWriter().evaluate()
+    new NadeefRulesVioResults().evaluate()
+  }
+
+  def getRulesVioResults(sparkSession: SparkSession): DataFrame = {
+    new NadeefRulesVioResults().getRulesVioResults(sparkSession)
   }
 
 }

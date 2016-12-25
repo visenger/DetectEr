@@ -5,6 +5,7 @@ import java.io.File
 import com.google.common.base.Strings
 import com.typesafe.config.{Config, ConfigFactory}
 import de.evaluation.data.blackoak.BlackOakSchema
+import de.evaluation.f1.DataF1
 import de.evaluation.util.{DataSetCreator, SparkSessionCreator}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -12,7 +13,7 @@ import org.apache.spark.sql._
 import scala.util.{Failure, Success, Try}
 
 
-class DBoostResultWriter {
+class DBoostResults {
 
 
   val conf: Config = ConfigFactory.load()
@@ -36,6 +37,32 @@ class DBoostResultWriter {
 
     sparkSession.stop()
 
+  }
+
+  def getGaussResultForOutlierDetection(sparkSession: SparkSession): DataFrame = {
+
+    val path = "output.dboost.gaus.result.file"
+
+    val gausResults: DataFrame = getOutliersByAlgorithm(sparkSession, path)
+    gausResults
+  }
+
+  def getHistogramResultForOutlierDetection(sparkSession: SparkSession): DataFrame = {
+
+    val path = "output.dboost.result.file"
+
+    val histResults: DataFrame = getOutliersByAlgorithm(sparkSession, path)
+    histResults
+  }
+
+  private def getOutliersByAlgorithm(sparkSession: SparkSession, path: String) = {
+    val resultDataSet: DataFrame = DataSetCreator
+      .createDataSet(
+        sparkSession,
+        path,
+        DataF1.schema: _*)
+
+    resultDataSet
   }
 
   def writeResultsForMultipleFiles() = {
@@ -96,9 +123,11 @@ class DBoostResultWriter {
     //every attribute marked as ~attr~ is being identified as outlier
     import sparkSession.implicits._
 
-    val allColumns: Seq[Column] = BlackOakSchema.schema.map(name => resultDataSet.col(name).contains("~"))
+    val allColumns: Seq[Column] = BlackOakSchema.schema
+      .map(name => resultDataSet.col(name).contains("~"))
 
-    val condition: Column = allColumns.tail.foldLeft(allColumns.head)((acc: Column, actual: Column) => acc || actual)
+    val condition: Column = allColumns.tail
+      .foldLeft(allColumns.head)((acc: Column, actual: Column) => acc || actual)
 
     val filter = resultDataSet.filter(condition)
 
@@ -116,10 +145,18 @@ class DBoostResultWriter {
   }
 }
 
-object DBoostResultWriter {
+object DBoostResults {
   def main(args: Array[String]): Unit = {
-    //  new DBoostResultWriter().writeResults()
-    new DBoostResultWriter().writeResultsForMultipleFiles()
+    new DBoostResults().writeResults()
+    //new DBoostResultWriter().writeResultsForMultipleFiles()
+  }
+
+  def getHistogramResultForOutlierDetection(session: SparkSession): DataFrame = {
+    new DBoostResults().getHistogramResultForOutlierDetection(session)
+  }
+
+  def getGaussResultForOutlierDetection(session: SparkSession): DataFrame = {
+    new DBoostResults().getGaussResultForOutlierDetection(session)
   }
 
 }

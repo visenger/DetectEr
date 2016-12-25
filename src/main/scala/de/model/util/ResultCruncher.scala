@@ -1,7 +1,12 @@
 package de.model.util
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.data.blackoak.BlackOakSchema
+import de.evaluation.data.blackoak.{BlackOakGoldStandard, BlackOakSchema}
+import de.evaluation.f1.DataF1
+import de.evaluation.tools.deduplication.nadeef.NadeefDeduplicationResults
+import de.evaluation.tools.outliers.dboost.DBoostResults
+import de.evaluation.tools.pattern.violation.TrifactaResults
+import de.evaluation.tools.ruleviolations.nadeef.NadeefRulesVioResults
 import de.evaluation.util.{DataSetCreator, DatabaseProps, SparkLOAN, SparkSessionCreator}
 import org.apache.spark.sql._
 
@@ -11,191 +16,67 @@ import org.apache.spark.sql._
   */
 class ResultCruncher {
 
-  private val conf = ConfigFactory.load()
-  private val cleanData = "data.BlackOak.clean-data-path"
-  private val dirtyData = "data.BlackOak.dirty-data-path"
-  private val trifactaData = "trifacta.cleaning.result"
-
-  def prepareDedupResults(): Unit = {
-
-    val session = SparkSessionCreator.createSession("DEDUP")
-
-    val properties = DatabaseProps.getDefaultProps
-
-    val violation = "violation"
-    val violationTotal: DataFrame = session
-      .read
-      .jdbc(conf.getString("db.postgresql.url"), violation, properties)
-    violationTotal.createOrReplaceTempView(violation)
-
-    val tb_inputdb = "tb_inputdb"
-    val dirtyData: DataFrame = session
-      .read
-      .jdbc(conf.getString("db.postgresql.url"), tb_inputdb, properties)
-    dirtyData.createOrReplaceTempView(tb_inputdb)
-
-    val queryDirtyDedup =
-      s"""
-         |SELECT v.vid, v.tupleid, i.recid
-         |FROM $violation as v
-         |  JOIN $tb_inputdb as i on v.tupleid = i.tid
-         |WHERE v.rid='${conf.getString("deduplication.rule.for.dirty.data")}'
-         |GROUP BY v.vid, v.tupleid, i.recid
-       """.stripMargin
-
-
-    val dirtyDuplicates: Dataset[List[String]] = getDuplicatePairs(session, queryDirtyDedup)
-
-    /**
-      * Assuming that duplicates are data points represented by the complete line,
-      * we include all attributes as found values.
-      * todo steps:
-      * 1. get distinct ids
-      * 2. for each id create list: id, attr#
-      **/
-    import session.implicits._
-    val distinctIds: Dataset[String] = dirtyDuplicates
-      .flatMap(list => list)
-      .distinct()
-
-    val extendedDuplicatesIds: Dataset[String] = distinctIds.flatMap(id => {
-      val blackOakAttrIds = BlackOakSchema.indexedAttributes.values.toList
-      val idToAttributes: List[String] = blackOakAttrIds.map(i => s"$id,$i").toList
-      idToAttributes
-    })
-    /**
-      * todo steps: write extended duplicates into a file.
-      **/
-    extendedDuplicatesIds.show(5)
-
-    session.stop()
-  }
-
-  def preparePatternVioResults(): Unit = {
-
-
-    val sparkSession: SparkSession = SparkSessionCreator.createSession("TFCT")
-
-    import scala.collection.JavaConversions._
-    import sparkSession.implicits._
-
-
-    val attributesNames = conf.getStringList("trifacta.fields").toList
-    /** read attribute names from config file   */
-
-    /*what was cleaned*/
-    val trifactaDF: DataFrame = DataSetCreator
-      .createDataSet(sparkSession, trifactaData, BlackOakSchema.schema: _*)
-    val trifactaCols: List[Column] = getColumns(trifactaDF, attributesNames)
-    val trifactaProjection: DataFrame = trifactaDF.select(trifactaCols: _*)
-
-    /*what was dirty*/
-    val dirtyBlackOakDF: DataFrame = DataSetCreator.createDataSet(sparkSession, dirtyData, BlackOakSchema.schema: _*)
-    val dirtyDFCols: List[Column] = getColumns(dirtyBlackOakDF, attributesNames)
-    val dirtyDataProjection = dirtyBlackOakDF.select(dirtyDFCols: _*)
-
-
-    val whatTrifactaFound = dirtyDataProjection.except(trifactaProjection)
-
-    val recid = "RecID"
-    val nonIdAttributes = attributesNames.diff(Seq(recid))
-    val idxOfAttributes: List[Int] = nonIdAttributes
-      .map(attr => BlackOakSchema.indexedLowerCaseAttributes.getOrElse(attr.toLowerCase, 0))
-
-    val extendedPatternVioFields: Dataset[String] = whatTrifactaFound.toDF().flatMap(row => {
-      val id = row.getAs[String](recid)
-      val foundFields: List[String] = idxOfAttributes.map(attrIdx => s"$id,$attrIdx")
-      foundFields
-    })
-
-    /** todo: write extended duplicates into a file */
-    extendedPatternVioFields.show(6)
-
-    sparkSession.stop()
-
-  }
 
   def proofLoan() = {
+    import SparkLOAN._
+    // disadvanatage: with loan pattern we are not able to use the data frame objects outside the scope
+    // of the method
+    // loan pattern ist suitable for performing something without returning result. -> void methods.
+    // e.g side-effect methods, which perform I/O;
+    withSparkSession("cruncher") {
+      sparkSession => {
+        val goldStandard: DataFrame= BlackOakGoldStandard
+          .getGoldStandard(sparkSession)
+        goldStandard.show(1)
 
-    SparkLOAN.withSparkSession("test") {
-      sparkSession => convertTrifactaResult(sparkSession)
+        val patternViolationResult: DataFrame = TrifactaResults
+          .getPatternViolationResult(sparkSession)
+        patternViolationResult.show(2)
+
+
+        val dedupResult: DataFrame = NadeefDeduplicationResults
+          .getDedupResults(sparkSession)
+        dedupResult.show(3)
+
+        val histOutliers = DBoostResults
+          .getHistogramResultForOutlierDetection(sparkSession)
+        histOutliers.show(4)
+
+        val gaussOutliers = DBoostResults
+          .getGaussResultForOutlierDetection(sparkSession)
+        gaussOutliers.show(5)
+
+        val rulesVioResults = NadeefRulesVioResults
+          .getRulesVioResults(sparkSession)
+        rulesVioResults.show(6)
+
+      }
 
     }
 
-  }
-
-  def convertTrifactaResult(sparkSession: SparkSession) = {
-    import scala.collection.JavaConversions._
-    import sparkSession.implicits._
-
-
-    val attributesNames = conf.getStringList("trifacta.fields").toList
-    /** read attribute names from config file   */
-
-    /*what was cleaned*/
-    val trifactaDF: DataFrame = DataSetCreator
-      .createDataSet(sparkSession, trifactaData, BlackOakSchema.schema: _*)
-    val trifactaCols: List[Column] = getColumns(trifactaDF, attributesNames)
-    val trifactaProjection: DataFrame = trifactaDF.select(trifactaCols: _*)
-
-    /*what was dirty*/
-    val dirtyBlackOakDF: DataFrame = DataSetCreator.createDataSet(sparkSession, dirtyData, BlackOakSchema.schema: _*)
-    val dirtyDFCols: List[Column] = getColumns(dirtyBlackOakDF, attributesNames)
-    val dirtyDataProjection = dirtyBlackOakDF.select(dirtyDFCols: _*)
-
-
-    val whatTrifactaFound = dirtyDataProjection.except(trifactaProjection)
-
-    val recid = "RecID"
-    val nonIdAttributes = attributesNames.diff(Seq(recid))
-    val idxOfAttributes: List[Int] = nonIdAttributes
-      .map(attr => BlackOakSchema.indexedLowerCaseAttributes.getOrElse(attr.toLowerCase, 0))
-
-    val extendedPatternVioFields: Dataset[String] = whatTrifactaFound.toDF().flatMap(row => {
-      val id = row.getAs[String](recid)
-      val foundFields: List[String] = idxOfAttributes.map(attrIdx => s"$id,$attrIdx")
-      foundFields
-    })
-
-    /** todo: write extended duplicates into a file */
-    extendedPatternVioFields.show(3)
-  }
-
-  private def getDuplicatePairs(session: SparkSession, query: String): Dataset[List[String]] = {
 
     /**
-      * the result is of the form:
-      * +------------------+
-      * |             value|
-      * +------------------+
-      * |[A961269, A992384]|
-      * |[A939682, A939624]|
-      * |[A990110, A967936]|
-      * +------------------+
+      *
+      * def withSparkSession(name: String)(f: SparkSession => Unit) = {
+      * val r = SparkSessionCreator.createSession(name)
+      * try {
+      * f(r)
+      * } finally {
+      *r.stop()
+      * }
+      * }
       *
       **/
 
-    import session.implicits._
-    val dedupDirtyData: DataFrame = session.sql(query)
-    val dirtyGroupedByVID: KeyValueGroupedDataset[Int, Row] = dedupDirtyData.groupByKey(row => row.getAs[Int](0))
 
-    val dirtyDuplicates: Dataset[List[String]] = dirtyGroupedByVID.mapGroups((k, v) => {
-      val duplicates: List[String] = v.map(row => row.getAs[String](2)).toList
-      duplicates
-
-    })
-    dirtyDuplicates
   }
 
-  private def getColumns(df: DataFrame, attributesNames: List[String]) = {
-    attributesNames.map(attr => df.col(attr))
-  }
 
 }
 
 object ResultCruncher {
   def main(args: Array[String]): Unit = {
-    //    new ResultCruncher().preparePatternVioResults()
+
     new ResultCruncher().proofLoan()
   }
 

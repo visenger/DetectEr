@@ -1,7 +1,7 @@
 package de.evaluation.f1.trifacta
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.data.blackoak.{BlackOakGoldStandardWriter, BlackOakSchema}
+import de.evaluation.data.blackoak.{BlackOakGoldStandard, BlackOakSchema}
 import de.evaluation.f1.Eval
 import de.evaluation.util.{DataSetCreator, SparkSessionCreator}
 import org.apache.spark.sql._
