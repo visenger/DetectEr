@@ -7,8 +7,17 @@ import de.evaluation.util.{DataSetCreator, SparkSessionCreator}
 import org.apache.spark.sql.{DataFrame, Dataset}
 
 
+object Table {
+  val recid = "RecID"
+  val attrnr = "attrNr"
+  val exists = "exists"
+  val schema = Seq(recid, attrnr, exists)
+}
+
 object DataF1 {
-  val schema = Seq("RecID", "attrNr")
+  val recid = "RecID"
+  val attrnr = "attrNr"
+  val schema = Seq(recid, attrnr)
 }
 
 class BlackOakF1 {

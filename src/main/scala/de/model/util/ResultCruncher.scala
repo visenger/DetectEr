@@ -2,13 +2,16 @@ package de.model.util
 
 import com.typesafe.config.ConfigFactory
 import de.evaluation.data.blackoak.{BlackOakGoldStandard, BlackOakSchema}
-import de.evaluation.f1.DataF1
+import de.evaluation.f1.{DataF1, Table}
 import de.evaluation.tools.deduplication.nadeef.NadeefDeduplicationResults
 import de.evaluation.tools.outliers.dboost.DBoostResults
 import de.evaluation.tools.pattern.violation.TrifactaResults
 import de.evaluation.tools.ruleviolations.nadeef.NadeefRulesVioResults
 import de.evaluation.util.{DataSetCreator, DatabaseProps, SparkLOAN, SparkSessionCreator}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+
+import scala.collection.immutable.IndexedSeq
 
 
 /**
@@ -25,31 +28,47 @@ class ResultCruncher {
     // e.g side-effect methods, which perform I/O;
     withSparkSession("cruncher") {
       sparkSession => {
-        val goldStandard: DataFrame= BlackOakGoldStandard
+        val goldStandard: DataFrame = BlackOakGoldStandard
           .getGoldStandard(sparkSession)
-        goldStandard.show(1)
 
         val patternViolationResult: DataFrame = TrifactaResults
           .getPatternViolationResult(sparkSession)
-        patternViolationResult.show(2)
-
 
         val dedupResult: DataFrame = NadeefDeduplicationResults
           .getDedupResults(sparkSession)
-        dedupResult.show(3)
 
         val histOutliers = DBoostResults
           .getHistogramResultForOutlierDetection(sparkSession)
-        histOutliers.show(4)
 
         val gaussOutliers = DBoostResults
           .getGaussResultForOutlierDetection(sparkSession)
-        gaussOutliers.show(5)
 
         val rulesVioResults = NadeefRulesVioResults
           .getRulesVioResults(sparkSession)
-        rulesVioResults.show(6)
 
+        val patternVioExists: DataFrame = extendWithExistsColumn(sparkSession, goldStandard, patternViolationResult)
+        val dedupExists: DataFrame = extendWithExistsColumn(sparkSession, goldStandard, dedupResult)
+        val histExists: DataFrame = extendWithExistsColumn(sparkSession, goldStandard, histOutliers)
+        val gaussExists: DataFrame = extendWithExistsColumn(sparkSession, goldStandard, gaussOutliers)
+        val rulesVioExists: DataFrame = extendWithExistsColumn(sparkSession, goldStandard, rulesVioResults)
+
+        val columnsOnJoin = Seq(Table.recid, Table.attrnr)
+        val tools: Seq[String] = (1 to 5).map(i => s"${Table.exists}-$i").toSeq
+
+        val join = patternVioExists.join(dedupExists, columnsOnJoin)
+          .join(histExists, columnsOnJoin)
+          .join(gaussExists, columnsOnJoin)
+          .join(rulesVioExists, columnsOnJoin)
+          .toDF(columnsOnJoin ++ tools: _*)
+
+        val conf = ConfigFactory.load()
+        join
+          .coalesce(1)
+          .write
+          .format("com.databricks.spark.csv")
+          .option("header", true)
+          .save(s"${conf.getString("model.matrix.folder")}")
+        //.write.option("header", true).csv(conf.getString("model.matrix.folder"))
       }
 
     }
@@ -72,6 +91,20 @@ class ResultCruncher {
   }
 
 
+  private def extendWithExistsColumn(sparkSession: SparkSession, goldStandard: DataFrame, errorDetectResult: DataFrame) = {
+    import sparkSession.implicits._
+
+    val ones = goldStandard.intersect(errorDetectResult)
+    val existsDF: DataFrame = ones
+      .map(row => (row.getString(0), row.getString(1), "1")).toDF(Table.schema: _*)
+
+    val zeros: Dataset[Row] = goldStandard.except(errorDetectResult)
+    val notExistsDF: DataFrame = zeros
+      .map(row => (row.getString(0), row.getString(1), "0")).toDF(Table.schema: _*)
+
+    val union: DataFrame = existsDF.union(notExistsDF).toDF(Table.schema: _*)
+    union
+  }
 }
 
 object ResultCruncher {
