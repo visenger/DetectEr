@@ -20,7 +20,7 @@ import scala.collection.immutable.IndexedSeq
 class ResultCruncher {
 
 
-  def proofLoan() = {
+  def createMatrixForModel() = {
     import SparkLOAN._
     // disadvanatage: with loan pattern we are not able to use the data frame objects outside the scope
     // of the method
@@ -110,7 +110,7 @@ class ResultCruncher {
 object ResultCruncher {
   def main(args: Array[String]): Unit = {
 
-    new ResultCruncher().proofLoan()
+    new ResultCruncher().createMatrixForModel()
   }
 
 }
