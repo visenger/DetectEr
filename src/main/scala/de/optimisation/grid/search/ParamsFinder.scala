@@ -7,7 +7,7 @@ class ParamsFinder {
     import sys.process._
 
     val goldData = "/Users/visenger/research/datasets/BlackOak/Archive/small-groundDB.csv"
-    "/Users/visenger/PycharmProjects/dBoost/dboost"
+   // "/Users/visenger/PycharmProjects/dBoost/dboost"
 
     val script = "/../../PycharmProjects/dBoost/dboost/dboost-stdin.py"
     val input = "/Users/visenger/research/datasets/BlackOak/Archive/small-inputDB.csv"

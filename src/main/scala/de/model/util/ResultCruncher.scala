@@ -61,14 +61,15 @@ class ResultCruncher {
           .join(rulesVioExists, columnsOnJoin)
           .toDF(columnsOnJoin ++ tools: _*)
 
-        val conf = ConfigFactory.load()
-        join
-          .coalesce(1)
-          .write
-          .format("com.databricks.spark.csv")
-          .option("header", true)
-          .save(s"${conf.getString("model.matrix.folder")}")
-        //.write.option("header", true).csv(conf.getString("model.matrix.folder"))
+        join.show(5)
+
+        /* val conf = ConfigFactory.load()
+         join
+           .coalesce(1)
+           .write
+           .format("com.databricks.spark.csv")
+           .option("header", true)
+           .save(s"${conf.getString("model.matrix.folder")}")*/
       }
 
     }
@@ -105,9 +106,27 @@ class ResultCruncher {
     val union: DataFrame = existsDF.union(notExistsDF).toDF(Table.schema: _*)
     union
   }
+
+
+  private def inLibsvmFormat(sparkSession: SparkSession,
+                             goldStandard: DataFrame,
+                             errorDetectResult: DataFrame,
+                             label: String) = {
+    import sparkSession.implicits._
+
+    val ones = goldStandard.intersect(errorDetectResult)
+
+
+
+    /**/
+    val existsDF: DataFrame = ones
+      .map(row => (row.getString(0), row.getString(1), "1")).toDF(Table.schema: _*)
+
+    existsDF
+  }
 }
 
-object ResultCruncher {
+object ResultCruncher1 {
   def main(args: Array[String]): Unit = {
 
     new ResultCruncher().createMatrixForModel()
