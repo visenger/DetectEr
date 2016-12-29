@@ -23,6 +23,7 @@ object DataSetCreator {
     val namedDF: DataFrame = createDataSetFromFileNoHeader(sparkSession, dataPath, schema: _*)
 
     val head: Row = namedDF.head()
+
     val data: DataFrame = namedDF.filter(row => row != head).toDF()
     data
   }

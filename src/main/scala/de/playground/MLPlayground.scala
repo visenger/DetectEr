@@ -9,6 +9,7 @@ class MLPlayground {
 
 //spark example: https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/ml/EstimatorTransformerParamExample.scala
 import de.evaluation.util.SparkSessionCreator
+import de.model.util.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
@@ -17,8 +18,13 @@ import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.ml.{Pipeline, PipelineStage, Transformer}
 import org.apache.spark.ml.linalg.Vector
-import org.apache.spark.mllib.evaluation.{MulticlassMetrics, RegressionMetrics}
+import org.apache.spark.ml.regression.GeneralizedLinearRegression
+import org.apache.spark.mllib.evaluation.{RegressionMetrics}
 import org.apache.spark.mllib.util.MLUtils
+import scala.language.reflectiveCalls
+import scopt.OptionParser
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 
 object EstimatorTransformerParamExample {
@@ -202,22 +208,11 @@ object Word2VecExample {
   }
 }
 
-import scala.language.reflectiveCalls
-
-import scopt.OptionParser
-
-
-import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
   * An example runner for linear regression with elastic-net (mixing L1/L2) regularization.
-  * Run with
-  * {{{
-  * bin/run-example ml.LinearRegressionExample [options]
-  * }}}
-  * A synthetic dataset can be found at `data/mllib/sample_linear_regression_data.txt` which can be
-  * trained by
+  *
+  *
   * {{{
   * bin/run-example ml.LinearRegressionExample --regParam 0.15 --elasticNetParam 1.0 \
   *   data/mllib/sample_linear_regression_data.txt
@@ -230,11 +225,11 @@ object LinearRegressionExample {
                      input: String = null,
                      testInput: String = "",
                      dataFormat: String = "libsvm",
-                     regParam: Double = 0.0,
+                     regParam: Double = 0.15,
                      elasticNetParam: Double = 0.0,
-                     maxIter: Int = 100,
+                     maxIter: Int = 150,
                      tol: Double = 1E-6,
-                     fracTest: Double = 0.2) extends AbstractParams[Params]
+                     fracTest: Double = 0.3) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -281,12 +276,12 @@ object LinearRegressionExample {
     }
 
     parser.parse(args, defaultParams) match {
-      case Some(params) => run(params)
+      case Some(params) => runLinearRegression(params)
       case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params): Unit = {
+  def runLinearRegression(params: Params): Unit = {
     val spark = SparkSessionCreator.createSession("LINEAR-REGRESSION")
 
     println(s"LinearRegressionExample with parameters:\n$params")
@@ -392,7 +387,6 @@ object LinearRegressionExample {
     * @param data         DataFrame with "prediction" and labelColName columns
     * @param labelColName Name of the labelCol parameter for the model
     *
-    *                     TODO: Change model type to RegressionModel once that API is public. SPARK-5995
     */
   private def evaluateRegressionModel(
                                        model: Transformer,
@@ -405,5 +399,49 @@ object LinearRegressionExample {
     println(s"  Root mean squared error (RMSE): $RMSE")
   }
 
+}
+
+object GeneralizedLinearRegressionExample {
+  def main(args: Array[String]): Unit = {
+    var spark = SparkSessionCreator.createSession("GLR")
+    // Load training data
+    val dataset = spark.read.format("libsvm")
+      .load("src/main/resources/matrix-libsvm.txt")
+
+    val glr = new GeneralizedLinearRegression()
+      .setFamily("gamma")
+      .setLink("inverse")
+      .setMaxIter(100)
+      .setRegParam(0.15)
+
+    val Array(training, test) = dataset.randomSplit(Array(0.7, 0.3), seed = 1234L)
+
+    // Fit the model
+    val model = glr.fit(training)
+
+    // Print the coefficients and intercept for generalized linear regression model
+    println(s"Coefficients: ${model.coefficients}")
+    println(s"Intercept: ${model.intercept}")
+
+    // Summarize the model over the training set and print out some metrics
+    val summary = model.summary
+    println(s"Coefficient Standard Errors: ${summary.coefficientStandardErrors.mkString(",")}")
+    println(s"T Values: ${summary.tValues.mkString(",")}")
+    println(s"P Values: ${summary.pValues.mkString(",")}")
+    println(s"Dispersion: ${summary.dispersion}")
+    println(s"Null Deviance: ${summary.nullDeviance}")
+    println(s"Residual Degree Of Freedom Null: ${summary.residualDegreeOfFreedomNull}")
+    println(s"Deviance: ${summary.deviance}")
+    println(s"Residual Degree Of Freedom: ${summary.residualDegreeOfFreedom}")
+    println(s"AIC: ${summary.aic}")
+    println("Deviance Residuals: ")
+    //summary.residuals().show()
+
+
+    val prediction = model.transform(test)
+    prediction.show(12)
+
+    spark.stop()
+  }
 }
 

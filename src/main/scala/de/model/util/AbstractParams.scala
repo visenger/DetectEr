@@ -1,4 +1,4 @@
-package de.playground
+package de.model.util
 
 import scala.reflect.runtime.universe._
 
