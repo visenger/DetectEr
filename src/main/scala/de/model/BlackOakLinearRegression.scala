@@ -14,6 +14,7 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import scopt.OptionParser
 
@@ -34,17 +35,17 @@ object LinearRegressionBlackOak {
                      input: String = null,
                      testInput: String = "",
                      dataFormat: String = "libsvm",
-                     regParam: Double = 0.15,
+                     regParam: Double = 0.0,
                      elasticNetParam: Double = 0.0,
-                     maxIter: Int = 150,
-                     tol: Double = 1E-2,
-                     fracTest: Double = 0.3) extends AbstractParams[Params]
+                     maxIter: Int = 250,
+                     tol: Double = 1E-5,
+                     fracTest: Double = 0.2) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("LinearRegressionExample") {
-      head("LinearRegressionExample: an example Linear Regression with Elastic-Net app.")
+      head("LinearRegression:")
       opt[Double]("regParam")
         .text(s"regularization parameter, default: ${defaultParams.regParam}")
         .action((x, c) => c.copy(regParam = x))
@@ -202,10 +203,29 @@ object LinearRegressionBlackOak {
                                        data: DataFrame,
                                        labelColName: String): Unit = {
     val fullPredictions = model.transform(data).cache()
+    fullPredictions.printSchema()
+
+
     val predictions = fullPredictions.select("prediction").rdd.map(_.getDouble(0))
     val labels = fullPredictions.select(labelColName).rdd.map(_.getDouble(0))
-    val RMSE = new RegressionMetrics(predictions.zip(labels)).rootMeanSquaredError
+
+    //    import data.sparkSession.implicits._
+    //    val predictionAndLabels: RDD[(Double, Double)] = predictions.zip(labels)
+    //    val df = predictionAndLabels.toDF()
+    //
+
+    val regressionMetrics = new RegressionMetrics(predictions.zip(labels))
+    val RMSE = regressionMetrics.rootMeanSquaredError
     println(s"  Root mean squared error (RMSE): $RMSE")
+
+    val mae = regressionMetrics.meanAbsoluteError
+    println(s" Mean absolute error: $mae")
+
+    val eVariance = regressionMetrics.explainedVariance
+    println(s" Explained variance: $eVariance")
+
+    val rSquared = regressionMetrics.r2
+    println(s" R2: $rSquared")
   }
 
 }

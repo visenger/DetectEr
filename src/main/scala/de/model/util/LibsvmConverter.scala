@@ -63,7 +63,7 @@ class LibsvmConverter {
           val colsAndVals: String = toolNrs.mkString("", s":$recidIdx ", s":$recidIdx")
           val labeledRow = s"$attr $colsAndVals"
 
-          // s"$attr col:value...."
+          // s"$attr tool:recId...."
           labeledRow
         }
       }
