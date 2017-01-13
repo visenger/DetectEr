@@ -52,13 +52,13 @@ object PMIEstimatorRunner {
 
           println(s" First Tool [$tool1] found: $firstTool")
           println(s" Second Tool [$tool2] found: $secondTool")
-          println(s" Coocurence of tool 1 and tool 2: $cooccuringTools")
+          println(s" Coocurence of [$tool1] and [$tool2]: $cooccuringTools")
 
           val pmi: Double = Math.log(cooccuringTools.toDouble / (firstTool.toDouble * secondTool.toDouble))
           val pmiWithLog2 = DoubleMath.log2(cooccuringTools.toDouble / (firstTool.toDouble * secondTool.toDouble))
 
-          println(s" PMI of two tools: $pmi")
-          println(s" LOG2 PMI of two tools: $pmiWithLog2")
+          println(s" PMI of [$tool1] and [$tool2]  tools: $pmi")
+          println(s" LOG2 PMI of [$tool1] and [$tool2]  tools: $pmiWithLog2")
           println(s" ------******------ ")
 
           ToolPMI(tool1, tool2, pmi)
