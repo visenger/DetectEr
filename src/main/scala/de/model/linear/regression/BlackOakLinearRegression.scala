@@ -1,4 +1,4 @@
-package de.model
+package de.model.linear.regression
 
 /**
   * Created by visenger on 28/12/16.
@@ -14,7 +14,6 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import scopt.OptionParser
 

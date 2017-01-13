@@ -1,9 +1,7 @@
-package de.model
+package de.model.linear.regression
 
-import com.typesafe.config.ConfigFactory
 import de.evaluation.util.SparkSessionCreator
 import org.apache.spark.ml.evaluation.RegressionEvaluator
-import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.{GeneralizedLinearRegression, LinearRegression}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
