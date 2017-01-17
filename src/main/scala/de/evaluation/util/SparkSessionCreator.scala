@@ -12,7 +12,7 @@ object SparkSessionCreator {
   def createSession(appName: String) = {
     SparkSession
       .builder()
-      .master("local[4]")
+      .master("local[8]")
       .appName(appName)
       .config("spark.local.ip",
         conf.getString("spark.config.local.ip.value"))
