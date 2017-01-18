@@ -16,4 +16,13 @@ object Model {
 
   val extendedSchema: Seq[String] = schema ++ Seq(indexedcol)
 
+  val toolsWithIndex: Map[Int, String] = tools
+    .zipWithIndex
+    .map(e => (e._1, {
+      val idx = e._2 + 1
+      idx
+    }))
+    .map(_.swap)
+    .toMap
+
 }
