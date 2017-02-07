@@ -6,6 +6,7 @@ import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.{GeneralizedLinearRegression, LinearRegression}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.apache.spark.mllib.evaluation.RegressionMetrics
+import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
 
 /**
@@ -37,14 +38,16 @@ object GeneralizedLinearRegressionExample {
       .addGrid(glr.maxIter, Array(150, 200, 250))
       .build()
 
-    val Array(training, test) = dataset.randomSplit(Array(0.7, 0.3), seed = 1234L)
-
-
     val crossValidator = new CrossValidator()
       .setEstimator(glr)
       .setEvaluator(new RegressionEvaluator())
       .setEstimatorParamMaps(paramGrid)
       .setNumFolds(5)
+
+    val Array(training, test) = dataset.randomSplit(Array(0.7, 0.3), seed = 1234L)
+
+
+
 
 
     val validatorModel = crossValidator.fit(training)

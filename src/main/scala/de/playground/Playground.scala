@@ -44,3 +44,16 @@ object SparkPlayground {
 
 
 }
+
+
+object F1Calculator extends App {
+
+  val prTuples: Seq[(Double, Double)] = Seq((0.5678, 0.3117), (0.5404, 0.2352), (0.7335, 0.4531), (0.6655, 0.3976))
+
+  prTuples.foreach(tuple => {
+    val f1 = 2 * (tuple._1.toDouble * tuple._2.toDouble) / (tuple._1 + tuple._2)
+
+    println(s"Precision: ${tuple._1}, Recall: ${tuple._2}, F1: ${f1}")
+
+  })
+}

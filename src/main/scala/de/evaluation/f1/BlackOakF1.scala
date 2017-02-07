@@ -6,6 +6,14 @@ import com.typesafe.config.ConfigFactory
 import de.evaluation.util.{DataSetCreator, SparkSessionCreator}
 import org.apache.spark.sql.{DataFrame, Dataset}
 
+object FullResult {
+  val recid = "RecID"
+  val attrnr = "attrNr"
+  val label = "label"
+
+  val tools: Seq[String] = (1 to 5).map(i => s"${Table.exists}-$i")
+  val schema = Seq(recid) ++ Seq(attrnr) ++ Seq(label) ++ tools
+}
 
 object Table {
   val recid = "RecID"
@@ -25,7 +33,7 @@ class BlackOakF1 {
   def produceEvaluationF1(): Unit = {
     val sparkSession = SparkSessionCreator.createSession("ALL-F1")
 
-    val goldStdFileConfig = "output.blackouak.goldstandard.file"
+    val goldStdFileConfig = "output.blackouak.gold.file"
     val goldStd: DataFrame = DataSetCreator.createDataSetNoHeader(sparkSession, goldStdFileConfig, DataF1.schema: _*)
 
     //goldStd.show(5)

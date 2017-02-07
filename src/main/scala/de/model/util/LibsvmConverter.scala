@@ -1,6 +1,7 @@
 package de.model.util
 
 import com.typesafe.config.ConfigFactory
+import de.evaluation.f1.{FullResult, Table}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.rdd.RDD
@@ -11,6 +12,24 @@ import org.apache.spark.sql.{DataFrame, Row}
   */
 class LibsvmConverter {
 
+  def toLogisticRegrLibsvm(): Unit = {
+    SparkLOAN.withSparkSession("LRLIBSVM") {
+      session => {
+        val matrixDF = DataSetCreator.createDataSet(session, "output.full.result.file", FullResult.schema: _*)
+        val libsvm: DataFrame = toLibsvmFormat(matrixDF)
+
+        val path = ConfigFactory.load().getString("model.full.result.folder")
+        libsvm
+          .coalesce(1)
+          .write
+          .text(path)
+
+      }
+    }
+
+  }
+
+  @Deprecated
   def convertCsvToLibsvm(): Unit = {
     SparkLOAN.withSparkSession("LIBSVM") {
       session => {
@@ -35,6 +54,37 @@ class LibsvmConverter {
     }
   }
 
+  private def toLibsvmFormat(matrixWithLabel: DataFrame): DataFrame = {
+
+    val libsvm: RDD[String] = matrixWithLabel.rdd.map(row => {
+      val values: Map[String, String] = row.getValuesMap[String](FullResult.schema)
+      val partition: (Map[String, String], Map[String, String]) = values.partition(_._1.startsWith(Table.exists))
+      val tools: Map[String, String] = partition._1
+
+      val setValues: Map[String, String] = tools.partition(_._2 != "0")._1
+
+      val emptyRow = ""
+      setValues.isEmpty match {
+        case true => emptyRow
+        case false => {
+
+          val label = values.getOrElse(FullResult.label, "0")
+          val featuresNr = setValues.keySet.map(k => k.split("-")(1)).toSeq.sorted
+          val features = featuresNr.mkString("", ":1 ", ":1")
+          val libsvmRow = s"$label $features"
+          // s"$label tool:1...."
+          libsvmRow
+        }
+      }
+
+    })
+    import matrixWithLabel.sparkSession.implicits._
+
+    val nonEmptyRows = libsvm.filter(_ != "")
+    nonEmptyRows.toDF("row")
+  }
+
+  @Deprecated
   private def createLibsvmFormat(matrixDF: DataFrame): DataFrame = {
 
     val libsvm: RDD[String] = matrixDF.rdd.map(row => {
@@ -80,7 +130,7 @@ class LibsvmConverter {
 
 object LibsvmConverterRunner {
   def main(args: Array[String]): Unit = {
-    new LibsvmConverter().convertCsvToLibsvm()
+    new LibsvmConverter().toLogisticRegrLibsvm()
   }
 
 }

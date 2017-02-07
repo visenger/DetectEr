@@ -75,18 +75,6 @@ class ResultCruncher {
     }
 
 
-    /**
-      *
-      * def withSparkSession(name: String)(f: SparkSession => Unit) = {
-      * val r = SparkSessionCreator.createSession(name)
-      * try {
-      * f(r)
-      * } finally {
-      *r.stop()
-      * }
-      * }
-      *
-      **/
 
 
   }
