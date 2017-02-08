@@ -35,7 +35,7 @@ object F1 {
       val isUnionAll = (k == 0)
       val toolsAgreeOnError: Boolean = isUnionAll match {
         case true => toolsIndicatedError > k // the union-all case
-        case false => toolsIndicatedError == k // the min-k case
+        case false => toolsIndicatedError >= k // the min-k case
       }
 
       toolsAgreeOnError
