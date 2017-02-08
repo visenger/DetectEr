@@ -1,10 +1,12 @@
 package de.model.mutual.information
 
 import com.google.common.math.DoubleMath
+import de.evaluation.f1.{Eval, F1, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.model.util.Model
-import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 
+import scala.collection.immutable.IndexedSeq
 import scala.math.BigDecimal.RoundingMode
 
 /**
@@ -14,117 +16,97 @@ class PMIEstimator {
 
 }
 
-case class ToolPMI(tool1: String, tool2: String, pmi: Double, pmiLog2: Double, percentFound: Double)
+case class ToolPMI(tool1: String, tool2: String, pmi: Double, pmiLog2: Double) {
+  override def toString: String = {
+    s"$tool1, $tool2, PMI: $pmi, PMI-log2: $pmiLog2"
+  }
+}
 
 object PMIEstimatorRunner {
   def main(args: Array[String]): Unit = {
     SparkLOAN.withSparkSession("PMI") {
       session => {
-        val model: DataFrame = DataSetCreator.createDataSet(session, "model.matrix.file", Model.schema: _*)
-
-        val sampleSize = model.count()
-
+        val model: DataFrame = getData(session)
 
         //        val tool1 = "exists-1"
         //        val tool2 = "exists-2"
 
-        val pairs: List[Seq[String]] = Model.tools.combinations(2).toList
+        val pairs: List[Seq[String]] = FullResult.tools.combinations(2).toList
 
         val pmis: List[ToolPMI] = pairs.map(t => {
           val tool1 = t(0)
           val tool2 = t(1)
 
-          val twoTools = model.select(model.col(tool1), model.col(tool2))
+          val twoTools = model.select(model.col(FullResult.label), model.col(tool1), model.col(tool2))
 
-          val firstTool = countElementsOfColumn(twoTools, 0)
-
-          val secondTool = countElementsOfColumn(twoTools, 1)
+          val firstTool = countElementsOfColumn(twoTools, tool1)
+          val secondTool = countElementsOfColumn(twoTools, tool2)
 
           val cooccuringTools = twoTools
-            .filter(row => {
-              val firstElement = row.getString(0).toInt == 1
-              val secondElement = row.getString(1).toInt == 1
-              firstElement && secondElement
+            .where(twoTools.col(tool1) === "1" && twoTools.col(tool2) === "1")
+            .count()
 
-            }).count()
-
-
-          val bothToolsNothing = twoTools
-            .filter(row => {
-              val firstElement = row.getString(0).toInt == 0
-              val secondElement = row.getString(1).toInt == 0
-              firstElement && secondElement
-
-            }).count()
-
-          val found = sampleSize - bothToolsNothing
-
-          val percentageFound: Double = found.toDouble * 100 / sampleSize.toDouble
-
-          // println(s" First Tool [$tool1] found: $firstTool")
-          // println(s" Second Tool [$tool2] found: $secondTool")
-          // println(s" Coocurence of [$tool1] and [$tool2]: $cooccuringTools")
-          // println(s" Found total by [$tool1] and [$tool2]: $percentageFound%")
-
-
-          val pmi: Double = Math.log((cooccuringTools.toDouble * sampleSize.toDouble) / (firstTool.toDouble * secondTool.toDouble))
-          val pmiWithLog2 = DoubleMath.log2((cooccuringTools.toDouble * sampleSize.toDouble) / (firstTool.toDouble * secondTool.toDouble))
-
-          // println(s" PMI of [$tool1] and [$tool2]  tools: $pmi")
-          // println(s" LOG2 PMI of [$tool1] and [$tool2]  tools: $pmiWithLog2")
-
-          // println(s" ------******------ ")
+          val sampleSize = model.count()
+          val pmi: Double = Math
+            .log((cooccuringTools.toDouble * sampleSize.toDouble) / (firstTool.toDouble * secondTool.toDouble))
+          val pmiWithLog2 = DoubleMath
+            .log2((cooccuringTools.toDouble * sampleSize.toDouble) / (firstTool.toDouble * secondTool.toDouble))
 
           ToolPMI(
             tool1,
             tool2,
             round(pmi),
-            round(pmiWithLog2),
-            round(percentageFound))
-
+            round(pmiWithLog2))
         })
 
-        println(s" sorting by pmi")
-        val sortedByPMI = sortBy(pmis) {
-          t => t._1.pmi < t._2.pmi
-        }
-        sortedByPMI.foreach(println)
+        val toolPMIs: List[ToolPMI] = pmis.sortWith((p1, p2) => p1.pmi > p2.pmi).toList
 
-        val take = 3
-        val firstPMIs = sortedByPMI.take(take)
-        println(computePercentageFoundErrors(model, firstPMIs))
+        toolPMIs.foreach(t => println(t.toString))
 
+        val allTops: List[List[String]] = aggregateTools(toolPMIs)
 
-        println(s" ---- apply another sorting: by percentage ")
-        val sortedByPercentage = sortBy(pmis) {
-          t => (t._1.percentFound > t._2.percentFound)
-        }
-        sortedByPercentage.foreach(println)
+        allTops.foreach(topTools => {
+          val tools = topTools.mkString(" + ")
+          println(tools)
 
-        val percentage = sortedByPercentage.take(take)
-        println(computePercentageFoundErrors(model, percentage))
+          val label = FullResult.label
+          val labelAndTopTools = model.select(label, topTools: _*)
 
-        println(s" -- intersect of pmi and percentage ---")
-        val intersect = firstPMIs.intersect(percentage)
-        println(computePercentageFoundErrors(model, intersect))
+          val eval: Eval = F1.evaluate(labelAndTopTools)
+          eval.printResult("union all")
 
-        println(s" -- union of pmi and percentage ---")
-        val unifiedPMIAndPercent = firstPMIs.union(percentage).toSet.toList
-        println(computePercentageFoundErrors(model, unifiedPMIAndPercent))
-
-
-        println(s" two fold sorting: ")
-        val twoCriteriasSorting = sortBy(pmis) {
-          t => (t._1.pmi < t._2.pmi) && (t._1.percentFound > t._2.percentFound)
-        }
-        val pmisAndPercentage = twoCriteriasSorting.take(take)
-        println(computePercentageFoundErrors(model, pmisAndPercentage))
+          val k = topTools.length
+          val minK: Eval = F1.evaluate(labelAndTopTools, k)
+          minK.printResult(s"min-$k")
+        })
 
 
       }
     }
 
 
+  }
+
+
+  def aggregateTools(toolPMIs: List[ToolPMI]): List[List[String]] = {
+    val allTops = (1 to 5).map(i => {
+      val top1 = toolPMIs.take(i)
+      val listOfTools = getListOfTopPMIs(top1)
+      listOfTools
+    }).toSet.toList
+    allTops
+  }
+
+  def getListOfTopPMIs(top: List[ToolPMI]): List[String] = {
+    val tools: Set[String] = top.flatMap(t => {
+      Seq(t.tool1, t.tool2)
+    }).toSet
+    tools.toList
+  }
+
+  def getData(session: SparkSession): DataFrame = {
+    val blackOakFullResult = DataSetCreator.createDataSetNoHeader(session, "output.full.result.file", FullResult.schema: _*)
+    blackOakFullResult
   }
 
   private def sortBy(pmis: List[ToolPMI])(predicate: Tuple2[ToolPMI, ToolPMI] => Boolean) = {
@@ -134,6 +116,7 @@ object PMIEstimatorRunner {
     })
   }
 
+  @Deprecated
   private def computePercentageFoundErrors(model: DataFrame, pmis: List[ToolPMI]): String = {
 
     val firstWithLowPMI: Set[String] = pmis.flatMap(t => {
@@ -166,15 +149,13 @@ object PMIEstimatorRunner {
 
   }
 
-  private def round(percentageFound: Double) = {
-    BigDecimal(percentageFound).setScale(2, RoundingMode.HALF_UP).toDouble
+  def round(percentageFound: Double, scale: Int = 2) = {
+    BigDecimal(percentageFound).setScale(scale, RoundingMode.HALF_UP).toDouble
   }
 
-  private def countElementsOfColumn(twoTools: DataFrame, colNum: Int): Long = {
-    twoTools
-      .filter(row => {
-        row.getString(colNum).toInt == 1
-      }).count()
+  private def countElementsOfColumn(twoTools: DataFrame, colName: String): Long = {
+    twoTools.where(twoTools.col(colName) === "1")
+      .count()
   }
 }
 
