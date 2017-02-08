@@ -15,9 +15,51 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 /**
   * Created by visenger on 06/02/17.
   */
+
+case class TrainData(regParam: Double,
+                     elasticNetParam: Double,
+                     modelCoefficients: Array[Double],
+                     modelIntercept: Double,
+                     maxFMeasure: Double,
+                     areaUnderRoc: Double) {
+  override def toString: String = {
+
+    s"TRAIN: regParam: $regParam, elasticNetParam: $elasticNetParam,  maxFMeasure: $maxFMeasure, AreaUnderRoc: $areaUnderRoc, ModelCoefficients: ${modelCoefficients.mkString(",")}, ModelIntercept: $modelIntercept"
+  }
+
+  def createModelFormula(): String = {
+    var i = 0
+    val function = modelCoefficients.map(c => {
+      if (c < 0) s"(${c})t_{${i += 1; i;}}" else s"${c}t_{${i += 1; i;}}"
+    }).mkString(" + ")
+    function
+    s"""P(err)=\\frac{1}{1+\\exp ^{-($modelIntercept+$function)}}"""
+  }
+}
+
+case class TestData(totalTest: Long,
+                    wrongPrediction: Long,
+                    accuracy: Double,
+                    precision: Double,
+                    recall: Double,
+                    f1: Double) {
+  override def toString: String = {
+    s"TEST: Accuracy: $accuracy, Precision: $precision, Recall: $recall, F1: $f1, totalTest: $totalTest, wrongPrediction: $wrongPrediction"
+  }
+}
+
 object BlackOakLogisticRegression {
 
   def main(args: Array[String]): Unit = {
+
+    (1 to 5).foreach(trial => {
+      runLogisticRegression(trial)
+      Thread.sleep(1000)
+    })
+
+  }
+
+  def runLogisticRegression(ind: Int): Unit = {
     val path = ConfigFactory.load().getString("model.full.result.file")
     val sparkSession: SparkSession = SparkSessionCreator.createSession("LOGREGR")
 
@@ -49,18 +91,24 @@ object BlackOakLogisticRegression {
      evaluateRegressionModel(bestModel, test, FullResult.label)*/
 
 
-    println(s"-----------the previous model--------------")
-
+    val elasticNetParam = ind % 2 == 0 match {
+      case true => 0.4
+      case false => 0.0
+    }
+    val regParam = 0.1
     /* logistic regression */
     val logRegression = new LogisticRegression()
-      .setMaxIter(100)
-      .setRegParam(0.1)
-      .setElasticNetParam(0.4)
+      .setTol(1E-8)
+      .setRegParam(regParam)
+      .setElasticNetParam(elasticNetParam)
+
 
     val model = logRegression.fit(training)
 
     // Print the coefficients and intercept for logistic regression
-    println(s"Coefficients: ${model.coefficients} Intercept: ${model.intercept}")
+    val modelCoeff = model.coefficients.toArray
+    val intercept = model.intercept
+    //println(s"Coefficients: ${modelCoeff} Intercept: ${intercept}")
 
 
     val logisticRegressionTrainingSummary = model.summary
@@ -72,11 +120,13 @@ object BlackOakLogisticRegression {
     val binarySummary = logisticRegressionTrainingSummary.asInstanceOf[BinaryLogisticRegressionSummary]
 
     val lrRoc = binarySummary.roc
-    lrRoc.show()
-    println(s"Area under ROC: ${binarySummary.areaUnderROC}")
+    //lrRoc.show()
+    val areaUnderROC = binarySummary.areaUnderROC
+    // println(s"Area under ROC: ${areaUnderROC}")
 
     import org.apache.spark.sql.functions._
     val fMeasure = binarySummary.fMeasureByThreshold
+
     val maxFMeasure = fMeasure.select(max("F-Measure")).head().getDouble(0)
     val bestThreshold = fMeasure
       .where(fMeasure.col("F-Measure") === maxFMeasure)
@@ -84,15 +134,23 @@ object BlackOakLogisticRegression {
       .head()
       .getDouble(0)
 
-    println(s"max F-Measure: $maxFMeasure")
+    //    println(s"max F-Measure: $maxFMeasure")
+    //    println(s"best Threshold: $bestThreshold")
 
     model.setThreshold(bestThreshold)
 
-    val prediction = model.transform(test)
+    val trainDataInfo = TrainData(regParam, elasticNetParam, modelCoeff, intercept, maxFMeasure, areaUnderROC)
 
-    prediction.show(4)
+    //val prediction = model.transform(test)
 
-    evaluateRegressionModel(model, test, FullResult.label)
+    //prediction.show(4)
+
+    val testDataInfo = evaluateRegressionModel(model, test, FullResult.label)
+    println(s" round $ind:")
+    println(trainDataInfo)
+    println(trainDataInfo.createModelFormula())
+    println(testDataInfo)
+    println(s"---------------------------------------------------------")
 
 
     sparkSession.stop()
@@ -108,20 +166,54 @@ object BlackOakLogisticRegression {
     */
   private def evaluateRegressionModel(model: Transformer,
                                       data: DataFrame,
-                                      labelColName: String): Unit = {
+                                      labelColName: String): TestData = {
     val fullPredictions = model.transform(data).cache()
     val predictions = fullPredictions.select("prediction").rdd.map(_.getDouble(0))
-    println(s"Test data count: ${predictions.count()}")
+    val totalData = predictions.count()
+    //    println(s"Test data count: ${totalData}")
     val labels = fullPredictions.select(labelColName).rdd.map(_.getDouble(0))
     val zippedPredictionsAndLabels: RDD[(Double, Double)] = predictions.zip(labels)
     val RMSE = new RegressionMetrics(zippedPredictionsAndLabels).rootMeanSquaredError
-    println(s"  Root mean squared error (RMSE): $RMSE")
-    val wrongPredictions = zippedPredictionsAndLabels.filter(t => {
-      Math.abs(t._1 - t._2) != 0
-    }).count()
-    println(s"Wrong predictions count: $wrongPredictions")
+    //    println(s"  Root mean squared error (RMSE): $RMSE")
 
-    println(s"count by values ${zippedPredictionsAndLabels.countByValue()}")
+
+    val outcomeCounts = zippedPredictionsAndLabels.countByValue()
+    //    println(s"count by values ${outcomeCounts}")
+
+    val wrongPredictions: Double = outcomeCounts
+      .filterKeys(key => key._1 != key._2)
+      .map(_._2)
+      .foldLeft(0.0) { (acc, elem) => acc + elem }
+    //    println(s"Wrong predictions: $wrongPredictions")
+
+    var tp = 0.0
+    var fn = 0.0
+    var tn = 0.0
+    var fp = 0.0
+
+    outcomeCounts.foreach(elem => {
+      val values = elem._1
+      val count = elem._2
+      values match {
+        case (0.0, 0.0) => tn = count
+        case (1.0, 1.0) => tp = count
+        case (1.0, 0.0) => fp = count
+        case (0.0, 1.0) => fn = count
+      }
+    })
+
+    val accuracy = (tp + tn) / totalData.toDouble
+    //    println(s"Accuracy: $accuracy")
+    val precision = tp / (tp + fp).toDouble
+    //    println(s"Precision: $precision")
+
+    val recall = tp / (tp + fn).toDouble
+    //    println(s"Recall: $recall")
+
+    val F1 = 2 * precision * recall / (precision + recall)
+    //    println(s"F-1 Score: $F1")
+
+    TestData(totalData, wrongPredictions.toLong, accuracy, precision, recall, F1)
   }
 
   private def getDataFrame(session: SparkSession): DataFrame = {
