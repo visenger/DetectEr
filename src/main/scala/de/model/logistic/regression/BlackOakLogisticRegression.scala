@@ -12,6 +12,8 @@ import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
+import scala.math.BigDecimal.RoundingMode
+
 /**
   * Created by visenger on 06/02/17.
   */
@@ -27,13 +29,14 @@ case class TrainData(regParam: Double,
     s"TRAIN: regParam: $regParam, elasticNetParam: $elasticNetParam,  maxFMeasure: $maxFMeasure, AreaUnderRoc: $areaUnderRoc, ModelCoefficients: ${modelCoefficients.mkString(",")}, ModelIntercept: $modelIntercept"
   }
 
-  def createModelFormula(): String = {
+  def createModelFormula(ind: Int): String = {
     var i = 0
     val function = modelCoefficients.map(c => {
       if (c < 0) s"(${c})t_{${i += 1; i;}}" else s"${c}t_{${i += 1; i;}}"
     }).mkString(" + ")
     function
-    s"""P(err)=\\frac{1}{1+\\exp ^{-($modelIntercept+$function)}}"""
+    //s"""P(err)=\\frac{1}{1+\\exp ^{-($modelIntercept+$function)}}"""
+    s""" t_{$ind}=$modelIntercept+$function """
   }
 }
 
@@ -52,7 +55,7 @@ object BlackOakLogisticRegression {
 
   def main(args: Array[String]): Unit = {
 
-    (1 to 5).foreach(trial => {
+    (1 to 15).foreach(trial => {
       runLogisticRegression(trial)
       Thread.sleep(1000)
     })
@@ -106,8 +109,8 @@ object BlackOakLogisticRegression {
     val model = logRegression.fit(training)
 
     // Print the coefficients and intercept for logistic regression
-    val modelCoeff = model.coefficients.toArray
-    val intercept = model.intercept
+    val modelCoeff = model.coefficients.toArray.map(c => round(c, 4))
+    val intercept = round(model.intercept, 4)
     //println(s"Coefficients: ${modelCoeff} Intercept: ${intercept}")
 
 
@@ -124,7 +127,7 @@ object BlackOakLogisticRegression {
     val areaUnderROC = binarySummary.areaUnderROC
     // println(s"Area under ROC: ${areaUnderROC}")
 
-    import org.apache.spark.sql.functions._
+    import org.apache.spark.sql.functions.max
     val fMeasure = binarySummary.fMeasureByThreshold
 
     val maxFMeasure = fMeasure.select(max("F-Measure")).head().getDouble(0)
@@ -139,19 +142,22 @@ object BlackOakLogisticRegression {
 
     model.setThreshold(bestThreshold)
 
-    val trainDataInfo = TrainData(regParam, elasticNetParam, modelCoeff, intercept, maxFMeasure, areaUnderROC)
+    val trainDataInfo = TrainData(regParam, elasticNetParam, modelCoeff, intercept, round(maxFMeasure, 4), round(areaUnderROC, 4))
 
     //val prediction = model.transform(test)
 
     //prediction.show(4)
 
     val testDataInfo = evaluateRegressionModel(model, test, FullResult.label)
-    println(s" round $ind:")
-    println(trainDataInfo)
-    println(trainDataInfo.createModelFormula())
-    println(testDataInfo)
-    println(s"---------------------------------------------------------")
 
+    //println(s" round $ind:")
+    //println(trainDataInfo)
+    //println(trainDataInfo.createModelFormula(ind))
+    //println(testDataInfo)
+    //func         & auc             & train f1          & p         & r      & test f1                 \\
+
+    println(s"""$$ ${trainDataInfo.createModelFormula(ind)}$$     & ${trainDataInfo.areaUnderRoc}    & ${trainDataInfo.maxFMeasure}   & ${testDataInfo.precision}   & ${testDataInfo.recall}   & ${testDataInfo.f1}  \\\\""")
+    //println(s"---------------------------------------------------------")
 
     sparkSession.stop()
   }
@@ -213,7 +219,11 @@ object BlackOakLogisticRegression {
     val F1 = 2 * precision * recall / (precision + recall)
     //    println(s"F-1 Score: $F1")
 
-    TestData(totalData, wrongPredictions.toLong, accuracy, precision, recall, F1)
+    TestData(totalData, wrongPredictions.toLong, round(accuracy, 4), round(precision, 4), round(recall, 4), round(F1, 4))
+  }
+
+  def round(percentageFound: Double, scale: Int = 2) = {
+    BigDecimal(percentageFound).setScale(scale, RoundingMode.HALF_UP).toDouble
   }
 
   private def getDataFrame(session: SparkSession): DataFrame = {

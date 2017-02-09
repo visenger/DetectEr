@@ -16,9 +16,9 @@ class PMIEstimator {
 
 }
 
-case class ToolPMI(tool1: String, tool2: String, pmi: Double, pmiLog2: Double) {
+case class ToolPMI(tool1: String, tool2: String, pmi: Double) {
   override def toString: String = {
-    s"$tool1, $tool2, PMI: $pmi, PMI-log2: $pmiLog2"
+    s"$tool1, $tool2, PMI: $pmi"
   }
 }
 
@@ -49,14 +49,14 @@ object PMIEstimatorRunner {
           val sampleSize = model.count()
           val pmi: Double = Math
             .log((cooccuringTools.toDouble * sampleSize.toDouble) / (firstTool.toDouble * secondTool.toDouble))
-          val pmiWithLog2 = DoubleMath
-            .log2((cooccuringTools.toDouble * sampleSize.toDouble) / (firstTool.toDouble * secondTool.toDouble))
+          //          val pmiWithLog2 = DoubleMath
+          //            .log2((cooccuringTools.toDouble * sampleSize.toDouble) / (firstTool.toDouble * secondTool.toDouble))
 
           ToolPMI(
             tool1,
             tool2,
-            round(pmi),
-            round(pmiWithLog2))
+            round(pmi)
+          )
         })
 
         val toolPMIs: List[ToolPMI] = pmis.sortWith((p1, p2) => p1.pmi > p2.pmi).toList
@@ -64,29 +64,44 @@ object PMIEstimatorRunner {
         toolPMIs.foreach(t => println(t.toString))
 
         val allTops: List[List[String]] = aggregateTools(toolPMIs)
+        printEvaluation(model, allTops)
 
-        allTops.foreach(topTools => {
-          val tools = topTools.mkString(" + ")
-          println(tools)
-
-          val label = FullResult.label
-          val labelAndTopTools = model.select(label, topTools: _*)
-
-          val eval: Eval = F1.evaluate(labelAndTopTools)
-          eval.printResult("union all")
-
-          val k = topTools.length
-          val minK: Eval = F1.evaluate(labelAndTopTools, k)
-          minK.printResult(s"min-$k")
-        })
-
-
+        println(s"inverse PMI:")
+        val toolsInversePMIs = toolPMIs.reverse
+        val allInvPMIs: List[List[String]] = aggregateTools(toolsInversePMIs)
+        printEvaluation(model, allInvPMIs)
       }
     }
 
 
   }
 
+
+  private def printEvaluation(model: DataFrame, allTops: List[List[String]]) = {
+
+
+    allTops.foreach(topTools => {
+      val tools = topTools.mkString(" + ")
+      //println(tools)
+
+      val label = FullResult.label
+      val labelAndTopTools = model.select(label, topTools: _*)
+
+      val eval: Eval = F1.evaluate(labelAndTopTools)
+      //eval.printResult("union all")
+
+      val k = topTools.length
+      val minK: Eval = F1.evaluate(labelAndTopTools, k)
+      // minK.printResult(s"min-$k")
+
+      val latexTableRow =
+        s"""
+            \\multirow{2}{*}{Top-1} & \\multirow{2}{*}{$tools} & union all  & ${eval.precision}        & ${eval.recall}     & ${eval.f1}  \\\\
+                       &                              & min-$k      & ${minK.precision}        & ${minK.recall}     & ${minK.f1}   \\\\
+    """.stripMargin
+      println(latexTableRow)
+    })
+  }
 
   def aggregateTools(toolPMIs: List[ToolPMI]): List[List[String]] = {
     val allTops = (1 to 5).map(i => {
