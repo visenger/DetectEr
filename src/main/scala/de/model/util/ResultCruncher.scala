@@ -1,7 +1,7 @@
 package de.model.util
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.data.blackoak.{BlackOakGoldStandard, BlackOakSchema}
+import de.evaluation.data.blackoak.{BlackOakGoldStandard, BlackOakGoldStandardRunner}
 import de.evaluation.f1.{DataF1, Table}
 import de.evaluation.tools.deduplication.nadeef.NadeefDeduplicationResults
 import de.evaluation.tools.outliers.dboost.DBoostResults
@@ -28,7 +28,7 @@ class ResultCruncher {
     // e.g side-effect methods, which perform I/O;
     withSparkSession("cruncher") {
       sparkSession => {
-        val goldStandard: DataFrame = BlackOakGoldStandard
+        val goldStandard: DataFrame = BlackOakGoldStandardRunner
           .getGoldStandard(sparkSession)
 
         val patternViolationResult: DataFrame = TrifactaResults
@@ -75,8 +75,6 @@ class ResultCruncher {
     }
 
 
-
-
   }
 
 
@@ -103,7 +101,6 @@ class ResultCruncher {
     import sparkSession.implicits._
 
     val ones = goldStandard.intersect(errorDetectResult)
-
 
 
     /**/

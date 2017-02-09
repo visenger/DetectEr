@@ -1,7 +1,7 @@
 package de.evaluation.tools.pattern.violation
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.data.blackoak.BlackOakSchema
+import de.evaluation.data.schema.BlackOakSchema
 import de.evaluation.f1.DataF1
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}

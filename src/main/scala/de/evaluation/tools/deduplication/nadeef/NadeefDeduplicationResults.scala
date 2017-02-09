@@ -1,7 +1,7 @@
 package de.evaluation.tools.deduplication.nadeef
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.data.blackoak.BlackOakSchema
+import de.evaluation.data.schema.BlackOakSchema
 import de.evaluation.f1.DataF1
 import de.evaluation.util.{DataSetCreator, DatabaseProps, SparkLOAN}
 import org.apache.spark.sql._

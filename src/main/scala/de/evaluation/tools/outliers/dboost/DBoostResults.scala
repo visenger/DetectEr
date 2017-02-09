@@ -4,7 +4,7 @@ import java.io.File
 
 import com.google.common.base.Strings
 import com.typesafe.config.{Config, ConfigFactory}
-import de.evaluation.data.blackoak.BlackOakSchema
+import de.evaluation.data.schema.BlackOakSchema
 import de.evaluation.f1.DataF1
 import de.evaluation.util.{DataSetCreator, SparkSessionCreator}
 import org.apache.spark.rdd.RDD

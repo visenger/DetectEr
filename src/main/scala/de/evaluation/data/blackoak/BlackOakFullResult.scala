@@ -21,7 +21,7 @@ class BlackOakFullResult {
     SparkLOAN.withSparkSession("FULL") {
       sparkSession => {
 
-        val groundTruth: DataFrame = BlackOakGoldStandard
+        val groundTruth: DataFrame = BlackOakGoldStandardRunner
           .getGroundTruth(sparkSession)
 
         val patternViolationResult: DataFrame = TrifactaResults

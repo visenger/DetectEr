@@ -2,43 +2,11 @@ package de.evaluation.data.blackoak
 
 import com.google.common.base.Strings
 import com.typesafe.config.{Config, ConfigFactory}
+import de.evaluation.data.gold.standard.GoldStandardCreator
+import de.evaluation.data.schema.{BlackOakSchema, Schema}
 import de.evaluation.f1.{DataF1, Table}
 import de.evaluation.util.{DataSetCreator, SparkLOAN, SparkSessionCreator}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-
-/**
-  * Created by visenger on 27/11/16.
-  */
-
-object BlackOakSchema {
-  val schema = Seq("RecID", "FirstName", "MiddleName", "LastName", "Address", "City", "State", "ZIP", "POBox", "POCityStateZip", "SSN", "DOB")
-
-  val indexedAttributes: Map[String, Int] = indexAttributes
-
-  val indexedLowerCaseAttributes: Map[String, Int] = indexLCAttributes
-
-  private def indexAttributes = {
-    schema.zipWithIndex.toMap.map(
-      e => (e._1, {
-        var i = e._2;
-        i += 1; // 1-based indexing
-        i
-      }))
-  }
-
-  private def indexLCAttributes: Map[String, Int] = {
-    indexedAttributes.map(a => (a._1.toLowerCase, a._2))
-  }
-
-  def getIndexesByAttrNames(attributes: List[String]): List[Int] = {
-    val allAttrToLowerCase = attributes.map(_.toLowerCase)
-    val indexes = allAttrToLowerCase.map(attr => {
-      indexedLowerCaseAttributes.getOrElse(attr, 0)
-    })
-    indexes.sortWith(_ < _)
-  }
-
-}
 
 
 class BlackOakGoldStandard {
@@ -50,6 +18,8 @@ class BlackOakGoldStandard {
 
   val goldStdFile: String = "output.blackouak.gold.file"
 
+  val outputFolder = "output.blackoak.goldstandard.ground.truth.folder"
+
   val groundTruthFile = "output.blackoak.goldstandard.ground.truth.file"
 
 
@@ -58,11 +28,12 @@ class BlackOakGoldStandard {
 
     val sparkSession: SparkSession = SparkSessionCreator.createSession("GOLD")
 
-    val dirtyBlackOakDF: DataFrame = DataSetCreator.createDataSet(sparkSession, dirtyData, BlackOakSchema.schema: _*)
+    val dirtyBlackOakDF: DataFrame = DataSetCreator.createDataSet(sparkSession, dirtyData, BlackOakSchema.getSchema: _*)
 
     val cleanBlackOakDF: DataFrame = DataSetCreator.createDataSet(sparkSession, cleanData, BlackOakSchema.schema: _*)
 
     val goldStandard: Dataset[String] = createLogGoldStandard(sparkSession, dirtyBlackOakDF, cleanBlackOakDF)
+
 
     val outputGoldStandard = conf.getString("output.blackouak.goldstandard")
     goldStandard.write.text(outputGoldStandard)
@@ -72,8 +43,18 @@ class BlackOakGoldStandard {
     sparkSession.stop()
   }
 
-
   def createGoldWithGroundTruth(): Unit = {
+    val creator = GoldStandardCreator
+    val s = BlackOakSchema
+    creator.onSchema(s)
+    creator.addDirtyPath(dirtyData)
+    creator.addCleanPath(cleanData)
+    creator.specifyOutputFolder("output.blackoak.goldstandard.ground.truth.folder")
+    creator.create
+  }
+
+
+  def old_createGoldWithGroundTruth(): Unit = {
     SparkLOAN.withSparkSession("GROUNDTRUTH") {
       session => {
         val dirtyBlackOakDF: DataFrame = DataSetCreator.createDataSet(session, dirtyData, BlackOakSchema.schema: _*)
@@ -99,6 +80,8 @@ class BlackOakGoldStandard {
     groundTruth
   }
 
+  private val recid = "RecID"
+
   @Deprecated
   private def createLogGoldStandard(sparkSession: SparkSession, dirtyBlackOakDF: DataFrame, cleanBlackOakDF: DataFrame): Dataset[String] = {
     val schema = BlackOakSchema.schema
@@ -107,12 +90,12 @@ class BlackOakGoldStandard {
     //here we produce log data for dirty rows and log dirty attributes:
     import sparkSession.implicits._
     val join = cleanBlackOakDF
-      .joinWith(dirtyBlackOakDF, cleanBlackOakDF.col("RecID") === dirtyBlackOakDF.col("RecID"))
+      .joinWith(dirtyBlackOakDF, cleanBlackOakDF.col(recid) === dirtyBlackOakDF.col(recid))
       .flatMap(row => {
         val cleanVals = row._1.getValuesMap[String](schema)
         val dirtyVals = row._2.getValuesMap[String](schema)
 
-        val dirtyAttributes = for (attrName <- schema; if attrName != "RecID") yield {
+        val dirtyAttributes = for (attrName <- schema; if attrName != recid) yield {
           val cleanValue = cleanVals.getOrElse(attrName, "")
           val dirtyValue = dirtyVals.getOrElse(attrName, "")
 
@@ -121,7 +104,7 @@ class BlackOakGoldStandard {
           } else ""
           idxIfDistinct.asInstanceOf[String]
         }
-        val id = cleanVals.getOrElse("RecID", "0")
+        val id = cleanVals.getOrElse(recid, "0")
         val nonEmptyAttrs = dirtyAttributes.filter(_.nonEmpty)
 
 
@@ -136,6 +119,7 @@ class BlackOakGoldStandard {
   }
 
 
+  //todo: make this method general.
   private def createLogGoldStandardWithGroundTruth(sparkSession: SparkSession,
                                                    dirtyBlackOakDF: DataFrame,
                                                    cleanBlackOakDF: DataFrame): Dataset[String] = {
@@ -148,14 +132,15 @@ class BlackOakGoldStandard {
     //here we produce log data for dirty rows and log dirty attributes:
     import sparkSession.implicits._
     val join = cleanBlackOakDF
-      .joinWith(dirtyBlackOakDF, cleanBlackOakDF.col("RecID") === dirtyBlackOakDF.col("RecID"))
+      .joinWith(dirtyBlackOakDF, cleanBlackOakDF.col(recid) === dirtyBlackOakDF.col(recid))
       .flatMap(row => {
+        row._1.schema.fieldNames
         val cleanVals = row._1.getValuesMap[String](schema)
         val dirtyVals = row._2.getValuesMap[String](schema)
 
-        val id = cleanVals.getOrElse("RecID", "0")
+        val id = cleanVals.getOrElse(recid, "0")
 
-        val dirtyAndCleanAttributes = for (attrName <- schema; if attrName != "RecID") yield {
+        val dirtyAndCleanAttributes = for (attrName <- schema; if attrName != recid) yield {
           val cleanValue = cleanVals.getOrElse(attrName, "")
           val dirtyValue = dirtyVals.getOrElse(attrName, "")
 
@@ -176,7 +161,7 @@ class BlackOakGoldStandard {
 
 }
 
-object BlackOakGoldStandard {
+object BlackOakGoldStandardRunner {
   def main(args: Array[String]): Unit = {
     // new BlackOakGoldStandard().createGoldStandard()
     new BlackOakGoldStandard().createGoldWithGroundTruth()
