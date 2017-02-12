@@ -50,10 +50,10 @@ class BlackOakGoldStandard {
     creator.addDirtyPath(dirtyData)
     creator.addCleanPath(cleanData)
     creator.specifyOutputFolder("output.blackoak.goldstandard.ground.truth.folder")
-    creator.create
+    creator.show(13)
   }
 
-
+  @Deprecated
   def old_createGoldWithGroundTruth(): Unit = {
     SparkLOAN.withSparkSession("GROUNDTRUTH") {
       session => {
@@ -119,7 +119,7 @@ class BlackOakGoldStandard {
   }
 
 
-  //todo: make this method general.
+  @Deprecated
   private def createLogGoldStandardWithGroundTruth(sparkSession: SparkSession,
                                                    dirtyBlackOakDF: DataFrame,
                                                    cleanBlackOakDF: DataFrame): Dataset[String] = {
