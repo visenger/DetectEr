@@ -1,5 +1,15 @@
-splitrows col: column1 on: '\r' quote: '\"'
-split col: column1 on: ',' limit: 11 quote: '\"'
+splitrows col: column1 on: '\r\n' quote: '\"'
+split col: column1 on: ',' limit: 17 quote: '\"'
+replace col: * with: '' on: '\"' global: true
 header
-delete row: mismatched(ZIP_varchar_55, ['Integer'])
-delete row: mismatched(SSN_varchar_255, ['SSN'])
+annotatecolumn col: oid key: 'hidden' value: 'true'
+annotatecolumn col: hospitalname key: 'hidden' value: 'true'
+annotatecolumn col: address key: 'hidden' value: 'true'
+keep row: ismismatched(prno, ['Zipcode']) || (ismismatched(zip, ['Zipcode']) || ismismatched(phone, ['Phone']))
+annotatecolumn col: address key: 'hidden' value: 'false'
+annotatecolumn col: hospitalname key: 'hidden' value: 'false'
+annotatecolumn col: oid key: 'hidden' value: 'false'
+derive value: ismismatched(prno, ['Zipcode']) group:  as: 'ismismatched_prno'
+derive value: ismismatched(zip, ['Zipcode']) as: 'ismismatched_zip'
+derive value: ismismatched(phone, ['Phone']) as: 'ismismatched_phone'
+drop col: hospitalname, address, city, state, hospitaltype, hospitalowner, emergencyservice, condition, mc, measurename, score, sample1, stateavg, countryname

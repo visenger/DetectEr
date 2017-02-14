@@ -3,7 +3,7 @@ package de.evaluation.util
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
-  * Created by visenger on 23/12/16.
+  * LOAN Pattern for Spark session handling: close session after performing some function f.
   */
 object SparkLOAN {
 
@@ -17,13 +17,13 @@ object SparkLOAN {
 
   }
 
- /* def withSparkSession(name: String)(f: SparkSession => DataFrame) = {
-    val r = SparkSessionCreator.createSession(name)
-    try {
-      f(r)
-    } finally {
-      r.stop()
-    }
-  }*/
+  /* def withSparkSession(name: String)(f: SparkSession => DataFrame) = {
+     val r = SparkSessionCreator.createSession(name)
+     try {
+       f(r)
+     } finally {
+       r.stop()
+     }
+   }*/
 
 }
