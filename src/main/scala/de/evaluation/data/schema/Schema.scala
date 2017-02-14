@@ -3,7 +3,7 @@ package de.evaluation.data.schema
 /**
   * Created by visenger on 09/02/17.
   */
-trait Schema {
+trait Schema extends Serializable {
 
   // def getIndexesByAttrNames(attributes: List[String]): List[Int]
 
@@ -15,7 +15,7 @@ trait Schema {
     indexes.sortWith(_ < _)
   }
 
-   def indexLCAttributes: Map[String, Int] = {
+  def indexLCAttributes: Map[String, Int] = {
     indexAttributes.map(a => (a._1.toLowerCase, a._2))
   }
 

@@ -4,9 +4,9 @@ import java.io.File
 
 import com.google.common.base.Strings
 import com.typesafe.config.{Config, ConfigFactory}
-import de.evaluation.data.schema.BlackOakSchema
+import de.evaluation.data.schema.{BlackOakSchema, HospSchema, Schema}
 import de.evaluation.f1.DataF1
-import de.evaluation.util.{DataSetCreator, SparkSessionCreator}
+import de.evaluation.util.{DataSetCreator, SparkLOAN, SparkSessionCreator}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 
@@ -16,26 +16,52 @@ import scala.util.{Failure, Success, Try}
 class DBoostResults {
 
 
-  val conf: Config = ConfigFactory.load()
+  private var dboostDetectFile = ""
+  private var outputPath = ""
 
-  def writeResults(): Unit = {
-    val sparkSession: SparkSession = SparkSessionCreator.createSession("DBOOST")
+  private var schema: Schema = null
+  private var recid = ""
 
-    val path = "dboost.BlackOak.result.gaus"
-    val outputFolder = "output.dboost.gaus.result.folder"
+  val conf = ConfigFactory.load()
 
-    val resultDataSet: DataFrame = DataSetCreator
-      .createDataSet(
-        sparkSession,
-        path,
-        BlackOakSchema.schema: _*)
+  def onSchema(s: Schema): this.type = {
+    schema = s
+    recid = s.getRecID
+    this
+  }
 
-    val outliersDS: Dataset[String] = createOutliersLog(sparkSession, resultDataSet)
+  def addDetectFile(f: String): this.type = {
+    dboostDetectFile = f
+    this
+  }
 
-    //todo: write results to folder
-    outliersDS.write.text(conf.getString(outputFolder))
+  def addOutputFolder(out: String): this.type = {
+    outputPath = out
+    this
+  }
 
-    sparkSession.stop()
+  def showOutliersLog(numRows: Int = 20): Unit = {
+
+    SparkLOAN.withSparkSession("DBOOST") {
+      session => {
+        val result = DataSetCreator.createDataSetNoHeader(session, dboostDetectFile, schema.getSchema: _*)
+        val outliersLog: Dataset[String] = createOutliersLog(session, result)
+        outliersLog.show(numRows)
+      }
+    }
+
+  }
+
+  def writeOutliersLog(): Unit = {
+
+    SparkLOAN.withSparkSession("DBOOST") {
+      session => {
+        val result = DataSetCreator.createDataSetNoHeader(session, dboostDetectFile, schema.getSchema: _*)
+        val outliersLog: Dataset[String] = createOutliersLog(session, result)
+        outliersLog.show()
+        outliersLog.write.text(conf.getString(outputPath))
+      }
+    }
 
   }
 
@@ -65,6 +91,7 @@ class DBoostResults {
     resultDataSet
   }
 
+  @Deprecated
   def writeResultsForMultipleFiles() = {
 
     val outliersResults = conf.getString("dboost.small.output.folder")
@@ -118,13 +145,20 @@ class DBoostResults {
 
   }
 
-
   private def createOutliersLog(sparkSession: SparkSession, resultDataSet: DataFrame): Dataset[String] = {
     //every attribute marked as ~attr~ is being identified as outlier
     import sparkSession.implicits._
 
-    val allColumns: Seq[Column] = BlackOakSchema.schema
-      .map(name => resultDataSet.col(name).contains("~"))
+    val thisSchema: Schema = schema
+    val id = thisSchema.getRecID
+    val allAttrNames = thisSchema.getSchema
+    val oulierMark = "~"
+
+    //here we create all parts of condition
+    val allColumns: Seq[Column] = allAttrNames
+      .filterNot(_.equals(id))
+      .map(name => resultDataSet.col(name).contains(oulierMark))
+
 
     val condition: Column = allColumns.tail
       .foldLeft(allColumns.head)((acc: Column, actual: Column) => acc || actual)
@@ -132,11 +166,65 @@ class DBoostResults {
     val filter = resultDataSet.filter(condition)
 
     val outliers: RDD[String] = filter.rdd.flatMap(row => {
-      val vals: Map[String, String] = row.getValuesMap[String](BlackOakSchema.schema)
-      val filtered = vals.filter(a => !Strings.isNullOrEmpty(a._2) && a._2.contains("~"))
-      val idx: List[Int] = BlackOakSchema.getIndexesByAttrNames(filtered.keySet.toList)
-      val recID: String = row.getAs[String]("RecID").trim
-      val outliersLines: List[String] = idx.map(i => s"$recID,$i")
+      val vals: Map[String, String] = row.getValuesMap[String](allAttrNames)
+      val filtered = vals.filter(a =>
+        !a._1.equalsIgnoreCase(id) //just in case when id is considered as outlier, we have to exclude it
+          && !Strings.isNullOrEmpty(a._2)
+          && a._2.contains(oulierMark))
+      val idx: List[Int] = thisSchema.getIndexesByAttrNames(filtered.keySet.toList)
+
+      val recID: String = row.getAs[String](id).trim
+
+      //TODO: sometimes dboost takes recid as outliers. Here is a temp fix.
+      val scapedRecId = recID.contains(oulierMark) match {
+        case true => {
+          recID.replaceAll(oulierMark, "").trim
+        }
+        case false => recID
+      }
+
+      val outliersLines: List[String] = idx.map(i => s"$scapedRecId,$i")
+      outliersLines
+    })
+
+    val outliersDS: Dataset[String] = outliers.filter(!_.isEmpty).toDS()
+    outliersDS
+  }
+
+
+  private def old_createOutliersLog(sparkSession: SparkSession, resultDataSet: DataFrame): Dataset[String] = {
+    //every attribute marked as ~attr~ is being identified as outlier
+    import sparkSession.implicits._
+
+    val thisSchema: Schema = schema
+    val id = thisSchema.getRecID
+    val allAttrNames = thisSchema.getSchema
+    val oulierMark = "~"
+
+    val allColumns: Seq[Column] = allAttrNames
+      .map(name => resultDataSet.col(name).contains(oulierMark))
+
+    val condition: Column = allColumns.tail
+      .foldLeft(allColumns.head)((acc: Column, actual: Column) => acc || actual)
+
+    val filter = resultDataSet.filter(condition)
+
+    val outliers: RDD[String] = filter.rdd.flatMap(row => {
+      val vals: Map[String, String] = row.getValuesMap[String](allAttrNames)
+      val filtered = vals.filter(a => !Strings.isNullOrEmpty(a._2) && a._2.contains(oulierMark))
+      val idx: List[Int] = thisSchema.getIndexesByAttrNames(filtered.keySet.toList)
+
+      val recID: String = row.getAs[String](id).trim
+
+      //TODO: sometimes dboost takes recid as outliers. Here is a temp fix.
+      val scapedRecId = recID.contains(oulierMark) match {
+        case true => {
+          recID.replaceAll(oulierMark, "").trim
+        }
+        case false => recID
+      }
+
+      val outliersLines: List[String] = idx.map(i => s"$scapedRecId,$i")
       outliersLines
     })
 
@@ -146,11 +234,13 @@ class DBoostResults {
 }
 
 object DBoostResults {
-  def main(args: Array[String]): Unit = {
-    new DBoostResults().writeResults()
+  /*def main(args: Array[String]): Unit = {
+    new DBoostResults().createOutliersLog()
+
+    //new DBoostResults().writeResults()
     //new DBoostResultWriter().writeResultsForMultipleFiles()
   }
-
+*/
   def getHistogramResultForOutlierDetection(session: SparkSession): DataFrame = {
     new DBoostResults().getHistogramResultForOutlierDetection(session)
   }
@@ -159,4 +249,59 @@ object DBoostResults {
     new DBoostResults().getGaussResultForOutlierDetection(session)
   }
 
+}
+
+object HospHistDBoostResults {
+  val oulierDetectFile = "dboost.hosp.detect.hist"
+  val folder = "dboost.hosp.result.hist"
+
+  def main(args: Array[String]): Unit = {
+    val dboost = new DBoostResults()
+
+    dboost.onSchema(HospSchema)
+    dboost.addDetectFile(oulierDetectFile)
+    dboost.addOutputFolder(folder)
+    dboost.writeOutliersLog()
+
+  }
+}
+
+object HospGaussDBoostResults {
+  val oulierDetectFile = "dboost.hosp.detect.gauss"
+  val folder = "dboost.hosp.result.gauss"
+
+  def main(args: Array[String]): Unit = {
+    val dboost = new DBoostResults()
+
+    dboost.onSchema(HospSchema)
+    dboost.addDetectFile(oulierDetectFile)
+    dboost.addOutputFolder(folder)
+    dboost.writeOutliersLog()
+  }
+}
+
+object BlackOakGaussDBoostResults {
+  val outlierDetectFile = "dboost.BlackOak.result.gaus"
+
+  def main(args: Array[String]): Unit = {
+    val dboost = new DBoostResults()
+
+    dboost.onSchema(BlackOakSchema)
+    dboost.addDetectFile(outlierDetectFile)
+    dboost.addOutputFolder("")
+    dboost.showOutliersLog()
+  }
+}
+
+object BlackOakHistDBoostResults {
+  val outlierDetectFile = "dboost.BlackOak.result.dir"
+
+  def main(args: Array[String]): Unit = {
+    val dboost = new DBoostResults()
+
+    dboost.onSchema(BlackOakSchema)
+    dboost.addDetectFile(outlierDetectFile)
+    dboost.addOutputFolder("")
+    dboost.showOutliersLog()
+  }
 }
