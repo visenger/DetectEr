@@ -22,12 +22,17 @@ import scala.io.Source
 
 
 object NadeefCleanPathRulesGenerator extends App {
+  //subject of change:
+  val prefix = "hosp"
+  val folder = "data.hosp.fds.rules.folder"
+  val file = "data.hosp.fds.rules.file"
+  val noisy = "data.hosp.dirty.10k"
 
+  //general:
   val config = ConfigFactory.load()
-
-  val dcPath: String = config.getString("dc.rules.path")
-  val dcFile: String = config.getString("dc.rules.file")
-  val noisyData = config.getString("data.BlackOak.dirty-data-path")
+  val dcPath: String = config.getString(folder)
+  val dcFile: String = config.getString(file)
+  val noisyData = config.getString(noisy)
 
 
   val rawRules: List[String] = Source.fromFile(s"$dcPath/$dcFile").getLines().filterNot(_.isEmpty).toList
@@ -42,7 +47,7 @@ object NadeefCleanPathRulesGenerator extends App {
   val rules: List[String] = for (rule <- preparedDCRules) yield {
 
     s"""|        {
-        |			"name" : "FD${counter += 1; counter}",
+        |			"name" : "${prefix.toUpperCase}FD${counter += 1; counter}",
         |            "type" : "fd",
         |            "value" : $rule
         |        }""".stripMargin
@@ -63,10 +68,14 @@ object NadeefCleanPathRulesGenerator extends App {
        """.stripMargin
 
 
-  val path: Path = Paths.get(s"$dcPath/cleanpath.json")
+  private val cleanPath = s"$dcPath/cleanpath.json"
+  val path: Path = Paths.get(cleanPath)
   val writer: BufferedWriter = Files.newBufferedWriter(path, StandardCharsets.UTF_8)
+  println(s"writing clean path into $cleanPath")
   writer.write(template)
   writer.close()
+
+  println(s"TODO: now, put $cleanPath to NADEEF_HOME")
 
 
   def parseDCRule(input: String): String = {
