@@ -1,0 +1,13 @@
+{
+    "source" : {
+        "type" : "csv",
+        "file" : ["/Users/visenger/research/datasets/clean-and-dirty-data/HOSP-10K/dirty/dirty_hosp_10k_with_rowid.csv"]
+    },
+    "rule" : [
+        {
+            "name" : "dedupHosp",
+            "type" : "udf",
+            "value" : ["DedupRuleHosp"]
+        }
+    ]
+}

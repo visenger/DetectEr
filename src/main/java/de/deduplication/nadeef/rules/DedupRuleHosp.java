@@ -15,23 +15,29 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
+ * Hosp schema: oid,prno,hospitalname,address,city,state,zip,countryname,phone,hospitaltype,hospitalowner,emergencyservice,condition,mc,measurename,score,sample,stateavg
+ * <p>
  * NADEEF UDF: Matching rule to spot duplicates
- *
+ * <p>
  * 1.step: put this udf to nadeef directory
  * 1.a make sure the .java file does not contain the package declaration.
  * 2.step: compile java class:
  * javac blackoak/DedupRuleBlackOack.java -cp out/bin/*:
  */
-public class DedupRuleBlackOack extends PairTupleRule {
-    //todo: finish names
-    private String tableName = "inputDB";
-    private String colName1 = "FirstName";
-    private String colName2 = "LastName";
-    private String colName3 = "Address";
+public class DedupRuleHosp extends PairTupleRule {
+
+    private String tableName = "tb_dirty_hosp_10k_with_rowid";
+    private String colName1 = "prno";
+    private String colName2 = "city";
+    private String colName3 = "address";
+    private String colName4 = "hospitalname";
+
+    private List<String> simiColumns = Arrays.asList(colName2, colName3, colName4);
+    private List<String> equiColumns = Arrays.asList(colName1);
 
     @Override
-    public void initialize(String id, List<String> tableNames) {
-        super.initialize(id, tableNames);
+    public void initialize(String ruleName, List<String> tableNames) {
+        super.initialize(ruleName, tableNames);
     }
 
     @Override
@@ -57,7 +63,6 @@ public class DedupRuleBlackOack extends PairTupleRule {
     }
 
     private boolean isTupleDuplicate(TuplePair tuplePair) {
-        //boolean result = true;
         int isLeft = 1;
         int isRight = 0;
 
@@ -67,26 +72,38 @@ public class DedupRuleBlackOack extends PairTupleRule {
                 .build();
 
 
-        List<String> columns = Arrays.asList(colName1, colName2, colName3);
-
-        Stream<Boolean> allComparison = columns.stream().map(c -> {
+        Stream<Boolean> simiComparison = simiColumns.stream().map(c -> {
             String leftValue = getValue(tuplePair, tableName, c, isLeft);
             leftValue = Strings.nullToEmpty(leftValue);
 
             String rightValue = getValue(tuplePair, tableName, c, isRight);
             rightValue = Strings.nullToEmpty(rightValue);
 
-            boolean r = stringMetric.compare(leftValue, rightValue) > 0.9;
-            return r;
+            boolean simiResult = stringMetric.compare(leftValue, rightValue) > 0.9;
+            return simiResult;
         });
 
-        boolean result = allComparison.reduce(true, (a, b) -> a && b);
+        boolean simiResult = simiComparison.reduce(true, (a, b) -> a && b);
 
-        return result;
+
+        Stream<Boolean> equiComparison = this.equiColumns.stream().map(c -> {
+            String leftValue = getValue(tuplePair, tableName, c, isLeft);
+            leftValue = Strings.nullToEmpty(leftValue);
+
+            String rightValue = getValue(tuplePair, tableName, c, isRight);
+            rightValue = Strings.nullToEmpty(rightValue);
+            boolean equiResult = leftValue.equals(rightValue);
+            return equiResult;
+        });
+
+        boolean equiResult = equiComparison.reduce(true, (a, b) -> a && b);
+
+        return simiResult && equiResult;
     }
 
     @Override
     public Collection<Fix> repair(Violation violation) {
+        //we want to identify errors only.
         ArrayList<Fix> result = Lists.newArrayList();
         return result;
     }

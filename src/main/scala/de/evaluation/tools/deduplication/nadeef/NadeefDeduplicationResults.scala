@@ -1,22 +1,48 @@
 package de.evaluation.tools.deduplication.nadeef
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.data.schema.BlackOakSchema
+import de.evaluation.data.schema.{BlackOakSchema, HospSchema, Schema}
 import de.evaluation.f1.DataF1
 import de.evaluation.util.{DataSetCreator, DatabaseProps, SparkLOAN}
 import org.apache.spark.sql._
 
 /**
-  * Created by visenger on 25/12/16.
+  * Handling detected duplicates
   */
-class NadeefDeduplicationResults {
+class NadeefDeduplicationResults extends Serializable {
+  private var schema: Schema = null;
+  private var tb_inputdb = ""
+  private var recid = ""
+  private var confOutputFolder = ""
+  private var dedupRule = ""
+
   private val conf = ConfigFactory.load()
-  private val confOutputFolder = "output.nadeef.deduplication.result.folder"
+
   private val confOutputFile = "output.nadeef.deduplication.result.file"
+
+  def onSchema(s: Schema): this.type = {
+    schema = s;
+    recid = s.getRecID
+    this
+  }
+
+  def onDirtyTable(t: String): this.type = {
+    tb_inputdb = t
+    this
+  }
+
+  def onRule(r: String): this.type = {
+    dedupRule = r
+    this
+  }
+
+  def addOutputFolder(f: String): this.type = {
+    confOutputFolder = f
+    this
+  }
 
   def convertDedupResults(session: SparkSession): DataFrame = {
 
-    // val session = SparkSessionCreator.createSession("DEDUP")
 
     val properties = DatabaseProps.getDefaultProps
 
@@ -26,7 +52,7 @@ class NadeefDeduplicationResults {
       .jdbc(conf.getString("db.postgresql.url"), violation, properties)
     violationTotal.createOrReplaceTempView(violation)
 
-    val tb_inputdb = "tb_inputdb"
+
     val dirtyData: DataFrame = session
       .read
       .jdbc(conf.getString("db.postgresql.url"), tb_inputdb, properties)
@@ -34,11 +60,11 @@ class NadeefDeduplicationResults {
 
     val queryDirtyDedup =
       s"""
-         |SELECT v.vid, v.tupleid, i.recid
+         |SELECT v.vid, v.tupleid, i.$recid
          |FROM $violation as v
          |  JOIN $tb_inputdb as i on v.tupleid = i.tid
-         |WHERE v.rid='${conf.getString("deduplication.rule.for.dirty.data")}'
-         |GROUP BY v.vid, v.tupleid, i.recid
+         |WHERE v.rid='${dedupRule}'
+         |GROUP BY v.vid, v.tupleid, i.$recid
        """.stripMargin
 
 
@@ -57,30 +83,34 @@ class NadeefDeduplicationResults {
       .distinct()
 
     val extendedDuplicatesIds: Dataset[(String, String)] = distinctIds.flatMap(id => {
-      val blackOakAttrIds = BlackOakSchema.indexedAttributes.values.toList
-      val idToAttributes: List[(String, String)] = blackOakAttrIds.map(i => (id, i.toString))
+      // val attributes = BlackOakSchema.indexedAttributes
+      val attributes = schema.indexAttributes
+      val attrIds = attributes.values.toList
+      val idToAttributes: List[(String, String)] = attrIds.map(i => (id, i.toString))
       idToAttributes
     })
-    /**
-      * todo steps: write extended duplicates into a file.
-      **/
-    extendedDuplicatesIds.toDF(DataF1.schema: _*)
 
-    // session.stop()
+    extendedDuplicatesIds.toDF()
+
   }
 
+  //todo
   def getDedupResult(session: SparkSession): DataFrame = {
     val dedupResults = DataSetCreator.createDataSetNoHeader(session, confOutputFile, DataF1.schema: _*)
     dedupResults
   }
 
 
-  def writeResultsToDisk(): Unit = {
-    SparkLOAN.withSparkSession("ndf") {
+  def handleDuplicates(): Unit = {
+    SparkLOAN.withSparkSession("DEDUP") {
       session => {
         val nadeefDedup: DataFrame = convertDedupResults(session)
+        // nadeefDedup.show()
 
-        nadeefDedup.write.csv(conf.getString(confOutputFolder))
+        nadeefDedup
+          .coalesce(1)
+          .write
+          .csv(conf.getString(confOutputFolder))
       }
     }
   }
@@ -113,11 +143,27 @@ class NadeefDeduplicationResults {
 
 }
 
-object NadeefDeduplicationResults {
+object HospDuplicatesHandler {
+  val outputFolder = "nadeef.dedup.result.folder"
+  val dedupRule = "dedupHosp"
 
   def main(args: Array[String]): Unit = {
-    new NadeefDeduplicationResults().writeResultsToDisk()
+    val deduplicator = new NadeefDeduplicationResults()
+    deduplicator.onSchema(HospSchema)
+    deduplicator.onDirtyTable("tb_dirty_hosp_10k_with_rowid")
+    deduplicator.onRule(dedupRule)
+    deduplicator.addOutputFolder(outputFolder)
+    deduplicator.handleDuplicates()
+
   }
+}
+
+
+object NadeefDeduplicationResults {
+
+  //  def main(args: Array[String]): Unit = {
+  //    new NadeefDeduplicationResults().writeResultsToDisk()
+  //  }
 
   def convertDedupResults(session: SparkSession): DataFrame = {
     new NadeefDeduplicationResults().convertDedupResults(session)

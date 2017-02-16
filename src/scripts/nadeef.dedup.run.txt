@@ -1,0 +1,2 @@
+// with additional classpath folder for deduplications udfs
+cat dedupArgs.txt | java -cp out/bin/*:examples/:hosp/:out/test qa.qcri.nadeef.console.Console

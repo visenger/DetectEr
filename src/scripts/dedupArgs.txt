@@ -1,0 +1,2 @@
+load ./hosp/dedupHosp.json
+detect 0
