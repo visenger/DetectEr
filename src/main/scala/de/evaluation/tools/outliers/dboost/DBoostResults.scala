@@ -5,7 +5,7 @@ import java.io.File
 import com.google.common.base.Strings
 import com.typesafe.config.{Config, ConfigFactory}
 import de.evaluation.data.schema.{BlackOakSchema, HospSchema, Schema}
-import de.evaluation.f1.DataF1
+import de.evaluation.f1.Cells
 import de.evaluation.util.{DataSetCreator, SparkLOAN, SparkSessionCreator}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -81,12 +81,12 @@ class DBoostResults {
     histResults
   }
 
-  private def getOutliersByAlgorithm(sparkSession: SparkSession, path: String) = {
+  def getOutliersByAlgorithm(sparkSession: SparkSession, path: String) = {
     val resultDataSet: DataFrame = DataSetCreator
       .createDataSet(
         sparkSession,
         path,
-        DataF1.schema: _*)
+        Cells.schema: _*)
 
     resultDataSet
   }
@@ -192,45 +192,6 @@ class DBoostResults {
   }
 
 
-  private def old_createOutliersLog(sparkSession: SparkSession, resultDataSet: DataFrame): Dataset[String] = {
-    //every attribute marked as ~attr~ is being identified as outlier
-    import sparkSession.implicits._
-
-    val thisSchema: Schema = schema
-    val id = thisSchema.getRecID
-    val allAttrNames = thisSchema.getSchema
-    val oulierMark = "~"
-
-    val allColumns: Seq[Column] = allAttrNames
-      .map(name => resultDataSet.col(name).contains(oulierMark))
-
-    val condition: Column = allColumns.tail
-      .foldLeft(allColumns.head)((acc: Column, actual: Column) => acc || actual)
-
-    val filter = resultDataSet.filter(condition)
-
-    val outliers: RDD[String] = filter.rdd.flatMap(row => {
-      val vals: Map[String, String] = row.getValuesMap[String](allAttrNames)
-      val filtered = vals.filter(a => !Strings.isNullOrEmpty(a._2) && a._2.contains(oulierMark))
-      val idx: List[Int] = thisSchema.getIndexesByAttrNames(filtered.keySet.toList)
-
-      val recID: String = row.getAs[String](id).trim
-
-      //TODO: sometimes dboost takes recid as outliers. Here is a temp fix.
-      val scapedRecId = recID.contains(oulierMark) match {
-        case true => {
-          recID.replaceAll(oulierMark, "").trim
-        }
-        case false => recID
-      }
-
-      val outliersLines: List[String] = idx.map(i => s"$scapedRecId,$i")
-      outliersLines
-    })
-
-    val outliersDS: Dataset[String] = outliers.filter(!_.isEmpty).toDS()
-    outliersDS
-  }
 }
 
 object DBoostResults {
@@ -264,6 +225,11 @@ object HospHistDBoostResults {
     dboost.writeOutliersLog()
 
   }
+
+  def getResults(session: SparkSession): DataFrame = {
+    val hospOutput = "result.hosp.10k.outlier.hist"
+    new DBoostResults().getOutliersByAlgorithm(session, hospOutput)
+  }
 }
 
 object HospGaussDBoostResults {
@@ -278,6 +244,11 @@ object HospGaussDBoostResults {
     dboost.addOutputFolder(folder)
     dboost.writeOutliersLog()
   }
+
+  def getResults(session: SparkSession): DataFrame = {
+    val hospOutput = "result.hosp.10k.outlier.gauss"
+    new DBoostResults().getOutliersByAlgorithm(session, hospOutput)
+  }
 }
 
 object BlackOakGaussDBoostResults {
@@ -290,6 +261,11 @@ object BlackOakGaussDBoostResults {
     dboost.addDetectFile(outlierDetectFile)
     dboost.addOutputFolder("")
     dboost.showOutliersLog()
+  }
+
+  def getResults(session: SparkSession): DataFrame = {
+    val hospOutput = "output.dboost.gaus.result.file"
+    new DBoostResults().getOutliersByAlgorithm(session, hospOutput)
   }
 }
 

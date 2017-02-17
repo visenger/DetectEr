@@ -4,7 +4,7 @@ import java.util.Properties
 
 import com.typesafe.config.ConfigFactory
 import de.evaluation.data.schema.{BlackOakSchema, HospSchema, Schema}
-import de.evaluation.f1.DataF1
+import de.evaluation.f1.Cells
 import de.evaluation.util.{DataSetCreator, DatabaseProps, SparkLOAN}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -183,7 +183,7 @@ class NadeefRulesVioResults extends Serializable {
 
     val nadeefResultConf = "output.nadeef.detect.result.file"
     val nadeefResult: DataFrame = DataSetCreator
-      .createDataSetNoHeader(sparkSession, nadeefResultConf, DataF1.schema: _*)
+      .createDataSetNoHeader(sparkSession, nadeefResultConf, Cells.schema: _*)
 
     nadeefResult
   }
@@ -199,15 +199,22 @@ object HospRulesVioRunner {
     rulesVioResults.specifyOutput("nadeef.rules.vio.result.folder")
     rulesVioResults.createRulesVioLog()
   }
+
+  def getResult(session: SparkSession): DataFrame = {
+    val confString = "result.hosp.10k.rules.vio"
+    val trifactaOutput = DataSetCreator.createDataSetNoHeader(session, confString, Cells.schema: _*)
+    trifactaOutput
+  }
+
 }
 
-@Deprecated
+
 object NadeefRulesVioResults {
 
-  def main(args: Array[String]): Unit = {
-    // new NadeefRulesVioResults().evaluate()
-    new NadeefRulesVioResults().createRulesVioLog()
-  }
+//  def main(args: Array[String]): Unit = {
+//    // new NadeefRulesVioResults().evaluate()
+//    new NadeefRulesVioResults().createRulesVioLog()
+//  }
 
   def getRulesVioResults(sparkSession: SparkSession): DataFrame = {
     new NadeefRulesVioResults().getRulesVioResults(sparkSession)

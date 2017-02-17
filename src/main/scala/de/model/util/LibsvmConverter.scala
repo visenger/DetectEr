@@ -1,7 +1,7 @@
 package de.model.util
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.f1.{FullResult, Table}
+import de.evaluation.f1.{FullResult, GoldStandard}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.rdd.RDD
@@ -12,13 +12,18 @@ import org.apache.spark.sql.{DataFrame, Row}
   */
 class LibsvmConverter {
 
+  val fullResultPath = "result.hosp.10k.full.result.file"
+  //"output.full.result.file"
+  val libsvmFolder = "model.hosp.10k.libsvm.folder" //"model.full.result.folder"
+
   def toLogisticRegrLibsvm(): Unit = {
     SparkLOAN.withSparkSession("LRLIBSVM") {
       session => {
-        val matrixDF = DataSetCreator.createDataSet(session, "output.full.result.file", FullResult.schema: _*)
+        val matrixDF = DataSetCreator.createDataSet(session, fullResultPath, FullResult.schema: _*)
         val libsvm: DataFrame = toLibsvmFormat(matrixDF)
+        //libsvm.show(78)
 
-        val path = ConfigFactory.load().getString("model.full.result.folder")
+        val path = ConfigFactory.load().getString(libsvmFolder)
         libsvm
           .coalesce(1)
           .write
@@ -58,7 +63,7 @@ class LibsvmConverter {
 
     val libsvm: RDD[String] = matrixWithLabel.rdd.map(row => {
       val values: Map[String, String] = row.getValuesMap[String](FullResult.schema)
-      val partition: (Map[String, String], Map[String, String]) = values.partition(_._1.startsWith(Table.exists))
+      val partition: (Map[String, String], Map[String, String]) = values.partition(_._1.startsWith(GoldStandard.exists))
       val tools: Map[String, String] = partition._1
 
       val setValues: Map[String, String] = tools.partition(_._2 != "0")._1

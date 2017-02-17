@@ -2,7 +2,7 @@ package de.evaluation.tools.pattern.violation
 
 import com.typesafe.config.ConfigFactory
 import de.evaluation.data.schema.{BlackOakSchema, HospSchema, SalariesSchema}
-import de.evaluation.f1.DataF1
+import de.evaluation.f1.Cells
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
@@ -146,9 +146,9 @@ class TrifactaResults {
   }
 
 
-  def getPatternViolationResult(session: SparkSession): DataFrame = {
-    val confString = "output.trifacta.result.file"
-    val trifactaOutput = DataSetCreator.createDataSetNoHeader(session, confString, DataF1.schema: _*)
+  def getPatternViolationResult(session: SparkSession, file: String): DataFrame = {
+
+    val trifactaOutput = DataSetCreator.createDataSetNoHeader(session, file, Cells.schema: _*)
     trifactaOutput
   }
 
@@ -167,13 +167,30 @@ object TrifactaHospResults {
     trifacta.addOutputFolder(outputFolder)
     trifacta.writePatternVioLog()
   }
+
+  def getResult(session: SparkSession): DataFrame = {
+    val confString = "result.hosp.10k.pattern.vio"
+    val trifactaOutput = DataSetCreator.createDataSetNoHeader(session, confString, Cells.schema: _*)
+    trifactaOutput
+  }
+
+
+}
+
+object TrifactaBlackOakReslults {
+
+  def getPatternViolationResult(session: SparkSession): DataFrame = {
+    val confString = "output.trifacta.result.file"
+    new TrifactaResults().getPatternViolationResult(session, confString)
+  }
 }
 
 object TrifactaResults {
 
 
   def getPatternViolationResult(session: SparkSession): DataFrame = {
-    new TrifactaResults().getPatternViolationResult(session)
+    val confString = "output.trifacta.result.file"
+    new TrifactaResults().getPatternViolationResult(session, confString)
   }
 
 

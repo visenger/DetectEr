@@ -2,8 +2,6 @@ package de.evaluation.f1
 
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 
-import scala.math.BigDecimal.RoundingMode
-
 /**
   * Created by visenger on 07/12/16.
   */
@@ -23,13 +21,14 @@ object F1 {
     val precision = tp.toDouble / selected.toDouble
     val recall = tp.toDouble / correct.toDouble
     val F1 = 2 * precision * recall / (precision + recall)
-
+    import de.model.util.NumbersUtil._
+    //Eval(precision, recall, F1)
     Eval(round(precision, 4), round(recall, 4), round(F1, 4))
   }
 
-  def round(percentageFound: Double, scale: Int = 2) = {
-    BigDecimal(percentageFound).setScale(scale, RoundingMode.HALF_UP).toDouble
-  }
+  //  def round(percentageFound: Double, scale: Int = 2) = {
+  //    BigDecimal(percentageFound).setScale(scale, RoundingMode.HALF_UP).toDouble
+  //  }
 
   private def toolsAgreeOnError(resultDF: DataFrame, k: Int = 0): Dataset[Row] = {
     val toolsReturnedErrors: Dataset[Row] = resultDF.filter(row => {
@@ -65,7 +64,8 @@ object F1 {
 
     val F1 = 2 * precision * recall / (precision + recall)
 
-    val eval = Eval(round(precision, 4), round(recall, 4), round(F1, 4))
+    //val eval = Eval(round(precision, 4), round(recall, 4), round(F1, 4))
+    val eval = Eval(precision, recall, F1)
     eval
   }
 

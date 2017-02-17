@@ -2,10 +2,10 @@ package de.model.util
 
 import com.typesafe.config.ConfigFactory
 import de.evaluation.data.blackoak.{BlackOakGoldStandard, BlackOakGoldStandardRunner}
-import de.evaluation.f1.{DataF1, Table}
+import de.evaluation.f1.{Cells, GoldStandard}
 import de.evaluation.tools.deduplication.nadeef.NadeefDeduplicationResults
 import de.evaluation.tools.outliers.dboost.DBoostResults
-import de.evaluation.tools.pattern.violation.TrifactaResults
+import de.evaluation.tools.pattern.violation.{TrifactaBlackOakReslults, TrifactaResults}
 import de.evaluation.tools.ruleviolations.nadeef.NadeefRulesVioResults
 import de.evaluation.util.{DataSetCreator, DatabaseProps, SparkLOAN, SparkSessionCreator}
 import org.apache.spark.rdd.RDD
@@ -17,7 +17,8 @@ import scala.collection.immutable.IndexedSeq
 /**
   * Created by visenger on 22/12/16.
   */
-class ResultCruncher {
+@Deprecated
+class BlackOakResultCruncher {
 
 
   def createMatrixForModel() = {
@@ -31,7 +32,7 @@ class ResultCruncher {
         val goldStandard: DataFrame = BlackOakGoldStandardRunner
           .getGoldStandard(sparkSession)
 
-        val patternViolationResult: DataFrame = TrifactaResults
+        val patternViolationResult: DataFrame = TrifactaBlackOakReslults
           .getPatternViolationResult(sparkSession)
 
         val dedupResult: DataFrame = NadeefDeduplicationResults
@@ -52,8 +53,8 @@ class ResultCruncher {
         val gaussExists: DataFrame = extendWithExistsColumn(sparkSession, goldStandard, gaussOutliers)
         val rulesVioExists: DataFrame = extendWithExistsColumn(sparkSession, goldStandard, rulesVioResults)
 
-        val columnsOnJoin = Seq(Table.recid, Table.attrnr)
-        val tools: Seq[String] = (1 to 5).map(i => s"${Table.exists}-$i").toSeq
+        val columnsOnJoin = Seq(GoldStandard.recid, GoldStandard.attrnr)
+        val tools: Seq[String] = (1 to 5).map(i => s"${GoldStandard.exists}-$i").toSeq
 
         val join = patternVioExists.join(dedupExists, columnsOnJoin)
           .join(histExists, columnsOnJoin)
@@ -83,13 +84,13 @@ class ResultCruncher {
 
     val ones = goldStandard.intersect(errorDetectResult)
     val existsDF: DataFrame = ones
-      .map(row => (row.getString(0), row.getString(1), "1")).toDF(Table.schema: _*)
+      .map(row => (row.getString(0), row.getString(1), "1")).toDF(GoldStandard.schema: _*)
 
     val zeros: Dataset[Row] = goldStandard.except(errorDetectResult)
     val notExistsDF: DataFrame = zeros
-      .map(row => (row.getString(0), row.getString(1), "0")).toDF(Table.schema: _*)
+      .map(row => (row.getString(0), row.getString(1), "0")).toDF(GoldStandard.schema: _*)
 
-    val union: DataFrame = existsDF.union(notExistsDF).toDF(Table.schema: _*)
+    val union: DataFrame = existsDF.union(notExistsDF).toDF(GoldStandard.schema: _*)
     union
   }
 
@@ -105,7 +106,7 @@ class ResultCruncher {
 
     /**/
     val existsDF: DataFrame = ones
-      .map(row => (row.getString(0), row.getString(1), "1")).toDF(Table.schema: _*)
+      .map(row => (row.getString(0), row.getString(1), "1")).toDF(GoldStandard.schema: _*)
 
     existsDF
   }
@@ -114,7 +115,7 @@ class ResultCruncher {
 object ResultCruncher1 {
   def main(args: Array[String]): Unit = {
 
-    new ResultCruncher().createMatrixForModel()
+    new BlackOakResultCruncher().createMatrixForModel()
   }
 
 }

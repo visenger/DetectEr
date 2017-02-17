@@ -1,10 +1,10 @@
 package de.evaluation.data.blackoak
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.f1.{DataF1, FullResult, Table}
+import de.evaluation.f1.{Cells, FullResult, GoldStandard}
 import de.evaluation.tools.deduplication.nadeef.NadeefDeduplicationResults
 import de.evaluation.tools.outliers.dboost.DBoostResults
-import de.evaluation.tools.pattern.violation.TrifactaResults
+import de.evaluation.tools.pattern.violation.{TrifactaBlackOakReslults, TrifactaResults}
 import de.evaluation.tools.ruleviolations.nadeef.NadeefRulesVioResults
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.sql.catalyst.plans.{Inner, RightOuter}
@@ -13,9 +13,9 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 /**
   * Aggregates all results from the data cleaning tools;
   */
-class BlackOakFullResult {
+class BlackOakFullResult  {
 
-  private val joinCols = Seq(Table.recid, Table.attrnr)
+  private val joinCols = Seq(GoldStandard.recid, GoldStandard.attrnr)
 
   def createFullResults(): Unit = {
     SparkLOAN.withSparkSession("FULL") {
@@ -24,7 +24,7 @@ class BlackOakFullResult {
         val groundTruth: DataFrame = BlackOakGoldStandardRunner
           .getGroundTruth(sparkSession)
 
-        val patternViolationResult: DataFrame = TrifactaResults
+        val patternViolationResult: DataFrame = TrifactaBlackOakReslults
           .getPatternViolationResult(sparkSession)
 
         val dedupResult: DataFrame = NadeefDeduplicationResults
@@ -47,7 +47,7 @@ class BlackOakFullResult {
         val rules: DataFrame = extendWithExistsColumn(sparkSession, groundTruth, rulesVioResults)
 
 
-        val tools: Seq[String] = (1 to 5).map(i => s"${Table.exists}-$i")
+        val tools: Seq[String] = (1 to 5).map(i => s"${GoldStandard.exists}-$i")
         val schema = joinCols ++ Seq(FullResult.label) ++ tools
 
         val fullResult: DataFrame = groundTruth
@@ -74,27 +74,27 @@ class BlackOakFullResult {
   }
 
 
-  private def extendWithExistsColumn(sparkSession: SparkSession, goldStd: DataFrame, errorDetectResult: DataFrame) = {
+  private def extendWithExistsColumn(sparkSession: SparkSession, goldStd: DataFrame, errorDetectResult: DataFrame):DataFrame = {
     import sparkSession.implicits._
     import org.apache.spark.sql.functions._
 
     /* goldStd is already in Table format with exists column */
 
-    val selection = goldStd.select(Table.recid, Table.attrnr)
+    val selection = goldStd.select(GoldStandard.recid, GoldStandard.attrnr)
     val ones = selection.intersect(errorDetectResult)
 
     println(s" ones count ${ones.count()}")
 
     val existsDF: DataFrame = ones
-      .map(row => (row.getString(0), row.getString(1), "1")).toDF(Table.schema: _*)
+      .map(row => (row.getString(0), row.getString(1), "1")).toDF(GoldStandard.schema: _*)
 
     val zeros: Dataset[Row] = selection.except(errorDetectResult)
     val notExistsDF: DataFrame = zeros
-      .map(row => (row.getString(0), row.getString(1), "0")).toDF(Table.schema: _*)
+      .map(row => (row.getString(0), row.getString(1), "0")).toDF(GoldStandard.schema: _*)
 
     println(s" zeros count ${zeros.count()}")
 
-    val union: DataFrame = existsDF.union(notExistsDF).toDF(Table.schema: _*)
+    val union: DataFrame = existsDF.union(notExistsDF).toDF(GoldStandard.schema: _*)
     union
   }
 }

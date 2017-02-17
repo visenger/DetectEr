@@ -2,7 +2,7 @@ package de.evaluation.tools.deduplication.nadeef
 
 import com.typesafe.config.ConfigFactory
 import de.evaluation.data.schema.{BlackOakSchema, HospSchema, Schema}
-import de.evaluation.f1.DataF1
+import de.evaluation.f1.Cells
 import de.evaluation.util.{DataSetCreator, DatabaseProps, SparkLOAN}
 import org.apache.spark.sql._
 
@@ -18,7 +18,6 @@ class NadeefDeduplicationResults extends Serializable {
 
   private val conf = ConfigFactory.load()
 
-  private val confOutputFile = "output.nadeef.deduplication.result.file"
 
   def onSchema(s: Schema): this.type = {
     schema = s;
@@ -95,8 +94,9 @@ class NadeefDeduplicationResults extends Serializable {
   }
 
   //todo
-  def getDedupResult(session: SparkSession): DataFrame = {
-    val dedupResults = DataSetCreator.createDataSetNoHeader(session, confOutputFile, DataF1.schema: _*)
+  def getDedupResult(session: SparkSession, confOutputFile: String): DataFrame = {
+
+    val dedupResults = DataSetCreator.createDataSetNoHeader(session, confOutputFile, Cells.schema: _*)
     dedupResults
   }
 
@@ -156,6 +156,11 @@ object HospDuplicatesHandler {
     deduplicator.handleDuplicates()
 
   }
+
+  def getResults(session: SparkSession): DataFrame = {
+    val hospOutput = "result.hosp.10k.deduplication"
+    new NadeefDeduplicationResults().getDedupResult(session, hospOutput)
+  }
 }
 
 
@@ -170,7 +175,8 @@ object NadeefDeduplicationResults {
   }
 
   def getDedupResults(session: SparkSession): DataFrame = {
-    new NadeefDeduplicationResults().getDedupResult(session)
+    val confOutputFile = "output.nadeef.deduplication.result.file"
+    new NadeefDeduplicationResults().getDedupResult(session, confOutputFile)
   }
 
 }

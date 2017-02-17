@@ -2,6 +2,9 @@ package de.evaluation.data.hosp
 
 import de.evaluation.data.gold.standard.GoldStandardCreator
 import de.evaluation.data.schema.HospSchema
+import de.evaluation.f1.GoldStandard
+import de.evaluation.util.DataSetCreator
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
   * Created by visenger on 09/02/17.
@@ -44,6 +47,12 @@ class HospGoldStandard {
 object HospGoldStandardRunner {
   def main(args: Array[String]): Unit = {
     new HospGoldStandard().createGoldStd()
+  }
+
+  def getGroundTruth(session: SparkSession): DataFrame = {
+    val file = "result.hosp.10k.gold"
+    val groundTruth: DataFrame = DataSetCreator.createDataSetNoHeader(session, file, GoldStandard.schema: _*)
+    groundTruth
   }
 
 }

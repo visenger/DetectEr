@@ -4,7 +4,7 @@ import com.google.common.base.Strings
 import com.typesafe.config.{Config, ConfigFactory}
 import de.evaluation.data.gold.standard.GoldStandardCreator
 import de.evaluation.data.schema.{BlackOakSchema, Schema}
-import de.evaluation.f1.{DataF1, Table}
+import de.evaluation.f1.{Cells, GoldStandard}
 import de.evaluation.util.{DataSetCreator, SparkLOAN, SparkSessionCreator}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 
@@ -71,12 +71,12 @@ class BlackOakGoldStandard {
 
   def getGoldStandard(session: SparkSession): DataFrame = {
 
-    val goldStd: DataFrame = DataSetCreator.createDataSetNoHeader(session, goldStdFile, DataF1.schema: _*)
+    val goldStd: DataFrame = DataSetCreator.createDataSetNoHeader(session, goldStdFile, Cells.schema: _*)
     goldStd
   }
 
   def getGroundTruth(session: SparkSession): DataFrame = {
-    val groundTruth: DataFrame = DataSetCreator.createDataSetNoHeader(session, groundTruthFile, Table.schema: _*)
+    val groundTruth: DataFrame = DataSetCreator.createDataSetNoHeader(session, groundTruthFile, GoldStandard.schema: _*)
     groundTruth
   }
 
