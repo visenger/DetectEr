@@ -1,11 +1,12 @@
 package de.evaluation.tools.pattern.violation
 
+import com.google.common.base.Strings
 import com.typesafe.config.ConfigFactory
 import de.evaluation.data.schema.{BlackOakSchema, HospSchema, SalariesSchema}
 import de.evaluation.f1.Cells
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
   * Handling pattern violation results.
@@ -22,6 +23,29 @@ trait TrifactaSchema extends Serializable {
   def getSchema: Seq[String]
 
   def getAttributesIdx(): Map[String, Int]
+}
+
+object TrifactaSalariesSchema extends TrifactaSchema {
+
+  private val recid = "oid"
+  private val prefix = "vio_"
+  private val schema = Seq(recid, "employeename", s"${prefix}employeename", "jobtitle", s"${prefix}jobtitle", "basepay", s"${prefix}basepay", "benefits", s"${prefix}benefits", "totalpay", s"${prefix}totalpay", "status", s"${prefix}status")
+  private val salariesAttrs = Seq(recid, "employeename", "jobtitle", "basepay", "benefits", "totalpay", "status")
+
+  //
+  override def getRecId: String = recid
+
+  override def getPrefix: String = prefix
+
+  override def getSchema: Seq[String] = schema
+
+  override def getAttributesIdx(): Map[String, Int] = {
+    val salariesAttributes = SalariesSchema.indexAttributes
+    salariesAttrs.map(attr => {
+      val idx = salariesAttributes.getOrElse(attr, 0)
+      attr -> idx
+    }).toMap
+  }
 }
 
 object TrifactaHospSchema extends TrifactaSchema {
@@ -57,16 +81,6 @@ object TrifactaBlackOackSchema extends TrifactaSchema {
   override def getPrefix: String = ""
 }
 
-object TrifactaSalariesSchema extends TrifactaSchema {
-  //TODO: finish!
-  override def getAttributesIdx(): Map[String, Int] = null
-
-  override def getSchema: Seq[String] = Nil
-
-  override def getRecId: String = SalariesSchema.getRecID
-
-  override def getPrefix: String = ""
-}
 
 class TrifactaResults {
 
@@ -98,7 +112,10 @@ class TrifactaResults {
         val patternVioResult: DataFrame = DataSetCreator.createDataSetNoHeader(session, trifactaData, schema.getSchema: _*)
         val converted = convertPatternViolationResult(session, patternVioResult)
         converted.show()
-        converted.write.text(conf.getString(outputFolder))
+        converted
+          .coalesce(1)
+          .write
+          .text(conf.getString(outputFolder))
       }
     }
   }
@@ -119,7 +136,11 @@ class TrifactaResults {
 
       val recId = rowValuesMap.getOrElse(recIdOfSchema, "")
 
-      val violations = rowValuesMap.partition(_._2.equalsIgnoreCase("true"))._1
+      val violations = rowValuesMap.partition(entry => {
+        val value = entry._2
+        !Strings.nullToEmpty(value).isEmpty &&
+          value.equalsIgnoreCase("true")
+      })._1
 
       val allAttrsIdx: Set[Int] = violations.keySet.map(k => {
 
@@ -153,6 +174,26 @@ class TrifactaResults {
   }
 
 
+}
+
+object TrifactaSalariesResults {
+  def main(args: Array[String]): Unit = {
+    val result = "trifacta.salaries.vio"
+    val outputFolder = "trifacta.salaries.result.folder"
+
+    val sTrifacta = new TrifactaResults()
+    sTrifacta.onSchema(TrifactaSalariesSchema)
+    sTrifacta.onTrifactaResult(result)
+    sTrifacta.addOutputFolder(outputFolder)
+    sTrifacta.writePatternVioLog()
+
+  }
+
+  def getResult(session: SparkSession): DataFrame = {
+    val confString = "result.salaries.pattern.vio"
+    val trifactaOutput = DataSetCreator.createDataSetNoHeader(session, confString, Cells.schema: _*)
+    trifactaOutput
+  }
 }
 
 object TrifactaHospResults {
