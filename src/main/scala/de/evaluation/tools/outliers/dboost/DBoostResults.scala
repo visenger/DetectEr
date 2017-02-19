@@ -3,8 +3,8 @@ package de.evaluation.tools.outliers.dboost
 import java.io.File
 
 import com.google.common.base.Strings
-import com.typesafe.config.{Config, ConfigFactory}
-import de.evaluation.data.schema.{BlackOakSchema, HospSchema, Schema}
+import com.typesafe.config.ConfigFactory
+import de.evaluation.data.schema.{BlackOakSchema, HospSchema, SalariesSchema, Schema}
 import de.evaluation.f1.Cells
 import de.evaluation.util.{DataSetCreator, SparkLOAN, SparkSessionCreator}
 import org.apache.spark.rdd.RDD
@@ -58,8 +58,11 @@ class DBoostResults {
       session => {
         val result = DataSetCreator.createDataSetNoHeader(session, dboostDetectFile, schema.getSchema: _*)
         val outliersLog: Dataset[String] = createOutliersLog(session, result)
-        outliersLog.show()
-        outliersLog.write.text(conf.getString(outputPath))
+        outliersLog.show(123)
+        outliersLog
+          .coalesce(1)
+          .write
+          .text(conf.getString(outputPath))
       }
     }
 
@@ -249,6 +252,46 @@ object HospGaussDBoostResults {
     val hospOutput = "result.hosp.10k.outlier.gauss"
     new DBoostResults().getOutliersByAlgorithm(session, hospOutput)
   }
+}
+
+object SalariesHistDBoostResults {
+  val oulierDetectFile = "dboost.salaries.detect.hist"
+  val folder = "dboost.salaries.result.hist"
+
+  def main(args: Array[String]): Unit = {
+    val dboost = new DBoostResults()
+
+    dboost.onSchema(SalariesSchema)
+    dboost.addDetectFile(oulierDetectFile)
+    dboost.addOutputFolder(folder)
+    dboost.writeOutliersLog()
+  }
+
+  def getResults(session: SparkSession): DataFrame = {
+    val hospOutput = "result.salaries.outlier.hist"
+    new DBoostResults().getOutliersByAlgorithm(session, hospOutput)
+  }
+
+}
+
+object SalariesGaussDBoostResults {
+  val oulierDetectFile = "dboost.salaries.detect.gauss"
+  val folder = "dboost.salaries.result.gauss"
+
+  def main(args: Array[String]): Unit = {
+    val dboost = new DBoostResults()
+
+    dboost.onSchema(SalariesSchema)
+    dboost.addDetectFile(oulierDetectFile)
+    dboost.addOutputFolder(folder)
+    dboost.writeOutliersLog()
+  }
+
+  def getResults(session: SparkSession): DataFrame = {
+    val hospOutput = "result.salaries.outlier.gauss"
+    new DBoostResults().getOutliersByAlgorithm(session, hospOutput)
+  }
+
 }
 
 object BlackOakGaussDBoostResults {
