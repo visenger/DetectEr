@@ -10,7 +10,11 @@ object NumbersUtil {
 
 
   def round(percentageFound: Double, scale: Int = 2) = {
-    BigDecimal(percentageFound).setScale(scale, RoundingMode.HALF_UP).toDouble
+    val number = percentageFound.isNaN match {
+      case true => 0.0
+      case false => percentageFound
+    }
+    BigDecimal(number).setScale(scale, RoundingMode.HALF_UP).toDouble
   }
 
 }

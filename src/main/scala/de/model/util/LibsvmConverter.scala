@@ -5,23 +5,23 @@ import de.evaluation.f1.{FullResult, GoldStandard}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.DataFrame
 
 /**
   * Created by visenger on 28/12/16.
   */
 class LibsvmConverter {
 
-  val fullResultPath = "result.hosp.10k.full.result.file"
+  val fullResultPath = "result.salaries.full.result.file"
   //"output.full.result.file"
-  val libsvmFolder = "model.hosp.10k.libsvm.folder" //"model.full.result.folder"
+  val libsvmFolder = "model.salaries.libsvm.folder" //"model.full.result.folder"
 
   def toLogisticRegrLibsvm(): Unit = {
     SparkLOAN.withSparkSession("LRLIBSVM") {
       session => {
         val matrixDF = DataSetCreator.createDataSet(session, fullResultPath, FullResult.schema: _*)
         val libsvm: DataFrame = toLibsvmFormat(matrixDF)
-        //libsvm.show(78)
+        libsvm.show(78)
 
         val path = ConfigFactory.load().getString(libsvmFolder)
         libsvm

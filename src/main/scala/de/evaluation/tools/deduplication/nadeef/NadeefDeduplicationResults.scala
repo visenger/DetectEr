@@ -1,7 +1,7 @@
 package de.evaluation.tools.deduplication.nadeef
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.data.schema.{BlackOakSchema, HospSchema, Schema}
+import de.evaluation.data.schema.{HospSchema, SalariesSchema, Schema}
 import de.evaluation.f1.Cells
 import de.evaluation.util.{DataSetCreator, DatabaseProps, SparkLOAN}
 import org.apache.spark.sql._
@@ -105,7 +105,7 @@ class NadeefDeduplicationResults extends Serializable {
     SparkLOAN.withSparkSession("DEDUP") {
       session => {
         val nadeefDedup: DataFrame = convertDedupResults(session)
-        // nadeefDedup.show()
+        nadeefDedup.show()
 
         nadeefDedup
           .coalesce(1)
@@ -160,6 +160,25 @@ object HospDuplicatesHandler {
   def getResults(session: SparkSession): DataFrame = {
     val hospOutput = "result.hosp.10k.deduplication"
     new NadeefDeduplicationResults().getDedupResult(session, hospOutput)
+  }
+}
+
+object SalariesDuplicatesHandler {
+  val outputFolder = "nadeef.dedup.result.folder"
+  val dedupRule = "dedupSalaries"
+
+  def main(args: Array[String]): Unit = {
+    val deduplicator = new NadeefDeduplicationResults()
+    deduplicator.onSchema(SalariesSchema)
+    deduplicator.onDirtyTable("tb_dirty_salaries_with_id_nadeef_version")
+    deduplicator.onRule(dedupRule)
+    deduplicator.addOutputFolder(outputFolder)
+    deduplicator.handleDuplicates()
+  }
+
+  def getResults(session: SparkSession): DataFrame = {
+    val salariesOutput = "result.salaries.deduplication"
+    new NadeefDeduplicationResults().getDedupResult(session, salariesOutput)
   }
 }
 

@@ -1,5 +1,7 @@
 package de.evaluation.f1
 
+
+import de.model.util.NumbersUtil
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 
 /**
@@ -14,15 +16,28 @@ object F1 {
 
     val selected = toolsReturnedErrors.count()
 
+
     val tp = toolsReturnedErrors.filter(labeledAsError).count()
 
     val correct = resultDF.filter(labeledAsError).count()
 
-    val precision = tp.toDouble / selected.toDouble
-    val recall = tp.toDouble / correct.toDouble
-    val F1 = 2 * precision * recall / (precision + recall)
-    import de.model.util.NumbersUtil._
-    //Eval(precision, recall, F1)
+    // val precision = tp.toDouble / selected.toDouble
+    val precision = tp == 0 match {
+      case true => 0.0
+      case false => tp.toDouble / selected.toDouble
+    }
+    val recall = tp == 0 match {
+      case true => 0.0
+      case false => tp.toDouble / correct.toDouble
+    }
+
+    val F1 = (precision == 0.0 || recall == 0.0) match {
+      case true => 0.0
+      case false => 2 * precision * recall / (precision + recall)
+    }
+    //val F1 = 2 * precision * recall / (precision + recall)
+    import NumbersUtil.round
+    // Eval(precision, recall, F1)
     Eval(round(precision, 4), round(recall, 4), round(F1, 4))
   }
 
@@ -63,9 +78,9 @@ object F1 {
     val recall = tp.toDouble / correct.toDouble
 
     val F1 = 2 * precision * recall / (precision + recall)
-
-    //val eval = Eval(round(precision, 4), round(recall, 4), round(F1, 4))
-    val eval = Eval(precision, recall, F1)
+    import NumbersUtil.round
+    val eval = Eval(round(precision, 4), round(recall, 4), round(F1, 4))
+    // val eval = Eval(precision, recall, F1)
     eval
   }
 

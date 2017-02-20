@@ -4,7 +4,7 @@ import java.io.File
 
 import com.typesafe.config.ConfigFactory
 import de.evaluation.util.{DataSetCreator, SparkSessionCreator}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.DataFrame
 
 object FullResult {
   val recid = "RecID"
@@ -12,8 +12,9 @@ object FullResult {
   val label = "label"
 
   //todo: extract howManyTools we have
-  private val toolsNumber = 5
-  val tools: Seq[String] = (1 to toolsNumber).map(i => s"${GoldStandard.exists}-$i")
+  val toolsNumber = 5
+  private val toolsCount = ConfigFactory.load().getInt("tools.available")
+  val tools: Seq[String] = (1 to toolsCount).map(i => s"${GoldStandard.exists}-$i")
   val schema = Seq(recid) ++ Seq(attrnr) ++ Seq(label) ++ tools
 }
 

@@ -3,9 +3,9 @@ package de.evaluation.tools.ruleviolations.nadeef
 import java.util.Properties
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.data.schema.{BlackOakSchema, HospSchema, Schema}
+import de.evaluation.data.schema.{BlackOakSchema, HospSchema, SalariesSchema, Schema}
 import de.evaluation.f1.Cells
-import de.evaluation.util.{DataSetCreator, DatabaseProps, SparkLOAN}
+import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 
@@ -102,6 +102,7 @@ class NadeefRulesVioResults extends Serializable {
         })
 
         val detectedCells = dirtyRecIdAndAttributes.toDS()
+        detectedCells.show()
 
         detectedCells
           .coalesce(1)
@@ -179,7 +180,6 @@ class NadeefRulesVioResults extends Serializable {
   }
 
   def getRulesVioResults(sparkSession: SparkSession): DataFrame = {
-    import sparkSession.implicits._
 
     val nadeefResultConf = "output.nadeef.detect.result.file"
     val nadeefResult: DataFrame = DataSetCreator
@@ -202,19 +202,38 @@ object HospRulesVioRunner {
 
   def getResult(session: SparkSession): DataFrame = {
     val confString = "result.hosp.10k.rules.vio"
-    val trifactaOutput = DataSetCreator.createDataSetNoHeader(session, confString, Cells.schema: _*)
-    trifactaOutput
+    val rulesVioOutput = DataSetCreator.createDataSetNoHeader(session, confString, Cells.schema: _*)
+    rulesVioOutput
   }
 
+}
+
+object SalariesRulesVioRunner {
+  def main(args: Array[String]): Unit = {
+    val dirtyTableName = "tb_dirty_salaries_with_id_nadeef_version"
+
+    val rulesVioResults = new NadeefRulesVioResults()
+    rulesVioResults.onSchema(SalariesSchema)
+    rulesVioResults.addDirtyTableName(dirtyTableName)
+    rulesVioResults.specifyOutput("nadeef.rules.vio.result.folder")
+    rulesVioResults.createRulesVioLog()
+
+  }
+
+  def getResult(session: SparkSession): DataFrame = {
+    val confString = "result.salaries.rules.vio"
+    val rulesVioOutput = DataSetCreator.createDataSetNoHeader(session, confString, Cells.schema: _*)
+    rulesVioOutput
+  }
 }
 
 
 object NadeefRulesVioResults {
 
-//  def main(args: Array[String]): Unit = {
-//    // new NadeefRulesVioResults().evaluate()
-//    new NadeefRulesVioResults().createRulesVioLog()
-//  }
+  //  def main(args: Array[String]): Unit = {
+  //    // new NadeefRulesVioResults().evaluate()
+  //    new NadeefRulesVioResults().createRulesVioLog()
+  //  }
 
   def getRulesVioResults(sparkSession: SparkSession): DataFrame = {
     new NadeefRulesVioResults().getRulesVioResults(sparkSession)

@@ -20,9 +20,15 @@ import org.apache.spark.sql.DataFrame
   */
 class LogisticRegressionRunner {
   private var libsvmFile = ""
+  private var eNetParam: Double = 0.0
 
   def onLibsvm(file: String): this.type = {
     libsvmFile = ConfigFactory.load().getString(file)
+    this
+  }
+
+  def setElasticNetParam(param: Double): this.type = {
+    eNetParam = param
     this
   }
 
@@ -36,7 +42,7 @@ class LogisticRegressionRunner {
         val paramGrid = new ParamGridBuilder()
           .addGrid(logRegr.maxIter, Array(100, 200, 250))
           .addGrid(logRegr.regParam, Array(0.1, 0.2, 0.3, 0.4, 0.5))
-          .addGrid(logRegr.elasticNetParam, Array(0.01, 0.4, 0.5, 0.7, 0.8, 0.9, 0.999))
+          .addGrid(logRegr.elasticNetParam, Array(0.0, 0.01, 0.4, 0.5, 0.7, 0.8, 0.9, 0.999))
           .build()
 
         val crossValidator = new CrossValidator()
@@ -68,8 +74,8 @@ class LogisticRegressionRunner {
 
 
         val elasticNetParam = ind % 2 == 0 match {
-          case true => 0.01
-          case false => 0.0
+          case true => eNetParam //0.01
+          case false => 0.4
         }
 
         val regParam = 0.1
@@ -187,6 +193,8 @@ class LogisticRegressionRunner {
       }
     })
 
+    println(s"true positives: $tp")
+
     val accuracy = (tp + tn) / totalData.toDouble
     //    println(s"Accuracy: $accuracy")
     val precision = tp / (tp + fp).toDouble
@@ -209,7 +217,8 @@ object HospLogisticRegression {
   def main(args: Array[String]): Unit = {
     val logisticRegressionRunner = new LogisticRegressionRunner()
 
-    logisticRegressionRunner.onLibsvm("model.hosp.10k.libsvm.file")
+    logisticRegressionRunner.onLibsvm("model.salaries.libsvm.file")
+    //logisticRegressionRunner.findBestModel()
 
     /** BEST MODEL:
       * //logisticRegressionRunner.findBestModel()
@@ -230,6 +239,7 @@ object HospLogisticRegression {
       * TEST: Accuracy: 0.921, Precision: 0.9633, Recall: 0.2068, F1: 0.3405, totalTest: 32209, wrongPrediction: 2545
       * */
 
+    logisticRegressionRunner.setElasticNetParam(0.0)
     (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind))
 
   }

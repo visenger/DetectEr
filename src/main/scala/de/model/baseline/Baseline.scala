@@ -1,10 +1,8 @@
 package de.model.baseline
 
-import de.evaluation.f1.{Eval, F1, FullResult}
+import de.evaluation.f1.{F1, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.sql._
-
-import scala.collection.immutable.IndexedSeq
 
 /**
   * Created by visenger on 08/02/17.
@@ -43,7 +41,7 @@ class Baseline {
 
         /* UNION ALL RESULTS: */
         val unionAll = F1.evaluate(data)
-       // unionAll.printResult("UNION ALL")
+        // unionAll.printResult("UNION ALL")
         unionAll.printLatexString("UNION ALL")
 
         /* MIN-K RESULTS: */
@@ -69,6 +67,15 @@ object HospBaselineRunner {
     hospBaseline.onData("result.hosp.10k.full.result.file")
     hospBaseline.calculateEvalForEachTool()
     hospBaseline.calculateBaseline()
+  }
+}
+
+object SalariesBaselineRunner {
+  def main(args: Array[String]): Unit = {
+    val salariesBaseline = new Baseline()
+    salariesBaseline.onData("result.salaries.full.result.file")
+    salariesBaseline.calculateEvalForEachTool()
+    salariesBaseline.calculateBaseline()
   }
 }
 

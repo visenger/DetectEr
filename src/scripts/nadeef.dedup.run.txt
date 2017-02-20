@@ -1,2 +1,15 @@
 // with additional classpath folder for deduplications udfs
 cat dedupArgs.txt | java -cp out/bin/*:examples/:hosp/:out/test qa.qcri.nadeef.console.Console
+
+------
+runDedup.sh file:
+
+#!/bin/bash
+
+FOLDER=salaries
+
+javac $FOLDER/DedupRuleSalaries.java -cp out/bin/*:
+
+cat dedupArgs.txt | java -cp out/bin/*:examples/:$FOLDER/:out/test qa.qcri.nadeef.console.Console
+echo $?
+------

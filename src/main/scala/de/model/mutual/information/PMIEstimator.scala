@@ -85,24 +85,24 @@ class PMIEstimator {
 
     allTops.foreach(topTools => {
       val tools = topTools.mkString(" + ")
-//      println(tools)
+      //           println(tools)
 
       val label = FullResult.label
       val labelAndTopTools = model.select(label, topTools: _*)
 
       val eval: Eval = F1.evaluate(labelAndTopTools)
-//      eval.printResult("union all")
+      //            eval.printResult("union all")
 
       val k = topTools.length
       val minK: Eval = F1.evaluate(labelAndTopTools, k)
-//      minK.printResult(s"min-$k")
+      //            minK.printResult(s"min-$k")
 
       val latexTableRow =
         s"""
                   \\multirow{2}{*}{Top-1} & \\multirow{2}{*}{$tools} & union all  & ${eval.precision}        & ${eval.recall}     & ${eval.f1}  \\\\
                              &                              & min-$k      & ${minK.precision}        & ${minK.recall}     & ${minK.f1}   \\\\
           """.stripMargin
-            println(latexTableRow)
+      println(latexTableRow)
     })
   }
 
@@ -139,6 +139,15 @@ object HospPMIEstimatorRunner {
   }
 }
 
+object SalariesPMIEstimatorRunner {
+  val resultPath = "result.salaries.full.result.file"
+
+  def main(args: Array[String]): Unit = {
+    val pmi = new PMIEstimator()
+    pmi.onData(resultPath)
+    pmi.runPMI()
+  }
+}
 
 object PMIEstimatorRunner {
   val resultPath = "output.full.result.file"
