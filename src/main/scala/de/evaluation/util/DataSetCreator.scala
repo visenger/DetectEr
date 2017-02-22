@@ -1,8 +1,7 @@
 package de.evaluation.util
 
 import com.typesafe.config.{Config, ConfigFactory}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 
 /**
   * Created by visenger on 29/11/16.
@@ -28,6 +27,35 @@ object DataSetCreator {
     data
   }
 
+  def createDataSetFromCSV(sparkSession: SparkSession, dataPathStr: String, schema: String*): DataFrame = {
+
+    /*
+    * todo: consider the following way of reading csv:
+    * val csvdata = spark.read.options(Map(
+    "header" -> "true",
+    "ignoreLeadingWhiteSpace" -> "true",
+    "ignoreTrailingWhiteSpace" -> "true",
+    "timestampFormat" -> "yyyy-MM-dd HH:mm:ss.SSSZZZ",
+    "inferSchema" -> "true",
+    "mode" -> "FAILFAST"))
+  .csv("s3a://landsat-pds/scene_list.gz")
+
+    * */
+
+    val config: Config = ConfigFactory.load()
+    val dataPath: String = config.getString(dataPathStr)
+
+    val csv = sparkSession
+      .read
+      .option("header", "true")
+      .csv(dataPath)
+
+    val df = csv.toDF(schema: _*)
+    df
+
+  }
+
+  @Deprecated //todo: use createDataSetFromCSV method.
   def createDataSetNoHeader(sparkSession: SparkSession, dataPathStr: String, schema: String*): DataFrame = {
 
     val config: Config = ConfigFactory.load()
@@ -44,6 +72,7 @@ object DataSetCreator {
     namedDF
   }
 
+  @Deprecated
   def createDataSetWithoutFirstTwo(sparkSession: SparkSession, dataPathStr: String, schema: String*): DataFrame = {
     import sys.process._
 
