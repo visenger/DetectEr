@@ -1,4 +1,4 @@
-package de.model.multiarmed.bandid
+package de.model.multiarmed.bandit
 
 import de.evaluation.f1.FullResult
 import de.evaluation.util.{DataSetCreator, SparkLOAN}

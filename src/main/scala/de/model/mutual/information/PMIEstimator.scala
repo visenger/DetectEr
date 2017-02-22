@@ -280,37 +280,3 @@ object PMIEstimatorRunner {
 
 
 }
-
-@Deprecated
-object RandomInformation {
-  def main(args: Array[String]): Unit = {
-    SparkLOAN.withSparkSession("RNDINF") {
-      session => {
-        val model: DataFrame = DataSetCreator.createDataSet(session, "model.matrix.file", Model.schema: _*)
-
-        val sampleSize = model.count()
-
-        val tools = Model.tools.map(t => model.col(t))
-
-        val toolsSelect = model.select(tools: _*)
-
-        val notFoundErrorsCount = toolsSelect.filter(row => {
-          val notFound1 = row.getString(0).toInt == 0
-          val notFound2 = row.getString(1).toInt == 0
-          val notFound3 = row.getString(2).toInt == 0
-          val notFound4 = row.getString(3).toInt == 0
-          val notFound5 = row.getString(4).toInt == 0
-          notFound1 && notFound2 && notFound3 && notFound4 && notFound5
-        }).count()
-        println(s" errors not found: $notFoundErrorsCount from $sampleSize")
-
-        val found: Long = sampleSize - notFoundErrorsCount
-
-        val foundPercent: Double = BigDecimal(found.toDouble * 100 / sampleSize.toDouble).setScale(2, RoundingMode.HALF_UP).toDouble
-        println(s" found percent: $foundPercent %")
-
-
-      }
-    }
-  }
-}
