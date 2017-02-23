@@ -1,0 +1,35 @@
+DATASET: BLACKOAK
+exists-3, exists-4, PMI: 1.42
+exists-1, exists-5, PMI: 0.74
+exists-1, exists-4, PMI: 0.38
+exists-1, exists-3, PMI: 0.13
+exists-2, exists-5, PMI: 0.05
+exists-1, exists-2, PMI: -0.16
+exists-2, exists-3, PMI: -0.21
+exists-2, exists-4, PMI: -0.46
+exists-4, exists-5, PMI: -1.27
+exists-3, exists-5, PMI: -1.77
+
+DATASET: HOSP
+exists-1, exists-4, PMI: 2.77
+exists-1, exists-3, PMI: 2.36
+exists-3, exists-4, PMI: 2.25
+exists-1, exists-5, PMI: 1.01
+exists-3, exists-5, PMI: 0.15
+exists-1, exists-2, PMI: 0.07
+exists-2, exists-3, PMI: 0.02
+exists-2, exists-4, PMI: 0.02
+exists-2, exists-5, PMI: -0.02
+exists-4, exists-5, PMI: -0.16
+
+DATASET: SALARIES
+exists-2, exists-5, PMI: 6.56
+exists-3, exists-4, PMI: 2.26
+exists-4, exists-5, PMI: 1.75
+exists-2, exists-4, PMI: 1.38
+exists-3, exists-5, PMI: 0.69
+exists-1, exists-5, PMI: 0.48
+exists-2, exists-3, PMI: 0.48
+exists-1, exists-2, PMI: 0.17
+exists-1, exists-4, PMI: -1.54
+exists-1, exists-3, PMI: -3.88

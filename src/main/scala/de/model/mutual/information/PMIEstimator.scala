@@ -132,30 +132,45 @@ case class ToolPMI(tool1: String, tool2: String, pmi: Double) {
 object HospPMIEstimatorRunner {
   val resultPath = "result.hosp.10k.full.result.file"
 
-  def main(args: Array[String]): Unit = {
+  def run() = {
+    println(s"DATASET: HOSP")
     val pmi = new PMIEstimator()
     pmi.onData(resultPath)
     pmi.runPMI()
+  }
+
+  def main(args: Array[String]): Unit = {
+    run()
   }
 }
 
 object SalariesPMIEstimatorRunner {
   val resultPath = "result.salaries.full.result.file"
 
-  def main(args: Array[String]): Unit = {
+  def run() = {
+    println(s"DATASET: SALARIES")
     val pmi = new PMIEstimator()
     pmi.onData(resultPath)
     pmi.runPMI()
+  }
+
+  def main(args: Array[String]): Unit = {
+    run()
   }
 }
 
 object PMIEstimatorRunner {
   val resultPath = "output.full.result.file"
 
-  def main(args: Array[String]): Unit = {
+  def run() = {
+    println(s"DATASET: BLACKOAK")
     val pmi = new PMIEstimator()
     pmi.onData(resultPath)
     pmi.runPMI()
+  }
+
+  def main(args: Array[String]): Unit = {
+    run()
   }
 
   def old_main(args: Array[String]): Unit = {

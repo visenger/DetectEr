@@ -21,6 +21,7 @@ class Baseline {
       session => {
 
         val data: DataFrame = getData(session)
+        data.randomSplit(Array(0.1,0.9))
 
         val tools = FullResult.tools
 
