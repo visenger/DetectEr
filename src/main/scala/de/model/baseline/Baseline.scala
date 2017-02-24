@@ -21,7 +21,7 @@ class Baseline {
       session => {
 
         val data: DataFrame = getData(session)
-        data.randomSplit(Array(0.1,0.9))
+
 
         val tools = FullResult.tools
 
@@ -56,8 +56,10 @@ class Baseline {
 
 
   private def getData(session: SparkSession): DataFrame = {
-    val blackOakFullResult = DataSetCreator.createDataSetNoHeader(session, fullResult, FullResult.schema: _*)
-    blackOakFullResult
+    //    val blackOakFullResult = DataSetCreator.createDataSetNoHeader(session, fullResult, FullResult.schema: _*)
+    //    blackOakFullResult
+    val data = DataSetCreator.createDataSetFromCSV(session, fullResult, FullResult.schema: _*)
+    data
   }
 
 }

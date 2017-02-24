@@ -13,7 +13,7 @@ import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tuning.{CrossValidator, CrossValidatorModel, ParamGridBuilder}
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 
 /**
   * Created by visenger on 16/02/17.
@@ -124,6 +124,16 @@ class LogisticRegressionRunner {
 
         model.setThreshold(bestThreshold)
 
+        val pr: Dataset[Row] = binarySummary.pr
+          .select("precision", "recall")
+          .where(fMeasure.col("F-Measure") === maxFMeasure)
+
+        val trainPrecision = pr.head().getDouble(0)
+        val trainRecall = pr.head().getDouble(1)
+
+        println(s"train precision: $trainPrecision; train recall: $trainRecall")
+
+
         val trainDataInfo = TrainData(regParam, elasticNetParam, modelCoeff, intercept, round(maxFMeasure, 4), round(areaUnderROC, 4))
 
         //val prediction = model.transform(test)
@@ -186,6 +196,7 @@ class LogisticRegressionRunner {
       val values = elem._1
       val count = elem._2
       values match {
+        //(prediction, label)
         case (0.0, 0.0) => tn = count
         case (1.0, 1.0) => tp = count
         case (1.0, 0.0) => fp = count
@@ -212,8 +223,55 @@ class LogisticRegressionRunner {
 
 }
 
+object BlackOakLogisticRegression {
+  def main(args: Array[String]): Unit = {
+
+    val logisticRegressionRunner = new LogisticRegressionRunner()
+
+    logisticRegressionRunner.onLibsvm("model.full.result.file")
+    //logisticRegressionRunner.findBestModel()
+
+    logisticRegressionRunner.setElasticNetParam(0.0)
+    (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind))
+
+
+  }
+}
+
 
 object HospLogisticRegression {
+  def main(args: Array[String]): Unit = {
+    val logisticRegressionRunner = new LogisticRegressionRunner()
+
+    logisticRegressionRunner.onLibsvm("model.hosp.10k.libsvm.file")
+    //logisticRegressionRunner.findBestModel()
+
+    /** BEST MODEL:
+      * //logisticRegressionRunner.findBestModel()
+      * {
+      * logreg_adc0a80c0ca7-elasticNetParam: 0.01,
+      * logreg_adc0a80c0ca7-featuresCol: features,
+      * logreg_adc0a80c0ca7-fitIntercept: true,
+      * logreg_adc0a80c0ca7-labelCol: label,
+      * logreg_adc0a80c0ca7-maxIter: 100,
+      * logreg_adc0a80c0ca7-predictionCol: prediction,
+      * logreg_adc0a80c0ca7-probabilityCol: probability,
+      * logreg_adc0a80c0ca7-rawPredictionCol: rawPrediction,
+      * logreg_adc0a80c0ca7-regParam: 0.1,
+      * logreg_adc0a80c0ca7-standardization: true,
+      * logreg_adc0a80c0ca7-threshold: 0.5,
+      * logreg_adc0a80c0ca7-tol: 1.0E-6
+      * }
+      * TEST: Accuracy: 0.921, Precision: 0.9633, Recall: 0.2068, F1: 0.3405, totalTest: 32209, wrongPrediction: 2545
+      * */
+
+    logisticRegressionRunner.setElasticNetParam(0.0)
+    (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind))
+
+  }
+}
+
+object SalariesLogisticRegression {
   def main(args: Array[String]): Unit = {
     val logisticRegressionRunner = new LogisticRegressionRunner()
 
