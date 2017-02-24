@@ -46,7 +46,7 @@ class LibsvmConverter {
   }
 
 
-  private def toLibsvmFormat(matrixWithLabel: DataFrame): DataFrame = {
+  def toLibsvmFormat(matrixWithLabel: DataFrame): DataFrame = {
 
     val libsvm: RDD[String] = matrixWithLabel.rdd.map(row => {
       val values: Map[String, String] = row.getValuesMap[String](FullResult.schema)
