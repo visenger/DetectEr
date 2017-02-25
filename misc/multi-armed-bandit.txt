@@ -1,0 +1,154 @@
+EVALUATING: blackoak
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-1+exists-4+exists-2} & union all  & 0.3729        & 0.4757     & 0.4181  \\
+                             &                              & min-4      & 0.9873        & 7.0E-4     & 0.0014   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5} & union all  & 0.523        & 0.1773     & 0.2648  \\
+                             &                              & min-1      & 0.523        & 0.1773     & 0.2648   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-1+exists-3} & union all  & 0.4583        & 0.2815     & 0.3488  \\
+                             &                              & min-3      & 1.0        & 6.0E-4     & 0.0013   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-1+exists-3+exists-4} & union all  & 0.3939        & 0.4066     & 0.4001  \\
+                             &                              & min-4      & 1.0        & 1.0E-4     & 2.0E-4   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-1+exists-3+exists-4+exists-2} & union all  & 0.3726        & 0.4761     & 0.4181  \\
+                             &                              & min-5      & 1.0        & 0.0     & 0.0   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-1} & union all  & 0.4677        & 0.2749     & 0.3463  \\
+                             &                              & min-2      & 0.4786        & 0.0422     & 0.0775   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-1+exists-4+exists-2+exists-3} & union all  & 0.3726        & 0.4761     & 0.4181  \\
+                             &                              & min-5      & 1.0        & 0.0     & 0.0   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-1+exists-4} & union all  & 0.3943        & 0.4062     & 0.4001  \\
+                             &                              & min-3      & 0.9895        & 0.0052     & 0.0103   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-1+exists-2+exists-4+exists-3} & union all  & 0.3726        & 0.4761     & 0.4181  \\
+                             &                              & min-5      & 1.0        & 0.0     & 0.0   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-1+exists-2+exists-3+exists-4} & union all  & 0.3726        & 0.4761     & 0.4181  \\
+                             &                              & min-5      & 1.0        & 0.0     & 0.0   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-1+exists-2} & union all  & 0.4037        & 0.352     & 0.376  \\
+                             &                              & min-3      & 0.6102        & 0.0056     & 0.0111   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-1+exists-2+exists-3} & union all  & 0.3998        & 0.3579     & 0.3777  \\
+                             &                              & min-4      & 1.0        & 0.0     & 1.0E-4   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-1+exists-2+exists-4} & union all  & 0.3729        & 0.4757     & 0.4181  \\
+                             &                              & min-4      & 0.9873        & 7.0E-4     & 0.0014   \\
+
+EVALUATING: salaries
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-4+exists-5+exists-2} & union all  & 0.1509        & 0.1114     & 0.1282  \\
+                             &                              & min-3      & 0.0        & 0.0     & 0.0   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5} & union all  & 0.1311        & 0.0036     & 0.007  \\
+                             &                              & min-1      & 0.1311        & 0.0036     & 0.007   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-4+exists-5+exists-2+exists-3} & union all  & 0.0328        & 0.1371     & 0.0529  \\
+                             &                              & min-4      & 0.0        & 0.0     & 0.0   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-4+exists-2+exists-3+exists-1} & union all  & 0.0112        & 0.1389     & 0.0207  \\
+                             &                              & min-5      & 0.0        & 0.0     & 0.0   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-4} & union all  & 0.1514        & 0.1111     & 0.1281  \\
+                             &                              & min-2      & 0.0189        & 0.0     & 1.0E-4   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-4+exists-2} & union all  & 0.1509        & 0.1114     & 0.1282  \\
+                             &                              & min-3      & 0.0        & 0.0     & 0.0   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-5+exists-4+exists-2+exists-3} & union all  & 0.0328        & 0.1371     & 0.0529  \\
+                             &                              & min-4      & 0.0        & 0.0     & 0.0   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-4+exists-5} & union all  & 0.1514        & 0.1111     & 0.1281  \\
+                             &                              & min-2      & 0.0189        & 0.0     & 1.0E-4   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-4} & union all  & 0.1517        & 0.1075     & 0.1258  \\
+                             &                              & min-1      & 0.1517        & 0.1075     & 0.1258   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-4+exists-5+exists-2+exists-3+exists-1} & union all  & 0.0112        & 0.1389     & 0.0207  \\
+                             &                              & min-5      & 0.0        & 0.0     & 0.0   \\
+
+EVALUATING: hosp
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1+exists-3+exists-4} & union all  & 0.2943        & 0.3036     & 0.2988  \\
+                             &                              & min-3      & 0.6932        & 0.026     & 0.0501   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1} & union all  & 0.9462        & 0.2023     & 0.3334  \\
+                             &                              & min-1      & 0.9462        & 0.2023     & 0.3334   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1+exists-3+exists-4+exists-5} & union all  & 0.2272        & 0.9932     & 0.3698  \\
+                             &                              & min-4      & 0.6462        & 0.0179     & 0.0349   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1+exists-3+exists-5+exists-4} & union all  & 0.2272        & 0.9932     & 0.3698  \\
+                             &                              & min-4      & 0.6462        & 0.0179     & 0.0349   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1+exists-5+exists-3+exists-4+exists-2} & union all  & 0.0977        & 0.9993     & 0.1781  \\
+                             &                              & min-5      & 0.6421        & 0.0173     & 0.0338   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1+exists-3+exists-5+exists-4+exists-2} & union all  & 0.0977        & 0.9993     & 0.1781  \\
+                             &                              & min-5      & 0.6421        & 0.0173     & 0.0338   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1+exists-5} & union all  & 0.2633        & 0.9932     & 0.4163  \\
+                             &                              & min-2      & 0.9519        & 0.1942     & 0.3226   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1+exists-3+exists-4+exists-5+exists-2} & union all  & 0.0977        & 0.9993     & 0.1781  \\
+                             &                              & min-5      & 0.6421        & 0.0173     & 0.0338   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1+exists-3+exists-2+exists-4+exists-5} & union all  & 0.0977        & 0.9993     & 0.1781  \\
+                             &                              & min-5      & 0.6421        & 0.0173     & 0.0338   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1+exists-3} & union all  & 0.2986        & 0.3036     & 0.3011  \\
+                             &                              & min-2      & 0.9453        & 0.1988     & 0.3285   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1+exists-3+exists-5} & union all  & 0.2276        & 0.9932     & 0.3703  \\
+                             &                              & min-3      & 0.9511        & 0.1907     & 0.3177   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1+exists-5+exists-3} & union all  & 0.2276        & 0.9932     & 0.3703  \\
+                             &                              & min-3      & 0.9511        & 0.1907     & 0.3177   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1+exists-5+exists-3+exists-4} & union all  & 0.2272        & 0.9932     & 0.3698  \\
+                             &                              & min-4      & 0.6462        & 0.0179     & 0.0349   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1+exists-3+exists-2} & union all  & 0.0907        & 0.8872     & 0.1646  \\
+                             &                              & min-3      & 0.9435        & 0.19     & 0.3163   \\
+
+
+                  \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1+exists-3+exists-2+exists-4} & union all  & 0.0907        & 0.8872     & 0.1645  \\
+                             &                              & min-4      & 0.6806        & 0.0242     & 0.0468   \\

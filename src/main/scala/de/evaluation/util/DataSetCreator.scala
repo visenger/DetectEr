@@ -55,6 +55,35 @@ object DataSetCreator {
 
   }
 
+  /**
+    * @param dataPath represents direct path to the file to be read
+    **/
+  def createFrame(sparkSession: SparkSession, dataPath: String, schema: String*): DataFrame = {
+
+    /*
+    * todo: consider the following way of reading csv:
+    * val csvdata = spark.read.options(Map(
+    "header" -> "true",
+    "ignoreLeadingWhiteSpace" -> "true",
+    "ignoreTrailingWhiteSpace" -> "true",
+    "timestampFormat" -> "yyyy-MM-dd HH:mm:ss.SSSZZZ",
+    "inferSchema" -> "true",
+    "mode" -> "FAILFAST"))
+  .csv("s3a://landsat-pds/scene_list.gz")
+
+    * */
+
+
+    val csv = sparkSession
+      .read
+      .option("header", "true")
+      .csv(dataPath)
+
+    val df = csv.toDF(schema: _*)
+    df
+
+  }
+
   @Deprecated //todo: use createDataSetFromCSV method.
   def createDataSetNoHeader(sparkSession: SparkSession, dataPathStr: String, schema: String*): DataFrame = {
 

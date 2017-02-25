@@ -1,0 +1,120 @@
+BLACKOAK
+exists-3, exists-4, PMI: 1.42
+exists-1, exists-5, PMI: 0.72
+exists-1, exists-4, PMI: 0.4
+exists-1, exists-3, PMI: 0.2
+exists-2, exists-5, PMI: 0.05
+exists-1, exists-2, PMI: -0.17
+exists-2, exists-3, PMI: -0.18
+exists-2, exists-4, PMI: -0.46
+exists-4, exists-5, PMI: -1.22
+exists-3, exists-5, PMI: -1.67
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-3 + exists-4} & union all  & 0.3201        & 0.1801     & 0.2305  \\
+                                   &                              & min-2      & 0.2608        & 0.0068     & 0.0133   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-3 + exists-4 + exists-1 + exists-5} & union all  & 0.3939        & 0.4066     & 0.4001  \\
+                                   &                              & min-4      & 1.0        & 1.0E-4     & 2.0E-4   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-2 + exists-3 + exists-5 + exists-1 + exists-4} & union all  & 0.3726        & 0.4761     & 0.4181  \\
+                                   &                              & min-5      & 1.0        & 0.0     & 0.0   \\
+
+inverse PMI:
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-3 + exists-5} & union all  & 0.5024        & 0.1854     & 0.2709  \\
+                                   &                              & min-2      & 1.0        & 6.0E-4     & 0.0013   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-3 + exists-5 + exists-4} & union all  & 0.3858        & 0.34     & 0.3615  \\
+                                   &                              & min-3      & 1.0        & 1.0E-4     & 2.0E-4   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-3 + exists-5 + exists-4 + exists-2} & union all  & 0.3647        & 0.4194     & 0.3901  \\
+                                   &                              & min-4      & 1.0        & 0.0     & 0.0   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-2 + exists-3 + exists-5 + exists-1 + exists-4} & union all  & 0.3726        & 0.4761     & 0.4181  \\
+                                   &                              & min-5      & 1.0        & 0.0     & 0.0   \\
+
+HOSP
+exists-1, exists-4, PMI: 2.93
+exists-1, exists-3, PMI: 2.37
+exists-3, exists-4, PMI: 2.32
+exists-1, exists-5, PMI: 1.02
+exists-3, exists-5, PMI: 0.13
+exists-1, exists-2, PMI: 0.07
+exists-2, exists-3, PMI: 0.02
+exists-2, exists-4, PMI: 0.01
+exists-2, exists-5, PMI: -0.02
+exists-4, exists-5, PMI: -0.12
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1 + exists-4} & union all  & 0.6793        & 0.2023     & 0.3118  \\
+                                   &                              & min-2      & 0.6932        & 0.026     & 0.0501   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1 + exists-4 + exists-3} & union all  & 0.2943        & 0.3036     & 0.2988  \\
+                                   &                              & min-3      & 0.6932        & 0.026     & 0.0501   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1 + exists-4 + exists-3 + exists-5} & union all  & 0.2272        & 0.9932     & 0.3698  \\
+                                   &                              & min-4      & 0.6462        & 0.0179     & 0.0349   \\
+
+inverse PMI:
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-4 + exists-5} & union all  & 0.2581        & 0.9932     & 0.4098  \\
+                                   &                              & min-2      & 0.504        & 0.0179     & 0.0346   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-4 + exists-5 + exists-2} & union all  & 0.0982        & 0.9993     & 0.1788  \\
+                                   &                              & min-3      & 0.5115        & 0.0173     & 0.0335   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-4 + exists-5 + exists-2 + exists-3} & union all  & 0.0977        & 0.9993     & 0.1781  \\
+                                   &                              & min-4      & 0.6421        & 0.0173     & 0.0338   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-2 + exists-3 + exists-5 + exists-1 + exists-4} & union all  & 0.0977        & 0.9993     & 0.1781  \\
+                                   &                              & min-5      & 0.6421        & 0.0173     & 0.0338   \\
+
+SALARIES
+exists-2, exists-5, PMI: 6.64
+exists-3, exists-4, PMI: 2.27
+exists-4, exists-5, PMI: 1.8
+exists-2, exists-4, PMI: 0.97
+exists-1, exists-5, PMI: 0.59
+exists-3, exists-5, PMI: 0.46
+exists-1, exists-2, PMI: 0.29
+exists-2, exists-3, PMI: -0.78
+exists-1, exists-4, PMI: -1.62
+exists-1, exists-3, PMI: -3.98
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-2 + exists-5} & union all  & 0.1225        & 0.0039     & 0.0075  \\
+                                   &                              & min-2      & 0.1408        & 5.0E-4     & 0.001   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-2 + exists-5 + exists-3 + exists-4} & union all  & 0.0328        & 0.1371     & 0.0529  \\
+                                   &                              & min-4      & 0.0        & 0.0     & 0.0   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-2 + exists-3 + exists-5 + exists-1 + exists-4} & union all  & 0.0112        & 0.1389     & 0.0207  \\
+                                   &                              & min-5      & 0.0        & 0.0     & 0.0   \\
+
+inverse PMI:
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1 + exists-3} & union all  & 0.0111        & 0.1375     & 0.0206  \\
+                                   &                              & min-2      & 0.9703        & 0.0161     & 0.0317   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1 + exists-3 + exists-4} & union all  & 0.0111        & 0.1375     & 0.0205  \\
+                                   &                              & min-3      & 1.0        & 0.0161     & 0.0317   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-1 + exists-3 + exists-4 + exists-2} & union all  & 0.0111        & 0.1378     & 0.0205  \\
+                                   &                              & min-4      & 0.0        & 0.0     & 0.0   \\
+
+
+                        \multirow{2}{*}{Top-1} & \multirow{2}{*}{exists-2 + exists-3 + exists-5 + exists-1 + exists-4} & union all  & 0.0112        & 0.1389     & 0.0207  \\
+                                   &                              & min-5      & 0.0        & 0.0     & 0.0   \\
+

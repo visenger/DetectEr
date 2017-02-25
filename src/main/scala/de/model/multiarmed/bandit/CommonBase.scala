@@ -1,5 +1,6 @@
 package de.model.multiarmed.bandit
 
+import com.typesafe.config.ConfigFactory
 import de.evaluation.f1.FullResult
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.sql.{DataFrame, Row}
@@ -9,19 +10,33 @@ import org.apache.spark.sql.{DataFrame, Row}
   */
 trait CommonBase {
 
+  val config = ConfigFactory.load()
   val blackOakFullResultFile = "output.full.result.file"
   val hospFullResultFile = "result.hosp.10k.full.result.file"
   val salariesFullResultFile = "result.salaries.full.result.file"
 
-  val allResults = Map[String, String](
-    ("BLACKOAK" -> blackOakFullResultFile),
-    ("HOSP" -> hospFullResultFile),
-    ("SALARIES" -> salariesFullResultFile))
+  val experiments = ConfigFactory.load("experiments.conf")
+  val salariesTrainFile = "salaries.experiments.train.file"
+  val hospTrainFile = "hosp.experiments.train.file"
+  val blackoakTrainFile = "blackoak.experiments.train.file"
+
+  val dataForExperiments = Map[String, String](
+    ("BLACKOAK" -> experiments.getString(blackoakTrainFile)),
+    ("HOSP" -> experiments.getString(hospTrainFile)),
+    ("SALARIES" -> experiments.getString(salariesTrainFile))
+  )
+
+
+  val fullResults = Map[String, String](
+    ("BLACKOAK" -> config.getString(blackOakFullResultFile)),
+    ("HOSP" -> config.getString(hospFullResultFile)),
+    ("SALARIES" -> config.getString(salariesFullResultFile)))
 
   val fullResultSchema = FullResult
 
   def process_data(f: Tuple2[String, String] => DataFrame): Seq[DataFrame] = {
-    allResults.map(t => f(t)).toSeq
+    //fullResults.map(t => f(t)).toSeq
+    dataForExperiments.map(t => f(t)).toSeq
   }
 
   case class Result(dataSetName: String, tool1: String, tool2: String, tool3: String, tool4: String, tool5: String)
@@ -50,9 +65,9 @@ object ToolsRewards extends CommonBase {
           data => {
 
             val datasetName = data._1
+            val path = data._2
 
-            val configPath = data._2
-            val toolsResultDF = DataSetCreator.createDataSetFromCSV(session, configPath, fullResultSchema.schema: _*)
+            val toolsResultDF = DataSetCreator.createFrame(session, path, fullResultSchema.schema: _*)
             //toolsResultDF.show()
 
             val allTools: Seq[String] = fullResultSchema.tools

@@ -17,9 +17,10 @@ import scala.collection.immutable.{IndexedSeq, Seq}
   */
 trait ExperimentsBase {
 
-  val config = ConfigFactory.load()
+  val config = ConfigFactory.load("experiments.conf")
+  ///Users/visenger/research/datasets/multiarmed-bandit/experiments-10percent.csv
 
-  val configPath = "multiarmed.bandit.result.csv"
+  val multiArmedBandResults = config.getString("multiarmed.bandit.result.csv")
 
   def schema = {
     val header = config.getString("multiarmed.bandit.header")
@@ -27,12 +28,16 @@ trait ExperimentsBase {
     Seq(dataset, banditalg, param, expectations)
   }
 
-  def getConfigPathByDataset(data: String): String = {
+  def getDatasetPath(data: String): String = {
+
+    val blackoakTestFile = config.getString("blackoak.experiments.test.file")
+    val hospTestFile = config.getString("hosp.experiments.test.file")
+    val salariesTestFile = config.getString("salaries.experiments.test.file")
 
     val path = data.toLowerCase() match {
-      case "blackoak" => "output.full.result.file"
-      case "hosp" => "result.hosp.10k.full.result.file"
-      case "salaries" => "result.salaries.full.result.file"
+      case "blackoak" => blackoakTestFile
+      case "hosp" => hospTestFile
+      case "salaries" => salariesTestFile
       case _ => ""
     }
     path
@@ -59,7 +64,7 @@ object MultiarmedBanditRunner extends ExperimentsBase {
     SparkLOAN.withSparkSession("MULTIARMEDBANDIT") {
       session => {
         import session.implicits._
-        val experimentsCSV = DataSetCreator.createDataSetFromCSV(session, configPath, schema: _*)
+        val experimentsCSV = DataSetCreator.createFrame(session, multiArmedBandResults, schema: _*)
 
         //experimentsCSV.show()
         //header: "dataset,banditalg,param,expectations"
@@ -100,15 +105,15 @@ object MultiarmedBanditRunner extends ExperimentsBase {
 
         val experimentSettings: DataFrame = allData.toDF("dataset", "banditalg", "toolscombi")
 
-        val allDatasets = experimentsCSV
+        val allDatasets: Array[String] = experimentsCSV
           .select(experimentsCSV.col("dataset"))
           .distinct()
           .map(row => row.getString(0))
           .collect()
 
         allDatasets.foreach(data => {
-          val path = getConfigPathByDataset(data)
-          val fullResult: DataFrame = DataSetCreator.createDataSetFromCSV(session, path, FullResult.schema: _*)
+          val path = getDatasetPath(data)
+          val fullResult: DataFrame = DataSetCreator.createFrame(session, path, FullResult.schema: _*)
 
           val experimentsByDataset: Dataset[Row] =
             experimentSettings
