@@ -21,6 +21,6 @@ case class TrainData(regParam: Double,
     }).mkString(" + ")
     function
     //s"""P(err)=\\frac{1}{1+\\exp ^{-($modelIntercept+$function)}}"""
-    s""" t_{$ind}=$modelIntercept+$function """
+    s""" y_{$ind}=$modelIntercept+$function """
   }
 }

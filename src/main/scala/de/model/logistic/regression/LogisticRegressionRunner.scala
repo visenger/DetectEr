@@ -13,12 +13,19 @@ import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tuning.{CrossValidator, CrossValidatorModel, ParamGridBuilder}
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, DataFrame, Row}
 
 /**
-  * Created by visenger on 16/02/17.
+  * Finding the linear model of tools combinations;
   */
-class LogisticRegressionRunner {
+
+trait LogisticRegressionCommonBase {
+  val experimentsConfig = ConfigFactory.load("experiments.conf")
+  val trainFraction: Double = experimentsConfig.getDouble("train.fraction")
+  val testFraction: Double = experimentsConfig.getDouble("test.fraction")
+}
+
+class LogisticRegressionRunner extends LogisticRegressionCommonBase {
   private var libsvmFile = ""
   private var eNetParam: Double = 0.0
 
@@ -36,7 +43,7 @@ class LogisticRegressionRunner {
     SparkLOAN.withSparkSession("LOGREGRESSION") {
       session => {
         val data = session.read.format("libsvm").load(libsvmFile)
-        val Array(training, test) = data.randomSplit(Array(0.8, 0.2))
+        val Array(training, test) = data.randomSplit(Array(trainFraction, testFraction))
 
         val logRegr = new LogisticRegression()
         val paramGrid = new ParamGridBuilder()
@@ -70,12 +77,12 @@ class LogisticRegressionRunner {
     SparkLOAN.withSparkSession("LOGREGRESSION") {
       session => {
         val data = session.read.format("libsvm").load(libsvmFile)
-        val Array(training, test) = data.randomSplit(Array(0.7, 0.3))
+        val Array(training, test) = data.randomSplit(Array(trainFraction, testFraction))
 
-
-        val elasticNetParam = ind % 2 == 0 match {
-          case true => eNetParam //0.01
-          case false => 0.4
+        val elasticNetParam = ind % 3 match {
+          case 1 => eNetParam //0.01
+          case 2 => 0.999
+          case 0 => 0.0
         }
 
         val regParam = 0.1
@@ -85,29 +92,22 @@ class LogisticRegressionRunner {
           .setRegParam(regParam)
           .setElasticNetParam(elasticNetParam)
 
-
         val model = logRegression.fit(training)
 
         import NumbersUtil._
         // Print the coefficients and intercept for logistic regression
-        val modelCoeff = model.coefficients.toArray.map(c => round(c, 4))
-        val intercept = round(model.intercept, 4)
+        val modelCoeff = model.coefficients.toArray.map(c => round(c))
+        val intercept = round(model.intercept)
 
         //        println(s"Coefficients: ${modelCoeff.mkString(",")} -- Intercept: ${intercept}")
 
-
         val logisticRegressionTrainingSummary = model.summary
-
-        //    val objectiveHistory = logisticRegressionTrainingSummary.objectiveHistory
-        //
-        //    println(s"Objective History: ${objectiveHistory.foreach(loss => println(loss))}")
 
         val binarySummary = logisticRegressionTrainingSummary.asInstanceOf[BinaryLogisticRegressionSummary]
 
         val lrRoc = binarySummary.roc
         //lrRoc.show()
         val areaUnderROC = binarySummary.areaUnderROC
-        //        println(s"Area under ROC: ${areaUnderROC}")
 
         import org.apache.spark.sql.functions.max
         val fMeasure = binarySummary.fMeasureByThreshold
@@ -124,32 +124,26 @@ class LogisticRegressionRunner {
 
         model.setThreshold(bestThreshold)
 
-        val pr: Dataset[Row] = binarySummary.pr
-          .select("precision", "recall")
-          .where(fMeasure.col("F-Measure") === maxFMeasure)
+        val f1 = ((p: Column, r: Column) => (p.*(r).*(2) / (p + r)))
+        val pr: DataFrame = binarySummary.pr
+        val withF1 = pr.withColumn("F1", f1(pr.col("precision"), pr.col("recall")))
+        val topF1 = withF1.where(withF1.col("F1") === maxFMeasure)
 
-        val trainPrecision = pr.head().getDouble(0)
-        val trainRecall = pr.head().getDouble(1)
+        val trainPRF1: Row = topF1.head()
+        val trainPrecision: Double = round(trainPRF1.getAs[Double]("precision"))
+        val trainRecall: Double = round(trainPRF1.getAs[Double]("recall"))
 
-        println(s"train precision: $trainPrecision; train recall: $trainRecall")
-
-
-        val trainDataInfo = TrainData(regParam, elasticNetParam, modelCoeff, intercept, round(maxFMeasure, 4), round(areaUnderROC, 4))
-
-        //val prediction = model.transform(test)
-
-        //prediction.show(4)
+        val trainDataInfo = TrainData(
+          regParam,
+          elasticNetParam,
+          modelCoeff,
+          intercept,
+          round(maxFMeasure),
+          round(areaUnderROC))
 
         val testDataInfo = evaluateRegressionModel(model, test, FullResult.label)
 
-        //        println(s" round $ind:")
-        //        println(trainDataInfo)
-        //        println(trainDataInfo.createModelFormula(ind))
-        //        println(testDataInfo)
-        //func         & auc             & train f1          & p         & r      & test f1                 \\
-
-        println(s"""$$ ${trainDataInfo.createModelFormula(ind)}$$     & ${trainDataInfo.areaUnderRoc}    & ${trainDataInfo.maxFMeasure}   & ${testDataInfo.precision}   & ${testDataInfo.recall}   & ${testDataInfo.f1}  \\\\""")
-        //println(s"---------------------------------------------------------")
+        println(s"""$$ ${trainDataInfo.createModelFormula(ind)}$$    & ${round(trainDataInfo.areaUnderRoc)} & ${trainPrecision} & ${trainRecall}   & ${trainDataInfo.maxFMeasure}   & ${testDataInfo.precision}   & ${testDataInfo.recall}   & ${testDataInfo.f1}  \\\\""")
 
       }
     }
@@ -204,7 +198,7 @@ class LogisticRegressionRunner {
       }
     })
 
-    println(s"true positives: $tp")
+    //    println(s"true positives: $tp")
 
     val accuracy = (tp + tn) / totalData.toDouble
     //    println(s"Accuracy: $accuracy")
@@ -225,81 +219,120 @@ class LogisticRegressionRunner {
 
 object BlackOakLogisticRegression {
   def main(args: Array[String]): Unit = {
+    run()
+  }
 
+  def run(): Unit = {
+    println("BLACKOAK")
     val logisticRegressionRunner = new LogisticRegressionRunner()
-
     logisticRegressionRunner.onLibsvm("model.full.result.file")
-    //logisticRegressionRunner.findBestModel()
+    //    logisticRegressionRunner.findBestModel()
 
-    logisticRegressionRunner.setElasticNetParam(0.0)
+    logisticRegressionRunner.setElasticNetParam(0.2)
     (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind))
-
-
   }
 }
 
 
 object HospLogisticRegression {
   def main(args: Array[String]): Unit = {
+    run()
+  }
+
+  def run(): Unit = {
+    println("HOSP")
     val logisticRegressionRunner = new LogisticRegressionRunner()
-
     logisticRegressionRunner.onLibsvm("model.hosp.10k.libsvm.file")
-    //logisticRegressionRunner.findBestModel()
+    //    logisticRegressionRunner.findBestModel()
 
-    /** BEST MODEL:
-      * //logisticRegressionRunner.findBestModel()
-      * {
-      * logreg_adc0a80c0ca7-elasticNetParam: 0.01,
-      * logreg_adc0a80c0ca7-featuresCol: features,
-      * logreg_adc0a80c0ca7-fitIntercept: true,
-      * logreg_adc0a80c0ca7-labelCol: label,
-      * logreg_adc0a80c0ca7-maxIter: 100,
-      * logreg_adc0a80c0ca7-predictionCol: prediction,
-      * logreg_adc0a80c0ca7-probabilityCol: probability,
-      * logreg_adc0a80c0ca7-rawPredictionCol: rawPrediction,
-      * logreg_adc0a80c0ca7-regParam: 0.1,
-      * logreg_adc0a80c0ca7-standardization: true,
-      * logreg_adc0a80c0ca7-threshold: 0.5,
-      * logreg_adc0a80c0ca7-tol: 1.0E-6
-      * }
-      * TEST: Accuracy: 0.921, Precision: 0.9633, Recall: 0.2068, F1: 0.3405, totalTest: 32209, wrongPrediction: 2545
-      * */
-
-    logisticRegressionRunner.setElasticNetParam(0.0)
+    logisticRegressionRunner.setElasticNetParam(0.01)
     (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind))
-
   }
 }
 
 object SalariesLogisticRegression {
   def main(args: Array[String]): Unit = {
+    run()
+  }
+
+  def run(): Unit = {
+    println("SALARIES")
     val logisticRegressionRunner = new LogisticRegressionRunner()
-
     logisticRegressionRunner.onLibsvm("model.salaries.libsvm.file")
-    //logisticRegressionRunner.findBestModel()
+    //    logisticRegressionRunner.findBestModel()
 
-    /** BEST MODEL:
-      * //logisticRegressionRunner.findBestModel()
-      * {
-      * logreg_adc0a80c0ca7-elasticNetParam: 0.01,
-      * logreg_adc0a80c0ca7-featuresCol: features,
-      * logreg_adc0a80c0ca7-fitIntercept: true,
-      * logreg_adc0a80c0ca7-labelCol: label,
-      * logreg_adc0a80c0ca7-maxIter: 100,
-      * logreg_adc0a80c0ca7-predictionCol: prediction,
-      * logreg_adc0a80c0ca7-probabilityCol: probability,
-      * logreg_adc0a80c0ca7-rawPredictionCol: rawPrediction,
-      * logreg_adc0a80c0ca7-regParam: 0.1,
-      * logreg_adc0a80c0ca7-standardization: true,
-      * logreg_adc0a80c0ca7-threshold: 0.5,
-      * logreg_adc0a80c0ca7-tol: 1.0E-6
-      * }
-      * TEST: Accuracy: 0.921, Precision: 0.9633, Recall: 0.2068, F1: 0.3405, totalTest: 32209, wrongPrediction: 2545
-      * */
-
-    logisticRegressionRunner.setElasticNetParam(0.0)
+    logisticRegressionRunner.setElasticNetParam(0.2)
     (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind))
-
   }
 }
+
+object LogisticRegressionRunAll {
+  def main(args: Array[String]): Unit = {
+    BlackOakLogisticRegression.run()
+    HospLogisticRegression.run()
+    SalariesLogisticRegression.run()
+  }
+}
+
+/**
+  * blackoak
+  *
+  * {
+  * logreg_74b4a4e8356d-elasticNetParam: 0.0,
+  * logreg_74b4a4e8356d-featuresCol: features,
+  * logreg_74b4a4e8356d-fitIntercept: true,
+  * logreg_74b4a4e8356d-labelCol: label,
+  * logreg_74b4a4e8356d-maxIter: 100,
+  * logreg_74b4a4e8356d-predictionCol: prediction,
+  * logreg_74b4a4e8356d-probabilityCol: probability,
+  * logreg_74b4a4e8356d-rawPredictionCol: rawPrediction,
+  * logreg_74b4a4e8356d-regParam: 0.2,
+  * logreg_74b4a4e8356d-standardization: true,
+  * logreg_74b4a4e8356d-threshold: 0.5,
+  * logreg_74b4a4e8356d-tol: 1.0E-6
+  * }
+  * true positives: 0.0
+  * TEST: Accuracy: 0.6276, Precision: 0.0, Recall: 0.0, F1: 0.0, totalTest: 440330, wrongPrediction: 163979
+  *
+  * hosp:
+  *
+  * {
+  * logreg_8110e1c07c19-elasticNetParam: 0.0,
+  * logreg_8110e1c07c19-featuresCol: features,
+  * logreg_8110e1c07c19-fitIntercept: true,
+  * logreg_8110e1c07c19-labelCol: label,
+  * logreg_8110e1c07c19-maxIter: 100,
+  * logreg_8110e1c07c19-predictionCol: prediction,
+  * logreg_8110e1c07c19-probabilityCol: probability,
+  * logreg_8110e1c07c19-rawPredictionCol: rawPrediction,
+  * logreg_8110e1c07c19-regParam: 0.1,
+  * logreg_8110e1c07c19-standardization: true,
+  * logreg_8110e1c07c19-threshold: 0.5,
+  * logreg_8110e1c07c19-tol: 1.0E-6
+  * }
+  * true positives: 2740.0
+  * TEST: Accuracy: 0.9199, Precision: 0.9514, Recall: 0.194, F1: 0.3223, totalTest: 143760, wrongPrediction: 11522
+  *
+  * salaries:
+  *
+  * {
+  * logreg_d60d7a031db2-elasticNetParam: 0.0,
+  * logreg_d60d7a031db2-featuresCol: features,
+  * logreg_d60d7a031db2-fitIntercept: true,
+  * logreg_d60d7a031db2-labelCol: label,
+  * logreg_d60d7a031db2-maxIter: 100,
+  * logreg_d60d7a031db2-predictionCol: prediction,
+  * logreg_d60d7a031db2-probabilityCol: probability,
+  * logreg_d60d7a031db2-rawPredictionCol: rawPrediction,
+  * logreg_d60d7a031db2-regParam: 0.1,
+  * logreg_d60d7a031db2-standardization: true,
+  * logreg_d60d7a031db2-threshold: 0.5,
+  * logreg_d60d7a031db2-tol: 1.0E-6
+  * }
+  * true positives: 0.0
+  * TEST: Accuracy: 0.989, Precision: 0.0, Recall: 0.0, F1: 0.0, totalTest: 252330, wrongPrediction: 2788
+  *
+  *
+  *
+  **/
 

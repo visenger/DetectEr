@@ -1,5 +1,6 @@
 package de.model.baseline
 
+import com.typesafe.config.ConfigFactory
 import de.evaluation.f1.{F1, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.sql._
@@ -21,7 +22,6 @@ class Baseline {
       session => {
 
         val data: DataFrame = getData(session)
-
 
         val tools = FullResult.tools
 
@@ -58,7 +58,7 @@ class Baseline {
   private def getData(session: SparkSession): DataFrame = {
     //    val blackOakFullResult = DataSetCreator.createDataSetNoHeader(session, fullResult, FullResult.schema: _*)
     //    blackOakFullResult
-    val data = DataSetCreator.createDataSetFromCSV(session, fullResult, FullResult.schema: _*)
+    val data = DataSetCreator.createFrame(session, fullResult, FullResult.schema: _*)
     data
   }
 
@@ -66,8 +66,9 @@ class Baseline {
 
 object HospBaselineRunner {
   def main(args: Array[String]): Unit = {
+    val config = ConfigFactory.load()
     val hospBaseline = new Baseline()
-    hospBaseline.onData("result.hosp.10k.full.result.file")
+    hospBaseline.onData(config.getString("result.hosp.10k.full.result.file"))
     hospBaseline.calculateEvalForEachTool()
     hospBaseline.calculateBaseline()
   }
@@ -75,8 +76,9 @@ object HospBaselineRunner {
 
 object SalariesBaselineRunner {
   def main(args: Array[String]): Unit = {
+    val config = ConfigFactory.load()
     val salariesBaseline = new Baseline()
-    salariesBaseline.onData("result.salaries.full.result.file")
+    salariesBaseline.onData(config.getString("result.salaries.full.result.file"))
     salariesBaseline.calculateEvalForEachTool()
     salariesBaseline.calculateBaseline()
   }
@@ -85,8 +87,9 @@ object SalariesBaselineRunner {
 object BlackOackBaselineRunner {
 
   def main(args: Array[String]): Unit = {
+    val config = ConfigFactory.load()
     val blackOakBaseline = new Baseline()
-    blackOakBaseline.onData("output.full.result.file")
+    blackOakBaseline.onData(config.getString("output.full.result.file"))
     blackOakBaseline.calculateEvalForEachTool()
     blackOakBaseline.calculateBaseline()
 
