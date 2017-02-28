@@ -1,0 +1,25 @@
+RUNNING BLACKOAK
+exists-1, exists-3, kappa: 0.004601411458131875
+exists-1, exists-4, kappa: 0.0895701616749188
+exists-1, exists-5, kappa: 0.15087493718305028
+exists-2, exists-5, kappa: 0.007325865249055773
+exists-3, exists-4, kappa: 0.06941110105334682
+
+RUNNING HOSP
+exists-1, exists-2, kappa: 0.0026504992409471222
+exists-1, exists-3, kappa: 0.318782791020986
+exists-1, exists-4, kappa: 0.2517834637557557
+exists-1, exists-5, kappa: 0.06732997726678504
+exists-2, exists-3, kappa: 0.0045441935330476505
+exists-2, exists-4, kappa: 1.6262648597223958E-4
+exists-3, exists-4, kappa: 0.18204646770700308
+exists-3, exists-5, kappa: 0.023863702087460848
+
+RUNNING SALARIES
+exists-1, exists-2, kappa: 1.6347842845842165E-4
+exists-1, exists-5, kappa: 9.967301785037074E-4
+exists-2, exists-4, kappa: 7.698369624910539E-4
+exists-2, exists-5, kappa: 0.26480617855870703
+exists-3, exists-4, kappa: 0.25200323889083215
+exists-3, exists-5, kappa: 7.227663020265838E-4
+exists-4, exists-5, kappa: 0.006082758328787589
