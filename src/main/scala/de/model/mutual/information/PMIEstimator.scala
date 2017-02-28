@@ -129,7 +129,7 @@ class PMIEstimator {
       val label = FullResult.label
       val labelAndTopTools = model.select(label, topTools: _*)
 
-      val eval: Eval = F1.evaluate(labelAndTopTools)
+      val unionAll: Eval = F1.evaluate(labelAndTopTools)
       // eval.printResult("union all")
 
       val k = topTools.length
@@ -138,9 +138,9 @@ class PMIEstimator {
 
       val latexTableRow =
         s"""
-                        \\multirow{2}{*}{Top-1} & \\multirow{2}{*}{$tools} & union all  & ${eval.precision}        & ${eval.recall}     & ${eval.f1}  \\\\
+          \\multirow{2}{*}{} & \\multirow{2}{*}{$tools} & union all  & ${unionAll.precision}        & ${unionAll.recall}     & ${unionAll.f1}  \\\\
                                    &                              & min-$k      & ${minK.precision}        & ${minK.recall}     & ${minK.f1}   \\\\
-                """.stripMargin
+          """.stripMargin
       println(latexTableRow)
     })
   }

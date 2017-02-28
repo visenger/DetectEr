@@ -17,5 +17,11 @@ trait ExperimentsCommonConfig {
   val hospTestFile = experimentsConfig.getString("hosp.experiments.test.file")
   val salariesTestFile = experimentsConfig.getString("salaries.experiments.test.file")
 
+  val allTestDataSets: Seq[String] = Seq(blackoakTestFile, hospTestFile, salariesTestFile)
+
+  def process_data(f: String => Unit): Unit = {
+    allTestDataSets.foreach(data => f(data))
+  }
+
 
 }
