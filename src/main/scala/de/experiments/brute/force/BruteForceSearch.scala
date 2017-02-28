@@ -27,11 +27,10 @@ object BruteForceSearchRunner extends ExperimentsCommonConfig {
             (1 to toolsNumber).foreach(num => {
               val combiOfK: List[Seq[String]] = allTools.combinations(num).toList
               combiOfK.foreach(tools => {
-                //println(tools.mkString(","))
+
                 val toolsToEval: DataFrame = fullDF.select(FullResult.label, tools: _*)
                 val unionAll: Eval = F1.evaluate(toolsToEval)
                 val minK: Eval = F1.evaluate(toolsToEval, num)
-                //println(s"""${tools.mkString("+")} & UNION-ALL: ${unionAll.toString} & MIN-$num : ${minK.toString}""")
 
                 val latexTableRow =
                   s"""
