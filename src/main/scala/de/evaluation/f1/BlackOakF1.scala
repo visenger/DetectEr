@@ -9,7 +9,7 @@ import org.apache.spark.sql.DataFrame
 object FullResult {
   val recid = "RecID"
   val attrnr = "attrNr"
-  val label = "label"
+  val label: String = "label"
 
   //todo: extract howManyTools we have
   val toolsNumber = 5

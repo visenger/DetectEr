@@ -72,8 +72,8 @@ class KappaEstimator {
       kappaForPair
     }).toList
 
-    val meaningfullKappas = kappas.filter(kappaOnTools => kappaOnTools.kappa != 0.0)
-    meaningfullKappas
+    val meaningfullKappas = kappas.filter(kappaOnTools => kappaOnTools.kappa >= 0.1)
+    meaningfullKappas.sortWith((t1, t2) => t1.kappa > t2.kappa)
   }
 
   def computeKappa(model: DataFrame, pairOfTools: Seq[String]): Kappa = {
@@ -99,10 +99,8 @@ class KappaEstimator {
     val probChanceAgreement: Double = (firstRated1 * secondRated1 + firstRated0 * secondRated0) / Math.pow(total, 2)
 
     val diff: Double = relativeObservedAgreement - probChanceAgreement
-    val kappa: Double = diff > 0.0 match {
-      case true => diff / (1.0 - probChanceAgreement)
-      case _ => 0.0
-    }
+    val kappa: Double = diff / (1.0 - probChanceAgreement)
+
     //  println(s"""$tool1 + $tool2: total: $total; diff:$diff -> relative obs agreement: $relativeObservedAgreement; prob of chance agreement: $probChanceAgreement""")
     Kappa(tool1, tool2, kappa)
   }
