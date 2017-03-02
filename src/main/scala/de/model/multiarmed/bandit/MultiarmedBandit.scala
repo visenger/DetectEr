@@ -28,7 +28,7 @@ trait ExperimentsBase {
     Seq(dataset, banditalg, param, expectations)
   }
 
-  def getDatasetPath(data: String): String = {
+  def getTestDatasetPath(data: String): String = {
 
     val blackoakTestFile = config.getString("blackoak.experiments.test.file")
     val hospTestFile = config.getString("hosp.experiments.test.file")
@@ -112,7 +112,7 @@ object MultiarmedBanditRunner extends ExperimentsBase {
           .collect()
 
         allDatasets.foreach(data => {
-          val path = getDatasetPath(data)
+          val path = getTestDatasetPath(data)
           val fullResult: DataFrame = DataSetCreator.createFrame(session, path, FullResult.schema: _*)
 
           val experimentsByDataset: Dataset[Row] =

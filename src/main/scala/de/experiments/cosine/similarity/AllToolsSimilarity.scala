@@ -11,6 +11,34 @@ import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
   */
 class AllToolsSimilarity {
 
+  def computeCosine(session: SparkSession, fullDF: DataFrame, tools: Tuple2[String, String]): Cosine = {
+    import session.implicits._
+
+    val firstTool = tools._1
+    val secondTool = tools._2
+
+    val firstTwoCols = fullDF.select(firstTool, secondTool)
+    val nominator: Double = firstTwoCols
+      .map(row => {
+        row.getString(0).toDouble * row.getString(1).toDouble
+      })
+      .reduce((a, b) => a + b)
+
+    val elementsPoweredBy2: Dataset[(Double, Double)] = firstTwoCols.map(row => {
+      val first: Double = Math.pow(row.getString(0).toDouble, 2)
+      val second: Double = Math.pow(row.getString(1).toDouble, 2)
+      (first, second)
+    })
+    val vectorsSizes: (Double, Double) = elementsPoweredBy2.reduce((a, b) => (a._1 + b._1, a._2 + b._2))
+
+    val denominator = Math.sqrt(vectorsSizes._1) * Math.sqrt(vectorsSizes._2)
+
+    val cosineSimi = nominator / denominator
+
+    Cosine(firstTool, secondTool, cosineSimi)
+
+  }
+
 }
 
 case class Cosine(tool1: String, tool2: String, similarity: Double)
@@ -20,9 +48,13 @@ object AllToolsSimilarityRunner extends ExperimentsCommonConfig {
     SparkLOAN.withSparkSession("COSINE") {
       session => {
 
+        val toolsSimilarity = new AllToolsSimilarity()
+
         val fullDF: DataFrame = DataSetCreator.createFrame(session, salariesTrainFile, FullResult.schema: _*)
 
-        val selectLabelAndTools: DataFrame = fullDF.select(FullResult.label, FullResult.tools: _*)
+        val selectLabelAndTools: DataFrame = fullDF
+          .select(FullResult.label, FullResult.tools: _*)
+          .cache()
         //todo: ACHTUNG: I was not able to map columns back to tools
         //
         //
@@ -70,7 +102,7 @@ object AllToolsSimilarityRunner extends ExperimentsCommonConfig {
           .map(tools => (tools(0), tools(1)))
 
         val cosines: List[Cosine] = allToolsCombi
-          .map(combi => computeCosine(session, selectLabelAndTools, combi))
+          .map(combi => toolsSimilarity.computeCosine(session, selectLabelAndTools, combi))
 
         cosines.foreach(simi =>
           println(s"my_cosine(${simi.tool1}, ${simi.tool2})= ${NumbersUtil.round(simi.similarity, 4)}"))
@@ -80,32 +112,31 @@ object AllToolsSimilarityRunner extends ExperimentsCommonConfig {
   }
 
 
-  def computeCosine(session: SparkSession, fullDF: DataFrame, tools: Tuple2[String, String]): Cosine = {
-    import session.implicits._
-
-    val firstTool = tools._1
-    val secondTool = tools._2
-
-    val firstTwoCols = fullDF.select(firstTool, secondTool)
-    val nominator: Double = firstTwoCols
-      .map(row => {
-        row.getString(0).toDouble * row.getString(1).toDouble
-      })
-      .reduce((a, b) => a + b)
-
-    val elementsPoweredBy2: Dataset[(Double, Double)] = firstTwoCols.map(row => {
-      val first: Double = Math.pow(row.getString(0).toDouble, 2)
-      val second: Double = Math.pow(row.getString(1).toDouble, 2)
-      (first, second)
-    })
-    val vectorsSizes: (Double, Double) = elementsPoweredBy2.reduce((a, b) => (a._1 + b._1, a._2 + b._2))
-
-    val denominator = Math.sqrt(vectorsSizes._1) * Math.sqrt(vectorsSizes._2)
-
-    val cosineSimi = nominator / denominator
-
-    Cosine(firstTool, secondTool, cosineSimi)
-
-
-  }
+  //  def computeCosine(session: SparkSession, fullDF: DataFrame, tools: Tuple2[String, String]): Cosine = {
+  //    import session.implicits._
+  //
+  //    val firstTool = tools._1
+  //    val secondTool = tools._2
+  //
+  //    val firstTwoCols = fullDF.select(firstTool, secondTool)
+  //    val nominator: Double = firstTwoCols
+  //      .map(row => {
+  //        row.getString(0).toDouble * row.getString(1).toDouble
+  //      })
+  //      .reduce((a, b) => a + b)
+  //
+  //    val elementsPoweredBy2: Dataset[(Double, Double)] = firstTwoCols.map(row => {
+  //      val first: Double = Math.pow(row.getString(0).toDouble, 2)
+  //      val second: Double = Math.pow(row.getString(1).toDouble, 2)
+  //      (first, second)
+  //    })
+  //    val vectorsSizes: (Double, Double) = elementsPoweredBy2.reduce((a, b) => (a._1 + b._1, a._2 + b._2))
+  //
+  //    val denominator = Math.sqrt(vectorsSizes._1) * Math.sqrt(vectorsSizes._2)
+  //
+  //    val cosineSimi = nominator / denominator
+  //
+  //    Cosine(firstTool, secondTool, cosineSimi)
+  //
+  //  }
 }

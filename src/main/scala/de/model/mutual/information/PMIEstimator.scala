@@ -83,7 +83,7 @@ class PMIEstimator {
     printEvaluation(testData, allInvPMIs)
   }
 
-  private def computePMI(model: DataFrame, pairOfTools: Seq[String]): ToolPMI = {
+  def computePMI(model: DataFrame, pairOfTools: Seq[String]): ToolPMI = {
     val tool1 = pairOfTools(0)
     val tool2 = pairOfTools(1)
 
