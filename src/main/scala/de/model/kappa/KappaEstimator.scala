@@ -2,6 +2,7 @@ package de.model.kappa
 
 import de.evaluation.f1.FullResult
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
+import de.model.util.NumbersUtil
 import org.apache.spark.sql.DataFrame
 
 /**
@@ -102,7 +103,7 @@ class KappaEstimator {
     val kappa: Double = diff / (1.0 - probChanceAgreement)
 
     //  println(s"""$tool1 + $tool2: total: $total; diff:$diff -> relative obs agreement: $relativeObservedAgreement; prob of chance agreement: $probChanceAgreement""")
-    Kappa(tool1, tool2, kappa)
+    Kappa(tool1, tool2, NumbersUtil.round(kappa, 4))
   }
 
 }

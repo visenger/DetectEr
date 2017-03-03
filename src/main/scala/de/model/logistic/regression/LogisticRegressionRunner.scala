@@ -15,6 +15,8 @@ import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Row}
 
+import scala.collection.Map
+
 /**
   * Finding the linear model of tools combinations;
   */
@@ -88,9 +90,10 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
         val regParam = 0.1
         /* logistic regression */
         val logRegression = new LogisticRegression()
-          .setTol(1E-8)
-          .setRegParam(regParam)
+          //.setTol(1E-8)
+          //.setRegParam(regParam)
           .setElasticNetParam(elasticNetParam)
+          .setThreshold(0.8)
 
         val model = logRegression.fit(training)
 
@@ -163,23 +166,22 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
                                       data: DataFrame,
                                       labelColName: String): TestData = {
     val fullPredictions = model.transform(data).cache()
-    val predictions = fullPredictions.select("prediction").rdd.map(_.getDouble(0))
-    val totalData = predictions.count()
+    //val predictions = fullPredictions.select("prediction").rdd.map(_.getDouble(0))
+    val totalData = fullPredictions.count()
     //    println(s"Test data count: ${totalData}")
-    val labels = fullPredictions.select(labelColName).rdd.map(_.getDouble(0))
-    val zippedPredictionsAndLabels: RDD[(Double, Double)] = predictions.zip(labels)
-    val RMSE = new RegressionMetrics(zippedPredictionsAndLabels).rootMeanSquaredError
+    //val labels = fullPredictions.select(labelColName).rdd.map(_.getDouble(0))
+    val predictionAndGroundTruth = fullPredictions.select("prediction", labelColName)
+    val zippedPredictionsAndLabels: RDD[(Double, Double)] = //predictions.zip(labels)
+      predictionAndGroundTruth.rdd.map(row => {
+        (row.getDouble(0), row.getDouble(1))
+      })
+    //val RMSE = new RegressionMetrics(zippedPredictionsAndLabels).rootMeanSquaredError
     //    println(s"  Root mean squared error (RMSE): $RMSE")
 
 
-    val outcomeCounts = zippedPredictionsAndLabels.countByValue()
+    val outcomeCounts: Map[(Double, Double), Long] = zippedPredictionsAndLabels.countByValue()
     //    println(s"count by values ${outcomeCounts}")
 
-    val wrongPredictions: Double = outcomeCounts
-      .filterKeys(key => key._1 != key._2)
-      .map(_._2)
-      .foldLeft(0.0) { (acc, elem) => acc + elem }
-    //    println(s"Wrong predictions: $wrongPredictions")
 
     var tp = 0.0
     var fn = 0.0
@@ -211,6 +213,12 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
     val F1 = 2 * precision * recall / (precision + recall)
     //    println(s"F-1 Score: $F1")
 
+    val wrongPredictions: Double = outcomeCounts
+      .count(key => key._1 != key._2)
+    //      .map(_._2)
+    //      .foldLeft(0.0) { (acc, elem) => acc + elem }
+    //    println(s"Wrong predictions: $wrongPredictions")
+
     TestData(totalData, wrongPredictions.toLong, round(accuracy, 4), round(precision, 4), round(recall, 4), round(F1, 4))
   }
 
@@ -229,7 +237,7 @@ object BlackOakLogisticRegression {
     //    logisticRegressionRunner.findBestModel()
 
     logisticRegressionRunner.setElasticNetParam(0.2)
-    (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind))
+    (1 to 5).foreach(ind => logisticRegressionRunner.runPredictions(ind))
   }
 }
 

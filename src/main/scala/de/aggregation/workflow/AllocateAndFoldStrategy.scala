@@ -1,5 +1,8 @@
 package de.aggregation.workflow
 
+import java.util
+import java.util.Objects
+
 import de.evaluation.f1.{Eval, F1, FullResult, GoldStandard}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
@@ -19,9 +22,37 @@ class AllocateAndFoldStrategy {
 
 }
 
-case class Tool(name: String)
+case class Tool(name: String) {
+  override def hashCode(): Int = Objects.hashCode(name)
 
-case class ToolsCombination(combi: List[Tool])
+  override def canEqual(that: Any): Boolean = that.isInstanceOf[Tool]
+
+  override def equals(other: scala.Any): Boolean = {
+
+    other match {
+      case other: Tool => other.canEqual(this) && other.hashCode() == this.hashCode()
+      case _ => false
+    }
+
+  }
+
+}
+
+case class ToolsCombination(combi: List[Tool]) {
+  override def hashCode(): Int = {
+    combi.foldLeft(0)((acc, tool) => acc + tool.hashCode())
+  }
+
+  override def canEqual(that: Any): Boolean = that.isInstanceOf[ToolsCombination]
+
+  override def equals(other: scala.Any): Boolean = {
+    other match {
+      case other: ToolsCombination => other.canEqual(this) && other.hashCode() == this.hashCode()
+      case _ => false
+    }
+  }
+
+}
 
 case class UnionAll(precision: Double, recall: Double, f1: Double)
 
@@ -30,7 +61,7 @@ case class MinK(k: Int, precision: Double, recall: Double, f1: Double)
 //Kappa, //Cosine, //ToolPMI
 case class AggregatedTools(dataset: String,
                            combi: ToolsCombination,
-                           unionEval: UnionAll,
+                           unionAll: UnionAll,
                            minK: MinK,
                            allPMI: List[ToolPMI],
                            allCosineSimis: List[Cosine],
@@ -151,65 +182,45 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig with de.mod
             val allKappas: List[Kappa] = allMetrics.map(_._2)
             val allCosine: List[Cosine] = allMetrics.map(_._3)
 
+
             AggregatedTools(data, toolsCombination, unionAll, minK, allPMIs, allCosine, allKappas)
           })
-
+          //todo: perform aggregation here - all information already there!
           println(s"data: $data -> ${toolsCombinations.size} ; ")
 
           aggregatedTools.foreach(println)
 
+          println(s"$data BEST combination:")
 
+          val topCombinations: List[AggregatedTools] = aggregatedTools
+            .sortWith((t1, t2) => t1.minK.precision >= t2.minK.precision && t1.unionAll.recall >= t2.unionAll.recall)
+            .take(4)
+
+
+          topCombinations.filter(_.combi.combi.size > 2).foreach(combi => {
+
+            println(combi)
+
+            val topCosines: List[Cosine] = combi
+              .allCosineSimis
+              .sortWith((c1, c2) => c1.similarity >= c2.similarity)
+              .take(1)
+
+            println(s"""COSINE: tools candidates for aggregate: ${topCosines.mkString(",")}""")
+
+            val topKappas: List[Kappa] = combi.allKappas
+              .sortWith((k1, k2) => k1.kappa >= k2.kappa)
+              .take(1)
+            println(s"""KAPPA: tools candidates for aggregate: ${topKappas.mkString(",")}""")
+
+            val topPMI = combi.allPMI
+              .sortWith((p1, p2) => p1.pmi >= p2.pmi)
+              .take(1)
+            println(s"""PMI: tools candidates for aggregate: ${topPMI.mkString(",")}""")
+
+          })
         })
-
-        //        allDatasets.foreach(data => {
-        //          val path = getDatasetPath(data)
-        //          val fullResult: DataFrame = DataSetCreator.createFrame(session, path, FullResult.schema: _*)
-        //
-        //          val experimentsByDataset: Dataset[Row] =
-        //            experimentSettings
-        //              .where(experimentSettings.col("dataset") === data)
-        //
-        //          val allCombis: Array[String] = experimentsByDataset
-        //            .select(experimentSettings.col("toolscombi"))
-        //            .distinct()
-        //            .map(row => row.getString(0))
-        //            .collect()
-        //
-        //          val toolsCombinations: List[List[String]] = allCombis.map(l => {
-        //            val toolsAsList: List[String] = l.split(",").toList
-        //            toolsAsList
-        //          }).toSeq.toList
-        //
-        //          println(s"EVALUATING: $data")
-        //          toolsCombinations.foreach(topTools => {
-        //            //println(s"""TOOLS COMBI: ${topTools.mkString("+")}""")
-        //            val label = FullResult.label
-        //            val labelAndTopTools = fullResult.select(label, topTools: _*)
-        //            val eval: Eval = F1.evaluate(labelAndTopTools)
-        //            //eval.printResult("union all")
-        //
-        //
-        //            val k = topTools.length
-        //            val minK: Eval = F1.evaluate(labelAndTopTools, k)
-        //            //minK.printResult(s"min-$k")
-        //            val latexTableRow =
-        //              s"""
-        //                  \\multirow{2}{*}{Top-1} & \\multirow{2}{*}{${topTools.mkString("+")}} & union all  & ${eval.precision}        & ${eval.recall}     & ${eval.f1}  \\\\
-        //                             &                              & min-$k      & ${minK.precision}        & ${minK.recall}     & ${minK.f1}   \\\\
-        //          """.stripMargin
-        //            println(latexTableRow)
-        //
-        //          })
-        //
-        //
-        //        })
-
-
       }
     }
-
-
   }
-
-
 }

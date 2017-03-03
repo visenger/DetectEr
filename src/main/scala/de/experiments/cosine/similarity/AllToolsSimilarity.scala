@@ -35,7 +35,7 @@ class AllToolsSimilarity {
 
     val cosineSimi = nominator / denominator
 
-    Cosine(firstTool, secondTool, cosineSimi)
+    Cosine(firstTool, secondTool, NumbersUtil.round(cosineSimi, 4))
 
   }
 
