@@ -17,7 +17,11 @@ case class TrainData(regParam: Double,
   def createModelFormula(ind: Int): String = {
     var i = 0
     val function = modelCoefficients.map(c => {
-      if (c < 0) s"(${c})t_{${i += 1; i;}}" else s"${c}t_{${i += 1; i;}}"
+      val idx = {
+        i += 1;
+        i;
+      }
+      if (c < 0) s"(${c})t_{$idx}" else s"${c}t_{$idx}"
     }).mkString(" + ")
     function
     //s"""P(err)=\\frac{1}{1+\\exp ^{-($modelIntercept+$function)}}"""

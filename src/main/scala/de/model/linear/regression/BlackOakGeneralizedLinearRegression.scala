@@ -1,5 +1,6 @@
 package de.model.linear.regression
 
+import com.typesafe.config.ConfigFactory
 import de.evaluation.util.SparkSessionCreator
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.param.ParamMap
@@ -21,21 +22,30 @@ object GeneralizedLinearRegressionExample {
     val spark = SparkSessionCreator.createSession("GLR")
 
     // Load data
-    val dataset = spark.read.format("libsvm")
-      .load("src/main/resources/matrix-libsvm.txt")
+    //    val dataset = spark.read.format("libsvm")
+    //      .load("src/main/resources/matrix-libsvm.txt")
+
+    val experimentsConfig = ConfigFactory.load("experiments.conf")
+    val trainFraction: Double = experimentsConfig.getDouble("train.fraction")
+    val testFraction: Double = experimentsConfig.getDouble("test.fraction")
+
+
+    println("testing blackoak")
+    val dataset = spark.read.format("libsvm").load(ConfigFactory.load().getString("model.full.result.file"))
+
 
     //todo: find the family
     val glr = new GeneralizedLinearRegression()
-      //.setFamily("gaussian")
-      //.setLink("log")
-      .setMaxIter(200)
+    //.setFamily("gaussian")
+    //.setLink("log")
+    //.setMaxIter(200)
     // .setRegParam(0.0015)
 
     val paramGrid = new ParamGridBuilder()
-      .addGrid(glr.family, Array("gaussian", "poisson", "gamma"))
-      .addGrid(glr.regParam, Array(0.1, 0.01, 0.001, 0.0001, 0.00001))
-      .addGrid(glr.tol, Array(1.0E-5, 1.0E-6, 1.0E-7))
-      .addGrid(glr.maxIter, Array(150, 200, 250))
+      .addGrid(glr.family, Array("gaussian"))
+      .addGrid(glr.regParam, Array(0.1, 0.01, 0.001))
+      .addGrid(glr.tol, Array(1.0E-5, 1.0E-7))
+      .addGrid(glr.maxIter, Array(150, 200))
       .build()
 
     val crossValidator = new CrossValidator()
@@ -44,11 +54,7 @@ object GeneralizedLinearRegressionExample {
       .setEstimatorParamMaps(paramGrid)
       .setNumFolds(5)
 
-    val Array(training, test) = dataset.randomSplit(Array(0.7, 0.3), seed = 1234L)
-
-
-
-
+    val Array(training, test) = dataset.randomSplit(Array(trainFraction, testFraction), seed = 1234L)
 
     val validatorModel = crossValidator.fit(training)
 
@@ -63,13 +69,12 @@ object GeneralizedLinearRegressionExample {
     val evaluatorParams: ParamMap = crossValidator.getEvaluator.extractParamMap()
     println(evaluatorParams.toString())
 
-    val linearRegr = new LinearRegression()
-
 
     //    test:
 
 
-    val predictForTestData = validatorModel.transform(test)
+    val predictForTestData = bestModel.transform(test)
+    predictForTestData.where(predictForTestData("label") >= 1.0) show (200)
 
     val prediction = predictForTestData.select("prediction").rdd.map(_.getDouble(0))
     val label = predictForTestData.select("label").rdd.map(_.getDouble(0))
@@ -80,20 +85,11 @@ object GeneralizedLinearRegressionExample {
     val rmse = regressionMetrics.rootMeanSquaredError
     println(s" Root mean squared error: $rmse")
 
+    val linearRegr = new LinearRegression()
     val model = linearRegr.fit(training, bestModelParams)
     println(s"Coefficients: ${model.coefficients}")
     println(s"Intercept: ${model.intercept}")
 
-
-    val predictAndLabelList = predictionAndLabel.collect().toList
-
-    val closeness = predictAndLabelList.partition(p => Math.abs(p._1 - p._2) < 1.0)
-    val closePrediction = closeness._1
-    val total = predictAndLabelList.size
-    val correct = closePrediction.size
-    val precision = correct.toDouble / total.toDouble
-
-    println(s" Precision: $precision")
 
     /*val path = ConfigFactory.load().getString("model.prediction.folder")
     predictForTestData

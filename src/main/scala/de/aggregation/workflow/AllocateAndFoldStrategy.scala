@@ -204,18 +204,18 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig with de.mod
             val topCosines: List[Cosine] = combi
               .allCosineSimis
               .sortWith((c1, c2) => c1.similarity >= c2.similarity)
-              .take(1)
+              .take(2)
 
             println(s"""COSINE: tools candidates for aggregate: ${topCosines.mkString(",")}""")
 
             val topKappas: List[Kappa] = combi.allKappas
               .sortWith((k1, k2) => k1.kappa >= k2.kappa)
-              .take(1)
+              .take(2)
             println(s"""KAPPA: tools candidates for aggregate: ${topKappas.mkString(",")}""")
 
             val topPMI = combi.allPMI
               .sortWith((p1, p2) => p1.pmi >= p2.pmi)
-              .take(1)
+              .take(2)
             println(s"""PMI: tools candidates for aggregate: ${topPMI.mkString(",")}""")
 
           })

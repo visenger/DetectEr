@@ -74,7 +74,9 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
     }
   }
 
-  def runPredictions(ind: Int = 0): Unit = {
+  def runPredictions(ind: Int = 0, precisonBoundary: Double, recallBoundary: Double): TestData = {
+
+    var resultModel: TestData = TestData(0L, 0L, 0.0, 0.0, 0.0, 0.0)
 
     SparkLOAN.withSparkSession("LOGREGRESSION") {
       session => {
@@ -88,17 +90,18 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
         }
 
         val regParam = 0.1
+        val actualThreshold = 0.5
         /* logistic regression */
         val logRegression = new LogisticRegression()
           //.setTol(1E-8)
           //.setRegParam(regParam)
           .setElasticNetParam(elasticNetParam)
-          .setThreshold(0.8)
+          .setThreshold(actualThreshold)
 
         val model = logRegression.fit(training)
 
         import NumbersUtil._
-        // Print the coefficients and intercept for logistic regression
+
         val modelCoeff = model.coefficients.toArray.map(c => round(c))
         val intercept = round(model.intercept)
 
@@ -108,49 +111,61 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
 
         val binarySummary = logisticRegressionTrainingSummary.asInstanceOf[BinaryLogisticRegressionSummary]
 
-        val lrRoc = binarySummary.roc
-        //lrRoc.show()
         val areaUnderROC = binarySummary.areaUnderROC
 
         import org.apache.spark.sql.functions.max
+
         val fMeasure = binarySummary.fMeasureByThreshold
+        val preci = binarySummary.precisionByThreshold
+        val recallByThreshold = binarySummary.recallByThreshold
 
-        val maxFMeasure = fMeasure.select(max("F-Measure")).head().getDouble(0)
-        val bestThreshold = fMeasure
-          .where(fMeasure.col("F-Measure") === maxFMeasure)
-          .select("threshold")
-          .head()
-          .getDouble(0)
+        val maxF1 = fMeasure
+          .join(preci, "threshold")
+          .join(recallByThreshold, "threshold")
+          .where(preci("precision") <= precisonBoundary && recallByThreshold("recall") <= recallBoundary)
 
-        //        println(s"max F-Measure: $maxFMeasure")
-        //        println(s"best Threshold: $bestThreshold")
+
+        val Array(bestThreshold, bestF1, bestPrecision, bestRecall) = maxF1.count() == 0 match {
+          case true => Array(0.5, 0.0, 0.0, 0.0)
+          case false => {
+            val selectMaxF1 = maxF1.select(max("F-Measure"))
+            val maxFMeasure = selectMaxF1.head().getDouble(0)
+
+            val bestAll: Row = maxF1
+              .where(maxF1.col("F-Measure") === maxFMeasure)
+              .select("threshold", "F-Measure", "precision", "recall")
+              .head()
+
+            val recall = bestAll.getDouble(3)
+            val precision = bestAll.getDouble(2)
+            val f1 = bestAll.getDouble(1)
+            val threshold = bestAll.getDouble(0)
+            Array(round(threshold, 4), round(f1, 4), round(precision, 4), round(recall, 4))
+          }
+        }
+
+
+        //println(s"max F-Measure: $maxFMeasure")
+        println(s"best Threshold: $bestThreshold ")
 
         model.setThreshold(bestThreshold)
-
-        val f1 = ((p: Column, r: Column) => (p.*(r).*(2) / (p + r)))
-        val pr: DataFrame = binarySummary.pr
-        val withF1 = pr.withColumn("F1", f1(pr.col("precision"), pr.col("recall")))
-        val topF1 = withF1.where(withF1.col("F1") === maxFMeasure)
-
-        val trainPRF1: Row = topF1.head()
-        val trainPrecision: Double = round(trainPRF1.getAs[Double]("precision"))
-        val trainRecall: Double = round(trainPRF1.getAs[Double]("recall"))
 
         val trainDataInfo = TrainData(
           regParam,
           elasticNetParam,
           modelCoeff,
           intercept,
-          round(maxFMeasure),
+          round(bestF1),
           round(areaUnderROC))
 
-        val testDataInfo = evaluateRegressionModel(model, test, FullResult.label)
+        resultModel = evaluateRegressionModel(model, test, FullResult.label)
 
-        println(s"""$$ ${trainDataInfo.createModelFormula(ind)}$$    & ${round(trainDataInfo.areaUnderRoc)} & ${trainPrecision} & ${trainRecall}   & ${trainDataInfo.maxFMeasure}   & ${testDataInfo.precision}   & ${testDataInfo.recall}   & ${testDataInfo.f1}  \\\\""")
+        println(s"""$$ ${trainDataInfo.createModelFormula(ind)}$$    & ${trainDataInfo.areaUnderRoc} & ${bestPrecision} & ${bestRecall}   & ${bestF1}   & ${resultModel.precision}   & ${resultModel.recall}   & ${resultModel.f1}  \\\\""")
+
 
       }
     }
-
+    resultModel
   }
 
 
@@ -166,22 +181,17 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
                                       data: DataFrame,
                                       labelColName: String): TestData = {
     val fullPredictions = model.transform(data).cache()
-    //val predictions = fullPredictions.select("prediction").rdd.map(_.getDouble(0))
     val totalData = fullPredictions.count()
-    //    println(s"Test data count: ${totalData}")
-    //val labels = fullPredictions.select(labelColName).rdd.map(_.getDouble(0))
     val predictionAndGroundTruth = fullPredictions.select("prediction", labelColName)
-    val zippedPredictionsAndLabels: RDD[(Double, Double)] = //predictions.zip(labels)
+    val zippedPredictionsAndLabels: RDD[(Double, Double)] =
       predictionAndGroundTruth.rdd.map(row => {
         (row.getDouble(0), row.getDouble(1))
       })
-    //val RMSE = new RegressionMetrics(zippedPredictionsAndLabels).rootMeanSquaredError
+    //    val RMSE = new RegressionMetrics(zippedPredictionsAndLabels).rootMeanSquaredError
     //    println(s"  Root mean squared error (RMSE): $RMSE")
 
 
     val outcomeCounts: Map[(Double, Double), Long] = zippedPredictionsAndLabels.countByValue()
-    //    println(s"count by values ${outcomeCounts}")
-
 
     var tp = 0.0
     var fn = 0.0
@@ -215,9 +225,6 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
 
     val wrongPredictions: Double = outcomeCounts
       .count(key => key._1 != key._2)
-    //      .map(_._2)
-    //      .foldLeft(0.0) { (acc, elem) => acc + elem }
-    //    println(s"Wrong predictions: $wrongPredictions")
 
     TestData(totalData, wrongPredictions.toLong, round(accuracy, 4), round(precision, 4), round(recall, 4), round(F1, 4))
   }
@@ -232,12 +239,14 @@ object BlackOakLogisticRegression {
 
   def run(): Unit = {
     println("BLACKOAK")
+    val maxPrecision = 0.9773
+    val maxRecall = 0.4739
     val logisticRegressionRunner = new LogisticRegressionRunner()
     logisticRegressionRunner.onLibsvm("model.full.result.file")
     //    logisticRegressionRunner.findBestModel()
 
-    logisticRegressionRunner.setElasticNetParam(0.2)
-    (1 to 5).foreach(ind => logisticRegressionRunner.runPredictions(ind))
+    logisticRegressionRunner.setElasticNetParam(0.1)
+    (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind, maxPrecision, maxRecall))
   }
 }
 
@@ -249,12 +258,14 @@ object HospLogisticRegression {
 
   def run(): Unit = {
     println("HOSP")
+    val maxPrecision = 0.9279
+    val maxRecall = 0.9994
     val logisticRegressionRunner = new LogisticRegressionRunner()
     logisticRegressionRunner.onLibsvm("model.hosp.10k.libsvm.file")
     //    logisticRegressionRunner.findBestModel()
 
     logisticRegressionRunner.setElasticNetParam(0.01)
-    (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind))
+    (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind, maxPrecision, maxRecall))
   }
 }
 
@@ -265,12 +276,14 @@ object SalariesLogisticRegression {
 
   def run(): Unit = {
     println("SALARIES")
+    val maxPrecision = 0.7674
+    val maxRecall = 0.1399
     val logisticRegressionRunner = new LogisticRegressionRunner()
     logisticRegressionRunner.onLibsvm("model.salaries.libsvm.file")
     //    logisticRegressionRunner.findBestModel()
 
     logisticRegressionRunner.setElasticNetParam(0.2)
-    (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind))
+    (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind, maxPrecision, maxRecall))
   }
 }
 
