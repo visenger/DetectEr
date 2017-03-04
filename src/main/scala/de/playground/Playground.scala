@@ -14,6 +14,22 @@ object Playground extends App {
   private val path: String = config.getString("data.BlackOak.clean-data-path")
   println("path = " + path)
 
+  /**
+    *
+    * (exists-2,-0.27)
+    * (exists-3,-0.17)
+    * (intercept,-0.64)
+    * (trainR,0.3811)
+    * (exists-5,0.76)
+    * (exists-1,0.15)
+    * (trainF1,0.4425)
+    * (threshold,0.4176)
+    * (trainP,0.5276)
+    * (exists-4,-0.17)
+    **/
+
+  println("-0.27".toDouble)
+
 }
 
 case class Record(key: Int, value: String)
@@ -59,3 +75,5 @@ object F1Calculator extends App {
 
   })
 }
+
+

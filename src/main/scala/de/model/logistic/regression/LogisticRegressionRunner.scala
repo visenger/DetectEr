@@ -1,6 +1,9 @@
 package de.model.logistic.regression
 
 
+import java.io.{File, PrintWriter}
+import java.util
+
 import com.typesafe.config.ConfigFactory
 import de.evaluation.f1.FullResult
 import de.evaluation.util.SparkLOAN
@@ -16,6 +19,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Row}
 
 import scala.collection.Map
+import scala.collection.immutable.Seq
 
 /**
   * Finding the linear model of tools combinations;
@@ -25,6 +29,23 @@ trait LogisticRegressionCommonBase {
   val experimentsConfig = ConfigFactory.load("experiments.conf")
   val trainFraction: Double = experimentsConfig.getDouble("train.fraction")
   val testFraction: Double = experimentsConfig.getDouble("test.fraction")
+
+  val blackOakData = "blackoak"
+  val hospData = "hosp"
+  val salariesData = "salaries"
+
+  val sep = ","
+  val newLine = "\n"
+
+  val tools = FullResult.tools.mkString(sep)
+  val linearCombiHeader = s"dataset,intercept,$tools,threshold,trainP,trainR,trainF1"
+  val linearCombiModelPath = experimentsConfig.getString("logistic.regression.result.csv")
+
+  def write_to_file(path: String)(writer: PrintWriter => Unit) = {
+    val file = new PrintWriter(new File(path))
+    writer(file)
+    file.close()
+  }
 }
 
 class LogisticRegressionRunner extends LogisticRegressionCommonBase {
@@ -74,9 +95,12 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
     }
   }
 
-  def runPredictions(ind: Int = 0, precisonBoundary: Double, recallBoundary: Double): TestData = {
+  def runPredictions(ind: Int = 0, precisonBoundary: Double, recallBoundary: Double): (TrainData, TestData) = {
 
-    var resultModel: TestData = TestData(0L, 0L, 0.0, 0.0, 0.0, 0.0)
+    var resultModel: Tuple2[TrainData, TestData]
+    = (TrainData(0.0, 0.0, 0.5, Array(0.0), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+      TestData(0L, 0L, 0.0, 0.0, 0.0, 0.0))
+
 
     SparkLOAN.withSparkSession("LOGREGRESSION") {
       session => {
@@ -146,22 +170,26 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
 
 
         //println(s"max F-Measure: $maxFMeasure")
-        println(s"best Threshold: $bestThreshold ")
+        //println(s"best Threshold: $bestThreshold ")
 
         model.setThreshold(bestThreshold)
 
         val trainDataInfo = TrainData(
           regParam,
           elasticNetParam,
+          bestThreshold,
           modelCoeff,
           intercept,
           round(bestF1),
-          round(areaUnderROC))
+          round(areaUnderROC),
+          bestPrecision,
+          bestRecall,
+          bestF1)
 
-        resultModel = evaluateRegressionModel(model, test, FullResult.label)
+        val testModel = evaluateRegressionModel(model, test, FullResult.label)
 
-        println(s"""$$ ${trainDataInfo.createModelFormula(ind)}$$    & ${trainDataInfo.areaUnderRoc} & ${bestPrecision} & ${bestRecall}   & ${bestF1}   & ${resultModel.precision}   & ${resultModel.recall}   & ${resultModel.f1}  \\\\""")
-
+        println(s"""$$ ${trainDataInfo.createModelFormula(ind)}$$   & ${bestPrecision} & ${bestRecall}   & ${bestF1}   & ${testModel.precision}   & ${testModel.recall}   & ${testModel.f1}  \\\\""")
+        resultModel = (trainDataInfo, testModel)
 
       }
     }
@@ -232,13 +260,17 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
 
 }
 
-object BlackOakLogisticRegression {
+object BlackOakLogisticRegression extends LogisticRegressionCommonBase {
   def main(args: Array[String]): Unit = {
     run()
   }
 
-  def run(): Unit = {
-    println("BLACKOAK")
+  def run(): Tuple2[String, TrainData] = {
+    val dataset = blackOakData
+    println(dataset)
+
+    //todo: p and r maximieren from baseline results
+    //todo: write to file baseline
     val maxPrecision = 0.9773
     val maxRecall = 0.4739
     val logisticRegressionRunner = new LogisticRegressionRunner()
@@ -246,36 +278,60 @@ object BlackOakLogisticRegression {
     //    logisticRegressionRunner.findBestModel()
 
     logisticRegressionRunner.setElasticNetParam(0.1)
-    (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind, maxPrecision, maxRecall))
+    val linearCombination =
+      (1 to 15)
+        .map(ind => logisticRegressionRunner.runPredictions(ind, maxPrecision, maxRecall))
+    val allTrainData = linearCombination.map(_._1)
+    val maxF1: Double = allTrainData.foldLeft(0.0)((max, c) => Math.max(max, c.maxFMeasure))
+    val bestLinearCombi = linearCombination.filter(all => all._1.maxFMeasure == maxF1).head
+    println(s"BEST LINEAR COMBI FOR $dataset")
+    println(bestLinearCombi)
+    (dataset, bestLinearCombi._1)
   }
 }
 
 
-object HospLogisticRegression {
+object HospLogisticRegression extends LogisticRegressionCommonBase {
   def main(args: Array[String]): Unit = {
     run()
   }
 
-  def run(): Unit = {
-    println("HOSP")
+  def run(): Tuple2[String, TrainData] = {
+    val dataset = hospData
+    println(dataset)
+    //todo: p and r maximieren from baseline results
+    //todo: write to file baseline
     val maxPrecision = 0.9279
     val maxRecall = 0.9994
+
     val logisticRegressionRunner = new LogisticRegressionRunner()
     logisticRegressionRunner.onLibsvm("model.hosp.10k.libsvm.file")
     //    logisticRegressionRunner.findBestModel()
 
     logisticRegressionRunner.setElasticNetParam(0.01)
-    (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind, maxPrecision, maxRecall))
+    val linearCombination: Seq[(TrainData, TestData)] =
+      (1 to 15)
+        .map(ind => logisticRegressionRunner.runPredictions(ind, maxPrecision, maxRecall))
+    val allTrainData = linearCombination.map(_._1)
+    val maxF1: Double = allTrainData.foldLeft(0.0)((max, c) => Math.max(max, c.maxFMeasure))
+    val bestLinearCombi = linearCombination.filter(all => all._1.maxFMeasure == maxF1).head
+    println(s"BEST LINEAR COMBI FOR $dataset")
+    println(bestLinearCombi)
+    (dataset, bestLinearCombi._1)
   }
 }
 
-object SalariesLogisticRegression {
+object SalariesLogisticRegression extends LogisticRegressionCommonBase {
   def main(args: Array[String]): Unit = {
     run()
   }
 
-  def run(): Unit = {
-    println("SALARIES")
+  def run(): Tuple2[String, TrainData] = {
+    val dataset = "salaries"
+    println(dataset)
+
+    //todo: p and r maximieren from baseline results
+    //todo: write to file baseline
     val maxPrecision = 0.7674
     val maxRecall = 0.1399
     val logisticRegressionRunner = new LogisticRegressionRunner()
@@ -283,15 +339,46 @@ object SalariesLogisticRegression {
     //    logisticRegressionRunner.findBestModel()
 
     logisticRegressionRunner.setElasticNetParam(0.2)
-    (1 to 15).foreach(ind => logisticRegressionRunner.runPredictions(ind, maxPrecision, maxRecall))
+    val linearCombination =
+      (1 to 15)
+        .map(ind => logisticRegressionRunner.runPredictions(ind, maxPrecision, maxRecall))
+    val allTrainData = linearCombination.map(_._1)
+    val maxF1: Double = allTrainData.foldLeft(0.0)((max, c) => Math.max(max, c.maxFMeasure))
+    val bestLinearCombi = linearCombination.filter(all => all._1.maxFMeasure == maxF1).head
+    println(s"BEST LINEAR COMBI FOR $dataset")
+    println(bestLinearCombi)
+    (dataset, bestLinearCombi._1)
   }
 }
 
-object LogisticRegressionRunAll {
+object LogisticRegressionRunAll extends LogisticRegressionCommonBase {
   def main(args: Array[String]): Unit = {
-    BlackOakLogisticRegression.run()
-    HospLogisticRegression.run()
-    SalariesLogisticRegression.run()
+
+    val blackoakRes: (String, TrainData) = BlackOakLogisticRegression.run()
+    val blackOakLine = constructLine(blackoakRes)
+
+    val hospRes: (String, TrainData) = HospLogisticRegression.run()
+    val hospLine = constructLine(hospRes)
+
+    val salariesRes: (String, TrainData) = SalariesLogisticRegression.run()
+    val salariesLine = constructLine(salariesRes)
+
+    val allLines = Seq(blackOakLine, hospLine, salariesLine)
+
+    write_to_file(linearCombiModelPath) {
+      writer => {
+        writer.write(s"$linearCombiHeader$newLine")
+        allLines.foreach(line => {
+          writer.write(s"$line$newLine")
+        })
+      }
+    }
+  }
+
+  private def constructLine(res: (String, TrainData)) = {
+    //    val linearCombiHeader = s"dataset,intercept,$tools,threshold,trainP,trainR,trainF1"
+    val train: TrainData = res._2
+    s"""${res._1},${train.intercept},${train.coefficients.mkString(sep)},${train.bestThreshold},${train.precision},${train.recall},${train.f1}"""
   }
 }
 

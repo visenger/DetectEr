@@ -7,20 +7,26 @@ import com.typesafe.config.ConfigFactory
   */
 trait ExperimentsCommonConfig {
 
-  val experimentsConfig = ConfigFactory.load("experiments.conf")
+  val experimentsConf = ConfigFactory.load("experiments.conf")
 
-  val blackoakTrainFile = experimentsConfig.getString("blackoak.experiments.train.file")
-  val hospTrainFile = experimentsConfig.getString("hosp.experiments.train.file")
-  val salariesTrainFile = experimentsConfig.getString("salaries.experiments.train.file")
+  val blackoakTrainFile = experimentsConf.getString("blackoak.experiments.train.file")
+  val hospTrainFile = experimentsConf.getString("hosp.experiments.train.file")
+  val salariesTrainFile = experimentsConf.getString("salaries.experiments.train.file")
 
-  val blackoakTestFile = experimentsConfig.getString("blackoak.experiments.test.file")
-  val hospTestFile = experimentsConfig.getString("hosp.experiments.test.file")
-  val salariesTestFile = experimentsConfig.getString("salaries.experiments.test.file")
+  val blackoakTestFile = experimentsConf.getString("blackoak.experiments.test.file")
+  val hospTestFile = experimentsConf.getString("hosp.experiments.test.file")
+  val salariesTestFile = experimentsConf.getString("salaries.experiments.test.file")
 
   val allTestDataSets: Seq[String] = Seq(blackoakTestFile, hospTestFile, salariesTestFile)
 
-  def process_data(f: String => Unit): Unit = {
-    allTestDataSets.foreach(data => f(data))
+
+  val allTestData: Map[String, String] = Map("blackoak" -> blackoakTestFile,
+    "hosp" -> hospTestFile,
+    "salaries" -> salariesTestFile)
+
+
+  def process_data(f: Tuple2[String, String] => Unit): Unit = {
+    allTestData.foreach(data => f(data))
   }
 
 

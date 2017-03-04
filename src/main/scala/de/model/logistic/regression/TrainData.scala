@@ -5,18 +5,22 @@ package de.model.logistic.regression
   */
 case class TrainData(regParam: Double,
                      elasticNetParam: Double,
-                     modelCoefficients: Array[Double],
-                     modelIntercept: Double,
+                     bestThreshold: Double,
+                     coefficients: Array[Double],
+                     intercept: Double,
                      maxFMeasure: Double,
-                     areaUnderRoc: Double) {
+                     areaUnderRoc: Double,
+                     precision: Double,
+                     recall: Double,
+                     f1: Double) {
   override def toString: String = {
 
-    s"TRAIN: regParam: $regParam, elasticNetParam: $elasticNetParam,  maxFMeasure: $maxFMeasure, AreaUnderRoc: $areaUnderRoc, ModelCoefficients: ${modelCoefficients.mkString(",")}, ModelIntercept: $modelIntercept"
+    s"TRAIN: regParam: $regParam, elasticNetParam: $elasticNetParam,  maxFMeasure: $maxFMeasure, AreaUnderRoc: $areaUnderRoc, ModelCoefficients: ${coefficients.mkString(",")}, ModelIntercept: $intercept"
   }
 
   def createModelFormula(ind: Int): String = {
     var i = 0
-    val function = modelCoefficients.map(c => {
+    val function = coefficients.map(c => {
       val idx = {
         i += 1;
         i;
@@ -25,6 +29,12 @@ case class TrainData(regParam: Double,
     }).mkString(" + ")
     function
     //s"""P(err)=\\frac{1}{1+\\exp ^{-($modelIntercept+$function)}}"""
-    s""" y_{$ind}=$modelIntercept+$function """
+    s""" y_{$ind}=$intercept+$function """
   }
+
+
 }
+
+
+
+

@@ -6,8 +6,10 @@ import java.util.Objects
 import de.evaluation.f1.{Eval, F1, FullResult, GoldStandard}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
+import de.experiments.brute.force.BruteForceSearchRunner.{linearCombiHeader, linearCombiModelPath, sep}
 import de.experiments.cosine.similarity.{AllToolsSimilarity, Cosine}
 import de.model.kappa.{Kappa, KappaEstimator}
+import de.model.logistic.regression.LogisticRegressionCommonBase
 import de.model.mutual.information.{PMIEstimator, ToolPMI}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 
@@ -58,23 +60,27 @@ case class UnionAll(precision: Double, recall: Double, f1: Double)
 
 case class MinK(k: Int, precision: Double, recall: Double, f1: Double)
 
+case class LinearCombi(precision: Double, recall: Double, f1: Double)
+
 //Kappa, //Cosine, //ToolPMI
 case class AggregatedTools(dataset: String,
                            combi: ToolsCombination,
                            unionAll: UnionAll,
                            minK: MinK,
+                           linearCombi: LinearCombi,
                            allPMI: List[ToolPMI],
                            allCosineSimis: List[Cosine],
                            allKappas: List[Kappa])
 
 
-object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig with de.model.multiarmed.bandit.ExperimentsBase {
+object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig with LogisticRegressionCommonBase with de.model.multiarmed.bandit.ExperimentsBase {
   def main(args: Array[String]): Unit = {
-
 
     SparkLOAN.withSparkSession("STRATEGY-FOR-TOOLS") {
       session => {
         import session.implicits._
+        val linearCombiSchema: Array[String] = linearCombiHeader.split(sep)
+        val linearModel = DataSetCreator.createFrame(session, linearCombiModelPath, linearCombiSchema: _*)
         val experimentsCSV = DataSetCreator.createFrame(session, multiArmedBandResults, schema: _*)
 
         //experimentsCSV.show()
@@ -127,6 +133,16 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig with de.mod
 
         //going through all datasets:
         allDatasets.foreach(data => {
+
+          val linearModelOfData = linearModel.where(linearModel("dataset") === data)
+          linearModelOfData.show()
+          val modelRow = linearModelOfData.head()
+
+          val modelValuesMap: Map[String, String] = modelRow
+            .getValuesMap[String](linearCombiSchema.filterNot(_.equals("dataset")))
+          val modelValues: Map[String, Double] = modelValuesMap.map(e => e._1 -> e._2.toDouble)
+
+
           val experimentsByDataset: Dataset[Row] =
             experimentSettings
               .where(experimentSettings.col("dataset") === data)
@@ -164,6 +180,9 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig with de.mod
             val minKEval = F1.evaluate(labelAndTools, k)
             val minK = MinK(k, minKEval.precision, minKEval.recall, minKEval.f1)
 
+            val linearCombiEval = F1.evaluate(labelAndTools, modelValues, tools)
+            val linearCombi = LinearCombi(linearCombiEval.precision, linearCombiEval.recall, linearCombiEval.f1)
+
 
             val allMetrics: List[(ToolPMI, Kappa, Cosine)] = tools.combinations(2).map(pair => {
 
@@ -183,7 +202,7 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig with de.mod
             val allCosine: List[Cosine] = allMetrics.map(_._3)
 
 
-            AggregatedTools(data, toolsCombination, unionAll, minK, allPMIs, allCosine, allKappas)
+            AggregatedTools(data, toolsCombination, unionAll, minK, linearCombi, allPMIs, allCosine, allKappas)
           })
           //todo: perform aggregation here - all information already there!
           println(s"data: $data -> ${toolsCombinations.size} ; ")
