@@ -47,14 +47,14 @@ class LinearFunction {
     var eval: Eval = null
     SparkLOAN.withSparkSession("LEARNERONSELECTION") {
       session => {
-        eval = estimateLinearCombi(session)
+        eval = evaluateLinearCombi(session)
       }
     }
     Eval(eval.precision, eval.recall, eval.f1)
 
   }
 
-  def estimateLinearCombi(session: SparkSession): Eval = {
+  def evaluateLinearCombi(session: SparkSession): Eval = {
     val dataDF: DataFrame = DataSetCreator.createFrame(session, trainDataPath, FullResult.schema: _*)
     val train: DataFrame = prepareDataToLIBSVM(session, dataDF)
 
@@ -151,10 +151,10 @@ class LinearFunction {
           .select("threshold", "F-Measure", "precision", "recall")
           .head()
 
-        val recall = bestAll.getDouble(3)
-        val precision = bestAll.getDouble(2)
-        val f1 = bestAll.getDouble(1)
         val threshold = bestAll.getDouble(0)
+        val f1 = bestAll.getDouble(1)
+        val precision = bestAll.getDouble(2)
+        val recall = bestAll.getDouble(3)
         Array(round(threshold, 4), round(f1, 4), round(precision, 4), round(recall, 4))
       }
     }

@@ -367,14 +367,14 @@ object LogisticRegressionRunAll extends LogisticRegressionCommonBase {
 
     val allLines = Seq(blackOakLine, hospLine, salariesLine)
 
-    write_to_file(linearCombiModelPath) {
-      writer => {
-        writer.write(s"$linearCombiHeader$newLine")
-        allLines.foreach(line => {
-          writer.write(s"$line$newLine")
-        })
-      }
-    }
+//    write_to_file(linearCombiModelPath) {
+//      writer => {
+//        writer.write(s"$linearCombiHeader$newLine")
+//        allLines.foreach(line => {
+//          writer.write(s"$line$newLine")
+//        })
+//      }
+//    }
   }
 
   private def constructLine(res: (String, TrainData)) = {

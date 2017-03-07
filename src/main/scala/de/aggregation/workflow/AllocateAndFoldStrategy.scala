@@ -11,7 +11,7 @@ import de.experiments.cosine.similarity.{AllToolsSimilarity, Cosine}
 import de.model.kappa.{Kappa, KappaEstimator}
 import de.model.logistic.regression.LogisticRegressionCommonBase
 import de.model.mutual.information.{PMIEstimator, ToolPMI}
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 
 import scala.collection.immutable.Seq
 
@@ -60,7 +60,7 @@ case class UnionAll(precision: Double, recall: Double, f1: Double)
 
 case class MinK(k: Int, precision: Double, recall: Double, f1: Double)
 
-case class LinearCombi(precision: Double, recall: Double, f1: Double)
+case class LinearCombi(precision: Double, recall: Double, f1: Double, functionStr: String)
 
 //Kappa, //Cosine, //ToolPMI
 case class AggregatedTools(dataset: String,
@@ -70,60 +70,37 @@ case class AggregatedTools(dataset: String,
                            linearCombi: LinearCombi,
                            allPMI: List[ToolPMI],
                            allCosineSimis: List[Cosine],
-                           allKappas: List[Kappa])
+                           allKappas: List[Kappa]) {
+
+  def makeLatexString(): String = {
+    val tools = combi.combi.map(_.name)
+    val num = tools.size
+    val latexString =
+      s"""
+         |\\multirow{3}{*}{\\begin{tabular}[c]{@{}l@{}}${tools.mkString("+")}\\\\ $$ ${linearCombi.functionStr} $$ \\end{tabular}}
+         |                                                                        & UnionAll & ${unionAll.precision} & ${unionAll.recall} & ${unionAll.f1}  \\\\
+         |                                                                        & Min-$num    & ${minK.precision} & ${minK.recall} & ${minK.f1}  \\\\
+         |                                                                        & LinComb  & ${linearCombi.precision} & ${linearCombi.recall} & ${linearCombi.f1} \\\\
+         |\\midrule
+         |
+                 """.stripMargin
+    latexString
+
+  }
+}
 
 
-object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig with LogisticRegressionCommonBase with de.model.multiarmed.bandit.ExperimentsBase {
+object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig
+  with LogisticRegressionCommonBase
+  with de.model.multiarmed.bandit.ExperimentsBase {
+
   def main(args: Array[String]): Unit = {
 
     SparkLOAN.withSparkSession("STRATEGY-FOR-TOOLS") {
       session => {
         import session.implicits._
-        val linearCombiSchema: Array[String] = linearCombiHeader.split(sep)
-        val linearModel = DataSetCreator.createFrame(session, linearCombiModelPath, linearCombiSchema: _*)
         val experimentsCSV = DataSetCreator.createFrame(session, multiArmedBandResults, schema: _*)
-
-        //experimentsCSV.show()
-        //header: "dataset,banditalg,param,expectations"
-        // implicit val rowEncoder = org.apache.spark.sql.Encoders.kryo[Row]
-        val byDataset = experimentsCSV.groupByKey(row => row.getAs[String]("dataset"))
-
-        val allData: Dataset[(String, String, String)] = byDataset.flatMapGroups((dataset, bandits) => {
-          //pro dataset
-          val algorithmsAndToolsCombi: Iterator[(String, String)] = bandits.flatMap(banditAlg => {
-            //pro algorithm on dataset:
-            val banditRow: Map[String, String] = banditAlg.getValuesMap[String](schema)
-            val expectations = banditRow.getOrElse("expectations", "")
-            val Array(a, b, c, d, e) = expectations.split("\\|")
-            //1:0.4143 -> toolId:expectation
-            val resultOfBanditRun: Seq[ToolExpectation] =
-              Seq(a, b, c, d, e)
-                .map(e => new ToolExpectation().apply(e))
-            val sortedResults = resultOfBanditRun
-              .sortWith((t1, t2) => t1.expectation > t2.expectation)
-
-            val toolsCombiByAlgorithm: Seq[String] =
-              (2 until sortedResults.size)
-                .map(toolsNum => {
-                  //top N tools:
-                  val whatToolsToEval: Seq[ToolExpectation] = sortedResults.take(toolsNum)
-                  val selectTools = whatToolsToEval.map(t => s"${GoldStandard.exists}-${t.id}").mkString(",")
-                  selectTools
-                })
-            val algorithm = banditRow.getOrElse("banditalg", "")
-            val algorithmToTools = toolsCombiByAlgorithm.map(tools => (algorithm, tools))
-            algorithmToTools
-          })
-          val dataToAlgorithmToTools = algorithmsAndToolsCombi.map(e => {
-            (dataset, e._1, e._2)
-          })
-          dataToAlgorithmToTools
-        })
-
-        val experimentSettings: DataFrame = allData.toDF("dataset", "banditalg", "toolscombi")
-        // experimentSettings.show(100)
-
-        //experimentSettings.rdd.collect().foreach(println)
+        val experimentSettings: DataFrame = getMABanditExperimentsSettings(session, experimentsCSV)
 
         val allDatasets: Array[String] = experimentsCSV
           .select(experimentsCSV.col("dataset"))
@@ -133,15 +110,6 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig with Logist
 
         //going through all datasets:
         allDatasets.foreach(data => {
-
-          val linearModelOfData = linearModel.where(linearModel("dataset") === data)
-          linearModelOfData.show()
-          val modelRow = linearModelOfData.head()
-
-          val modelValuesMap: Map[String, String] = modelRow
-            .getValuesMap[String](linearCombiSchema.filterNot(_.equals("dataset")))
-          val modelValues: Map[String, Double] = modelValuesMap.map(e => e._1 -> e._2.toDouble)
-
 
           val experimentsByDataset: Dataset[Row] =
             experimentSettings
@@ -180,8 +148,12 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig with Logist
             val minKEval = F1.evaluate(labelAndTools, k)
             val minK = MinK(k, minKEval.precision, minKEval.recall, minKEval.f1)
 
-            val linearCombiEval = F1.evaluate(labelAndTools, modelValues, tools)
-            val linearCombi = LinearCombi(linearCombiEval.precision, linearCombiEval.recall, linearCombiEval.f1)
+            val linearCombiEval: Eval = F1.evaluateLinearCombi(session, data, tools)
+            val linearCombi = LinearCombi(
+              linearCombiEval.precision,
+              linearCombiEval.recall,
+              linearCombiEval.f1,
+              linearCombiEval.info)
 
 
             val allMetrics: List[(ToolPMI, Kappa, Cosine)] = tools.combinations(2).map(pair => {
@@ -204,10 +176,10 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig with Logist
 
             AggregatedTools(data, toolsCombination, unionAll, minK, linearCombi, allPMIs, allCosine, allKappas)
           })
-          //todo: perform aggregation here - all information already there!
-          println(s"data: $data -> ${toolsCombinations.size} ; ")
 
-          aggregatedTools.foreach(println)
+          //todo: perform aggregation here - all information already there!
+          //println(s"data: $data -> ${toolsCombinations.size} ; ")
+          //aggregatedTools.foreach(println)
 
           println(s"$data BEST combination:")
 
@@ -215,31 +187,76 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig with Logist
             .sortWith((t1, t2) => t1.minK.precision >= t2.minK.precision && t1.unionAll.recall >= t2.unionAll.recall)
             .take(4)
 
-
           topCombinations.filter(_.combi.combi.size > 2).foreach(combi => {
 
-            println(combi)
+            //println(combi)
 
             val topCosines: List[Cosine] = combi
               .allCosineSimis
               .sortWith((c1, c2) => c1.similarity >= c2.similarity)
               .take(2)
 
-            println(s"""COSINE: tools candidates for aggregate: ${topCosines.mkString(",")}""")
+            //println(s"""COSINE: tools candidates for aggregate: ${topCosines.mkString(",")}""")
 
             val topKappas: List[Kappa] = combi.allKappas
               .sortWith((k1, k2) => k1.kappa >= k2.kappa)
               .take(2)
-            println(s"""KAPPA: tools candidates for aggregate: ${topKappas.mkString(",")}""")
+            //println(s"""KAPPA: tools candidates for aggregate: ${topKappas.mkString(",")}""")
 
             val topPMI = combi.allPMI
               .sortWith((p1, p2) => p1.pmi >= p2.pmi)
               .take(2)
-            println(s"""PMI: tools candidates for aggregate: ${topPMI.mkString(",")}""")
+            //println(s"""PMI: tools candidates for aggregate: ${topPMI.mkString(",")}""")
+
+
+            //println(s"""Linear combination: ${linearCombi.functionStr}""")
+
+            val latexString = combi.makeLatexString()
+            println(latexString)
 
           })
         })
       }
     }
+  }
+
+  private def getMABanditExperimentsSettings(session: SparkSession, experimentsCSV: DataFrame): DataFrame = {
+    import session.implicits._
+    val byDataset = experimentsCSV.groupByKey(row => row.getAs[String]("dataset"))
+
+    val allData: Dataset[(String, String, String)] = byDataset.flatMapGroups((dataset, bandits) => {
+      //pro dataset
+      val algorithmsAndToolsCombi: Iterator[(String, String)] = bandits.flatMap(banditAlg => {
+        //pro algorithm on dataset:
+        val banditRow: Map[String, String] = banditAlg.getValuesMap[String](schema)
+        val expectations = banditRow.getOrElse("expectations", "")
+        val Array(a, b, c, d, e) = expectations.split("\\|")
+        //1:0.4143 -> toolId:expectation
+        val resultOfBanditRun: Seq[ToolExpectation] =
+          Seq(a, b, c, d, e)
+            .map(e => new ToolExpectation().apply(e))
+        val sortedResults = resultOfBanditRun
+          .sortWith((t1, t2) => t1.expectation > t2.expectation)
+
+        val toolsCombiByAlgorithm: Seq[String] =
+          (2 until sortedResults.size)
+            .map(toolsNum => {
+              //top N tools:
+              val whatToolsToEval: Seq[ToolExpectation] = sortedResults.take(toolsNum)
+              val selectTools = whatToolsToEval.map(t => s"${GoldStandard.exists}-${t.id}").mkString(",")
+              selectTools
+            })
+        val algorithm = banditRow.getOrElse("banditalg", "")
+        val algorithmToTools = toolsCombiByAlgorithm.map(tools => (algorithm, tools))
+        algorithmToTools
+      })
+      val dataToAlgorithmToTools = algorithmsAndToolsCombi.map(e => {
+        (dataset, e._1, e._2)
+      })
+      dataToAlgorithmToTools
+    })
+
+    val experimentSettings: DataFrame = allData.toDF("dataset", "banditalg", "toolscombi")
+    experimentSettings
   }
 }

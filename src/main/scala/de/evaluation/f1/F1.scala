@@ -18,7 +18,7 @@ object F1 {
     val linearFunction = new LinearFunction()
     linearFunction.onDatasetName(datasetName)
     linearFunction.onTools(activatedTools)
-    val eval: Eval = linearFunction.estimateLinearCombi(session)
+    val eval: Eval = linearFunction.evaluateLinearCombi(session)
     eval
   }
 
