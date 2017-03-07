@@ -8,24 +8,109 @@ class MLPlayground {
 }
 
 //spark example: https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/ml/EstimatorTransformerParamExample.scala
-import de.evaluation.util.SparkSessionCreator
+import com.typesafe.config.ConfigFactory
+import de.evaluation.f1.FullResult
+import de.evaluation.util.{DataSetCreator, SparkLOAN, SparkSessionCreator}
 import de.model.util.AbstractParams
-import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.classification.{BinaryLogisticRegressionSummary, LogisticRegression}
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.ml.{Pipeline, PipelineStage, Transformer}
-import org.apache.spark.ml.linalg.Vector
-import org.apache.spark.ml.regression.GeneralizedLinearRegression
-import org.apache.spark.mllib.evaluation.{RegressionMetrics}
+import org.apache.spark.ml.regression.{GeneralizedLinearRegression, LinearRegression}
+import org.apache.spark.ml.{Pipeline, PipelineModel, Transformer}
+import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.util.MLUtils
-import scala.language.reflectiveCalls
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import scopt.OptionParser
-import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.sql.{DataFrame, SparkSession}
 
+import scala.collection.Map
+import scala.language.reflectiveCalls
+
+
+object MLPlaygroundDataType {
+  def main(args: Array[String]): Unit = {
+    SparkLOAN.withSparkSession("TESTFORMAT") {
+      session => {
+
+        import session.implicits._
+
+        val experimentConfig = ConfigFactory.load("experiments.conf")
+        val pathTrain = experimentConfig.getString("blackoak.experiments.train.file")
+        val pathTest = experimentConfig.getString("blackoak.experiments.test.file")
+
+        val dataDF: DataFrame = DataSetCreator.createFrame(session, pathTrain, FullResult.schema: _*)
+        val toolsForLinearCombi = Seq("exists-2", "exists-4", "exists-5")
+        val labelAndTools = dataDF.select(FullResult.label, toolsForLinearCombi: _*)
+
+        val train: DataFrame = labelAndTools.map(row => {
+          val label: Double = row.get(0).toString.toDouble
+          val toolsVals: Array[Double] = (1 to row.size - 1)
+            .map(idx => row.getString(idx).toDouble).toArray
+          val features = Vectors.dense(toolsVals)
+          (label, features)
+        }).toDF("label", "features")
+
+        val lr = new LogisticRegression()
+
+        val paramMap = ParamMap()
+          .put(lr.maxIter, 30) // Specify 1 Param. This overwrites the original maxIter.
+          .put(lr.regParam -> 0.8, lr.threshold -> 0.34)
+        // Specify multiple Params.
+        val model = lr.fit(train, paramMap)
+
+        println(s"Coefficients: ${model.coefficients} Intercept: ${model.intercept}")
+
+        val logisticRegressionTrainingSummary = model.summary
+
+        val binarySummary = logisticRegressionTrainingSummary.asInstanceOf[BinaryLogisticRegressionSummary]
+
+        binarySummary.fMeasureByThreshold.show()
+
+
+        val transform = model.transform(train)
+        val select = transform.select("prediction", "label")
+        val predictionAndLabel: RDD[(Double, Double)] = select.rdd.map(row => (row.getDouble(0), row.getDouble(1)))
+        val outcomeCounts: Map[(Double, Double), Long] = predictionAndLabel.countByValue()
+
+        evaluate(outcomeCounts)
+
+
+      }
+    }
+  }
+
+  def evaluate(outcomeCounts: Map[(Double, Double), Long]) = {
+    var tp = 0.0
+    var fn = 0.0
+    var tn = 0.0
+    var fp = 0.0
+
+    outcomeCounts.foreach(elem => {
+      val values = elem._1
+      val count = elem._2
+      values match {
+        //(prediction, label)
+        case (0.0, 0.0) => tn = count
+        case (1.0, 1.0) => tp = count
+        case (1.0, 0.0) => fp = count
+        case (0.0, 1.0) => fn = count
+      }
+    })
+
+    println(s"true positives: $tp")
+
+
+    val precision = tp / (tp + fp).toDouble
+    println(s"Precision: $precision")
+
+    val recall = tp / (tp + fn).toDouble
+    println(s"Recall: $recall")
+
+    val F1 = 2 * precision * recall / (precision + recall)
+    println(s"F-1 Score: $F1")
+  }
+}
 
 object EstimatorTransformerParamExample {
 

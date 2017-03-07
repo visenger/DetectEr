@@ -24,24 +24,13 @@ object BruteForceSearchRunner extends ExperimentsCommonConfig with LogisticRegre
     SparkLOAN.withSparkSession("BRUTE-FORCE") {
       session => {
 
-        val linearModel = DataSetCreator.createFrame(session, linearCombiModelPath, linearCombiSchema: _*)
-
         process_data {
           data => {
+
             val dataSetName = data._1
             println(s" DATASET: ${dataSetName}")
             val pathToData = data._2
             val fullDF: DataFrame = DataSetCreator.createFrame(session, pathToData, FullResult.schema: _*)
-            val linearModelOfData = linearModel.where(linearModel("dataset") === dataSetName)
-            linearModelOfData.show()
-            val modelRow = linearModelOfData.head()
-
-            val modelValuesMap: Map[String, String] = modelRow
-              .getValuesMap[String](linearCombiSchema.filterNot(_.equals("dataset")))
-
-            //modelValuesMap.foreach(println)
-
-            val modelValues: Map[String, Double] = modelValuesMap.map(e => e._1 -> e._2.toDouble)
 
             (2 to toolsNumber).foreach(num => {
               val combiOfK: List[Seq[String]] = allTools.combinations(num).toList
@@ -49,19 +38,25 @@ object BruteForceSearchRunner extends ExperimentsCommonConfig with LogisticRegre
 
                 val toolsToEval: DataFrame = fullDF.select(FullResult.label, tools: _*)
 
-                val linearModel: Eval = F1.evaluate(toolsToEval, modelValues, tools)
-                linearModel.printResult(s"combi: ${tools.mkString(sep)}")
+                val linearCombi = F1.evaluateLinearCombi(session, dataSetName, tools)
 
+                val unionAll: Eval = F1.evaluate(toolsToEval)
+                //  unionAll.printResult("Union All: ")
+                val minK: Eval = F1.evaluate(toolsToEval, num)
+                //  minK.printResult(s"min-$num")
 
-                //                val unionAll: Eval = F1.evaluate(toolsToEval)
-                //                val minK: Eval = F1.evaluate(toolsToEval, num)
-                //
-                //                val latexTableRow =
-                //                  s"""
-                //                                \\multirow{2}{*}{${tools.mkString("+")}} & union all  & ${unionAll.precision}  & ${unionAll.recall} & ${unionAll.f1}  \\\\
-                //                                                         & min-$num   & ${minK.precision}      & ${minK.recall}     & ${minK.f1}   \\\\
-                //                                """.stripMargin
-                //                println(latexTableRow)
+                val latexBruteForceRow =
+                  s"""
+                     |\\multirow{3}{*}{\\begin{tabular}[c]{@{}l@{}}${tools.mkString("+")}\\\\ $$ ${linearCombi.info} $$ \\end{tabular}}
+                     |                                                                        & UnionAll & ${unionAll.precision} & ${unionAll.recall} & ${unionAll.f1}  \\\\
+                     |                                                                        & Min-$num    & ${minK.precision} & ${minK.recall} & ${minK.f1}  \\\\
+                     |                                                                        & LinComb  & ${linearCombi.precision} & ${linearCombi.recall} & ${linearCombi.f1} \\\\
+                     |\\midrule
+                     |
+                 """.stripMargin
+
+                println(latexBruteForceRow)
+
               })
             })
           }

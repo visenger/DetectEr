@@ -1,9 +1,10 @@
 package de.evaluation.f1
 
 
+import de.model.logistic.regression.LinearFunction
 import de.model.util.NumbersUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql._
 
 import scala.collection.Map
 
@@ -11,6 +12,15 @@ import scala.collection.Map
   * Created by visenger on 07/12/16.
   */
 object F1 {
+
+  def evaluateLinearCombi(session: SparkSession, datasetName: String, activatedTools: Seq[String] = Seq()): Eval = {
+
+    val linearFunction = new LinearFunction()
+    linearFunction.onDatasetName(datasetName)
+    linearFunction.onTools(activatedTools)
+    val eval: Eval = linearFunction.estimateLinearCombi(session)
+    eval
+  }
 
 
   def evaluate(resultDF: DataFrame, model: Map[String, Double], activatedTools: Seq[String]): Eval = {

@@ -9,7 +9,7 @@ import de.evaluation.f1.FullResult
 import de.evaluation.util.SparkLOAN
 import de.model.util.NumbersUtil
 import de.model.util.NumbersUtil.round
-import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.{Model, Transformer}
 import org.apache.spark.ml.classification.{BinaryLogisticRegressionSummary, LogisticRegression}
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.param.ParamMap
@@ -65,7 +65,7 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
   def findBestModel(): Unit = {
     SparkLOAN.withSparkSession("LOGREGRESSION") {
       session => {
-        val data = session.read.format("libsvm").load(libsvmFile)
+        val data: DataFrame = session.read.format("libsvm").load(libsvmFile)
         val Array(training, test) = data.randomSplit(Array(trainFraction, testFraction))
 
         val logRegr = new LogisticRegression()
@@ -83,7 +83,7 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
 
         val crossValidatorModel: CrossValidatorModel = crossValidator.fit(training)
 
-        val bestModel = crossValidatorModel.bestModel
+        val bestModel: Model[_] = crossValidatorModel.bestModel
 
         val bestModelParams: ParamMap = bestModel.extractParamMap()
         println(bestModelParams.toString())
@@ -186,7 +186,9 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
           bestRecall,
           bestF1)
 
-        val testModel = evaluateRegressionModel(model, test, FullResult.label)
+        val testModel = ModelEvaluator.evaluateRegressionModel(model, test, FullResult.label)
+
+        /*evaluateRegressionModel(model, test, FullResult.label)*/
 
         println(s"""$$ ${trainDataInfo.createModelFormula(ind)}$$   & ${bestPrecision} & ${bestRecall}   & ${bestF1}   & ${testModel.precision}   & ${testModel.recall}   & ${testModel.f1}  \\\\""")
         resultModel = (trainDataInfo, testModel)
@@ -339,8 +341,8 @@ object SalariesLogisticRegression extends LogisticRegressionCommonBase {
     //    logisticRegressionRunner.findBestModel()
 
     logisticRegressionRunner.setElasticNetParam(0.2)
-    val linearCombination =
-      (1 to 15)
+    val linearCombination: Seq[(TrainData, TestData)] =
+      (1 to 5)
         .map(ind => logisticRegressionRunner.runPredictions(ind, maxPrecision, maxRecall))
     val allTrainData = linearCombination.map(_._1)
     val maxF1: Double = allTrainData.foldLeft(0.0)((max, c) => Math.max(max, c.maxFMeasure))
