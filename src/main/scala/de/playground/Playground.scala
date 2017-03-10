@@ -32,6 +32,13 @@ object Playground extends App {
 
 }
 
+
+object StatPlayground {
+  def main(args: Array[String]): Unit = {
+
+  }
+}
+
 case class Record(key: Int, value: String)
 
 object SparkPlayground {

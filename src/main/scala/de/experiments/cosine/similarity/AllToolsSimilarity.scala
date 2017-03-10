@@ -50,62 +50,74 @@ object AllToolsSimilarityRunner extends ExperimentsCommonConfig {
 
         val toolsSimilarity = new AllToolsSimilarity()
 
-        val fullDF: DataFrame = DataSetCreator.createFrame(session, salariesTrainFile, FullResult.schema: _*)
+        process_train_data {
+          trainData => {
+            val dataSetName = trainData._1
+            val trainFile = trainData._2
 
-        val selectLabelAndTools: DataFrame = fullDF
-          .select(FullResult.label, FullResult.tools: _*)
-          .cache()
-        //todo: ACHTUNG: I was not able to map columns back to tools
-        //
-        //
-        //        val rows: RDD[Vector] = selectLabelAndTools.rdd.map(row => {
-        //          val valuesMap: Map[String, String] = row.getValuesMap[String](Seq(FullResult.label) ++ FullResult.tools)
-        //          val valsAsNumbers: Array[Double] = valuesMap.values.map(v => v.toDouble).toArray
-        //
-        //          Vectors.dense(valsAsNumbers)
-        //
-        //        }).cache()
-        //
-        //        val matrix: RowMatrix = new RowMatrix(rows)
-        //
-        //
-        //        val columnSimilarities: CoordinateMatrix = matrix.columnSimilarities(0.1)
-        //
-        //
-        //        println(s"exact similarities rows: ${columnSimilarities.numRows()}, cols: ${columnSimilarities.numCols()}")
-        //
-        //
-        //        val labelsSimilarities = columnSimilarities.entries.filter {
-        //          case MatrixEntry(i, j, v) => i == 0
-        //        }
-        //        labelsSimilarities.foreach {
-        //          case MatrixEntry(i, j, v) => println(s"ground truth to tool-$j similarity: ${NumbersUtil.round(v, 4)}")
-        //        }
-        //
-        //        val toolsSimis = columnSimilarities.entries.filter {
-        //          case MatrixEntry(i, j, v) => i != 0
-        //        }
-        //        toolsSimis.foreach {
-        //          case MatrixEntry(i, j, v) => println(s"cosine(tool-$i, tool-$j) = ${NumbersUtil.round(v, 4)}")
-        //        }
+            val fullDF: DataFrame = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
 
-        //        val threshold = 0.1
-        //        val columnSimilaritiesWithThreshold: CoordinateMatrix = matrix.columnSimilarities(threshold)
+            val selectLabelAndTools: DataFrame = fullDF
+              .select(FullResult.label, FullResult.tools: _*)
+              .cache()
+            //todo: ACHTUNG: I was not able to map columns back to tools
+            //
+            //
+            //        val rows: RDD[Vector] = selectLabelAndTools.rdd.map(row => {
+            //          val valuesMap: Map[String, String] = row.getValuesMap[String](Seq(FullResult.label) ++ FullResult.tools)
+            //          val valsAsNumbers: Array[Double] = valuesMap.values.map(v => v.toDouble).toArray
+            //
+            //          Vectors.dense(valsAsNumbers)
+            //
+            //        }).cache()
+            //
+            //        val matrix: RowMatrix = new RowMatrix(rows)
+            //
+            //
+            //        val columnSimilarities: CoordinateMatrix = matrix.columnSimilarities(0.1)
+            //
+            //
+            //        println(s"exact similarities rows: ${columnSimilarities.numRows()}, cols: ${columnSimilarities.numCols()}")
+            //
+            //
+            //        val labelsSimilarities = columnSimilarities.entries.filter {
+            //          case MatrixEntry(i, j, v) => i == 0
+            //        }
+            //        labelsSimilarities.foreach {
+            //          case MatrixEntry(i, j, v) => println(s"ground truth to tool-$j similarity: ${NumbersUtil.round(v, 4)}")
+            //        }
+            //
+            //        val toolsSimis = columnSimilarities.entries.filter {
+            //          case MatrixEntry(i, j, v) => i != 0
+            //        }
+            //        toolsSimis.foreach {
+            //          case MatrixEntry(i, j, v) => println(s"cosine(tool-$i, tool-$j) = ${NumbersUtil.round(v, 4)}")
+            //        }
 
-        //        val vectors: Seq[Vector] = rows.collect().toSeq
-        //        val transpose: RDD[Vector] = session.sparkContext.parallelize(vectors.transpose.flatten)
-        //
+            //        val threshold = 0.1
+            //        val columnSimilaritiesWithThreshold: CoordinateMatrix = matrix.columnSimilarities(threshold)
 
-        val labelAndTools: Seq[String] = Seq(FullResult.label) ++ FullResult.tools
-        val allToolsCombi: List[(String, String)] = labelAndTools.combinations(2)
-          .toList
-          .map(tools => (tools(0), tools(1)))
+            //        val vectors: Seq[Vector] = rows.collect().toSeq
+            //        val transpose: RDD[Vector] = session.sparkContext.parallelize(vectors.transpose.flatten)
+            //
 
-        val cosines: List[Cosine] = allToolsCombi
-          .map(combi => toolsSimilarity.computeCosine(session, selectLabelAndTools, combi))
+            val labelAndTools: Seq[String] = Seq(FullResult.label) ++ FullResult.tools
+            val allToolsCombi: List[(String, String)] = labelAndTools.combinations(2)
+              .toList
+              .map(tools => (tools(0), tools(1)))
 
-        cosines.foreach(simi =>
-          println(s"my_cosine(${simi.tool1}, ${simi.tool2})= ${NumbersUtil.round(simi.similarity, 4)}"))
+            val cosines: List[Cosine] = allToolsCombi
+              .map(combi => toolsSimilarity.computeCosine(session, selectLabelAndTools, combi))
+
+            cosines
+              .sortWith((c1, c2) => c1.similarity > c2.similarity)
+              .foreach(simi =>
+                println(s"$dataSetName: Cosine(${getName(simi.tool1)}, ${getName(simi.tool2)})= ${NumbersUtil.round(simi.similarity, 4)}"))
+
+
+          }
+        }
+
 
       }
     }

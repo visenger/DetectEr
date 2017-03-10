@@ -24,7 +24,7 @@ object BruteForceSearchRunner extends ExperimentsCommonConfig with LogisticRegre
     SparkLOAN.withSparkSession("BRUTE-FORCE") {
       session => {
 
-        process_data {
+        process_test_data {
           data => {
 
             val dataSetName = data._1

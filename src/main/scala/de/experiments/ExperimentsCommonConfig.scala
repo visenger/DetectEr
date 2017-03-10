@@ -24,10 +24,20 @@ trait ExperimentsCommonConfig {
     "hosp" -> hospTestFile,
     "salaries" -> salariesTestFile)
 
+  val allTrainData: Map[String, String] = Map("blackoak" -> blackoakTrainFile,
+    "hosp" -> hospTrainFile,
+    "salaries" -> salariesTrainFile)
 
-  def process_data(f: Tuple2[String, String] => Unit): Unit = {
+
+  def process_test_data(f: Tuple2[String, String] => Unit): Unit = {
     allTestData.foreach(data => f(data))
   }
+
+  def process_train_data(f: Tuple2[String, String] => Unit): Unit = {
+    allTrainData.foreach(data => f(data))
+  }
+
+  def getName(tool: String) = experimentsConf.getString(s"dictionary.names.$tool")
 
 
 }

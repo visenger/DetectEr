@@ -100,7 +100,9 @@ class KappaEstimator {
     val probChanceAgreement: Double = (firstRated1 * secondRated1 + firstRated0 * secondRated0) / Math.pow(total, 2)
 
     val diff: Double = relativeObservedAgreement - probChanceAgreement
-    val kappa: Double = diff / (1.0 - probChanceAgreement)
+    //    val kappa: Double = diff / (1.0 - probChanceAgreement)
+
+    val kappa: Double = 1 - ((1 - relativeObservedAgreement) / (1 - probChanceAgreement))
 
     //  println(s"""$tool1 + $tool2: total: $total; diff:$diff -> relative obs agreement: $relativeObservedAgreement; prob of chance agreement: $probChanceAgreement""")
     Kappa(tool1, tool2, NumbersUtil.round(kappa, 4))

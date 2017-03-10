@@ -70,10 +70,11 @@ case class AggregatedTools(dataset: String,
                            linearCombi: LinearCombi,
                            allPMI: List[ToolPMI],
                            allCosineSimis: List[Cosine],
-                           allKappas: List[Kappa]) {
+                           allKappas: List[Kappa]) extends ExperimentsCommonConfig {
 
   def makeLatexString(): String = {
-    val tools = combi.combi.map(_.name)
+    //get real tool name -> from experiments.config file
+    val tools = combi.combi.map(_.name).map(tool => getName(tool))
     val num = tools.size
     val latexString =
       s"""
@@ -185,7 +186,7 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig
 
           val topCombinations: List[AggregatedTools] = aggregatedTools
             .sortWith((t1, t2) => t1.minK.precision >= t2.minK.precision && t1.unionAll.recall >= t2.unionAll.recall)
-            .take(4)
+          //.take(4)
 
           topCombinations.filter(_.combi.combi.size > 2).foreach(combi => {
 
