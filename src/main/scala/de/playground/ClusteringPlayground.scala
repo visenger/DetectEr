@@ -3,7 +3,7 @@ package de.playground
 import com.typesafe.config.{Config, ConfigFactory}
 import de.evaluation.f1.FullResult
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
-import org.apache.spark.ml.clustering.{BisectingKMeans, KMeans}
+import org.apache.spark.ml.clustering.{BisectingKMeans, GaussianMixture, KMeans}
 import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.sql.DataFrame
@@ -117,6 +117,17 @@ object ClusteringPlaygroundDQTools {
         val clustering = kMeansModel.transform(matrixWithIndx)
 
         clustering.select("toolName", "label", "prediction").show()
+
+
+        val bisectingKMeans = new BisectingKMeans()
+        bisectingKMeans.setK(3)
+        bisectingKMeans.setSeed(2L)
+        val bisectingKMeansModel = bisectingKMeans.fit(matrixWithIndx)
+        val bisectClustering = bisectingKMeansModel.transform(matrixWithIndx)
+        bisectClustering.select("toolName", "label", "prediction").show()
+
+
+
       }
     }
   }
