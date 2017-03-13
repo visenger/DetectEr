@@ -1,15 +1,14 @@
 package de.aggregation.workflow
 
-import java.util
 import java.util.Objects
 
 import de.evaluation.f1.{Eval, F1, FullResult, GoldStandard}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
-import de.experiments.brute.force.BruteForceSearchRunner.{linearCombiHeader, linearCombiModelPath, sep}
 import de.experiments.cosine.similarity.{AllToolsSimilarity, Cosine}
 import de.model.kappa.{Kappa, KappaEstimator}
 import de.model.logistic.regression.LogisticRegressionCommonBase
+import de.model.multiarmed.bandit.{MultiarmedBanditsExperimentBase, ToolExpectation}
 import de.model.mutual.information.{PMIEstimator, ToolPMI}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 
@@ -93,7 +92,7 @@ case class AggregatedTools(dataset: String,
 
 object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig
   with LogisticRegressionCommonBase
-  with de.model.multiarmed.bandit.ExperimentsBase {
+  with MultiarmedBanditsExperimentBase {
 
   def main(args: Array[String]): Unit = {
 
@@ -185,32 +184,14 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig
           println(s"$data BEST combination:")
 
           val topCombinations: List[AggregatedTools] = aggregatedTools
-            .sortWith((t1, t2) => t1.minK.precision >= t2.minK.precision && t1.unionAll.recall >= t2.unionAll.recall)
+            .sortWith((t1, t2)
+            => t1.minK.precision >= t2.minK.precision
+                && t1.unionAll.recall >= t2.unionAll.recall
+                && t1.linearCombi.f1 >= t2.linearCombi.f1)
           //.take(4)
 
           topCombinations.filter(_.combi.combi.size > 2).foreach(combi => {
 
-            //println(combi)
-
-            val topCosines: List[Cosine] = combi
-              .allCosineSimis
-              .sortWith((c1, c2) => c1.similarity >= c2.similarity)
-              .take(2)
-
-            //println(s"""COSINE: tools candidates for aggregate: ${topCosines.mkString(",")}""")
-
-            val topKappas: List[Kappa] = combi.allKappas
-              .sortWith((k1, k2) => k1.kappa >= k2.kappa)
-              .take(2)
-            //println(s"""KAPPA: tools candidates for aggregate: ${topKappas.mkString(",")}""")
-
-            val topPMI = combi.allPMI
-              .sortWith((p1, p2) => p1.pmi >= p2.pmi)
-              .take(2)
-            //println(s"""PMI: tools candidates for aggregate: ${topPMI.mkString(",")}""")
-
-
-            //println(s"""Linear combination: ${linearCombi.functionStr}""")
 
             val latexString = combi.makeLatexString()
             println(latexString)

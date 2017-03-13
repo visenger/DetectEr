@@ -18,6 +18,7 @@ object DataSetCreator {
     data
   }
 
+  @Deprecated
   def createDataSetFromFile(sparkSession: SparkSession, dataPath: String, schema: String*): DataFrame = {
     val namedDF: DataFrame = createDataSetFromFileNoHeader(sparkSession, dataPath, schema: _*)
 
@@ -94,7 +95,7 @@ object DataSetCreator {
     namedDF
   }
 
-
+  @Deprecated
   def createDataSetFromFileNoHeader(sparkSession: SparkSession, dataPath: String, schema: String*): DataFrame = {
     val df: DataFrame = sparkSession.read.csv(dataPath)
     val namedDF: DataFrame = df.toDF(schema: _*)

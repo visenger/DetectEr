@@ -1,13 +1,11 @@
 package de.model.multiarmed.bandit
 
-import java.util
-
 import com.typesafe.config.ConfigFactory
 import de.evaluation.f1.{Eval, F1, FullResult, GoldStandard}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 
-import scala.collection.immutable.{IndexedSeq, Seq}
+import scala.collection.immutable.Seq
 
 
 /**
@@ -15,7 +13,7 @@ import scala.collection.immutable.{IndexedSeq, Seq}
   * the complete code for experiment:
   * https://github.com/visenger/banditsbook-scala
   */
-trait ExperimentsBase {
+trait MultiarmedBanditsExperimentBase {
 
   val config = ConfigFactory.load("experiments.conf")
   ///Users/visenger/research/datasets/multiarmed-bandit/experiments-10percent.csv
@@ -43,15 +41,6 @@ trait ExperimentsBase {
     path
   }
 
-  case class ToolExpectation(id: Int = 0, expectation: Double = 0.0) {
-    def apply(id: Int, expectation: Double): ToolExpectation = new ToolExpectation(id, expectation)
-
-    def apply(tool: String): ToolExpectation = {
-      val Array(idStr, expectStr) = tool.split(":")
-
-      new ToolExpectation(id = Integer.valueOf(idStr), expectation = java.lang.Double.valueOf(expectStr))
-    }
-  }
 
 }
 
@@ -59,7 +48,17 @@ class MultiarmedBandit {
 
 }
 
-object MultiarmedBanditRunner extends ExperimentsBase {
+case class ToolExpectation(id: Int = 0, expectation: Double = 0.0) {
+  def apply(id: Int, expectation: Double): ToolExpectation = new ToolExpectation(id, expectation)
+
+  def apply(tool: String): ToolExpectation = {
+    val Array(idStr, expectStr) = tool.split(":")
+
+    new ToolExpectation(id = Integer.valueOf(idStr), expectation = java.lang.Double.valueOf(expectStr))
+  }
+}
+
+object MultiarmedBanditRunner extends MultiarmedBanditsExperimentBase {
   def main(args: Array[String]): Unit = {
     SparkLOAN.withSparkSession("MULTIARMEDBANDIT") {
       session => {
