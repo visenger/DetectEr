@@ -7,7 +7,7 @@ package de.evaluation.f1
 
 case class Eval(precision: Double, recall: Double, f1: Double, info: String = "") {
   override def toString: String = {
-    s"precision: $precision, recall: $recall, F1: $f1"
+    s"""precision: $precision, recall: $recall, F1: $f1  function: $info"""
   }
 
 

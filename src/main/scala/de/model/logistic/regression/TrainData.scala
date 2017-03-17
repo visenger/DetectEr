@@ -15,7 +15,14 @@ case class TrainData(regParam: Double,
                      f1: Double) {
   override def toString: String = {
 
-    s"TRAIN: regParam: $regParam, elasticNetParam: $elasticNetParam,  maxFMeasure: $maxFMeasure, AreaUnderRoc: $areaUnderRoc, ModelCoefficients: ${coefficients.mkString(",")}, ModelIntercept: $intercept"
+    s"""TRAIN MODEL:
+       |regParam: $regParam,
+       |elasticNetParam: $elasticNetParam,
+       |bestThreshold: $bestThreshold,
+       |maxFMeasure: $maxFMeasure,
+       |AreaUnderRoc: $areaUnderRoc,
+       |ModelCoefficients: ${coefficients.mkString(",")},
+       |ModelIntercept: $intercept""".stripMargin
   }
 
   def createModelFormula(ind: Int): String = {

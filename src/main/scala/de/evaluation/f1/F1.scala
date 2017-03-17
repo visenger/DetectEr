@@ -22,6 +22,15 @@ object F1 {
     eval
   }
 
+  def evaluateLinearCombiWithLBFGS(session: SparkSession, datasetName: String, activatedTools: Seq[String] = Seq()): Eval = {
+
+    val linearFunction = new LinearFunction()
+    linearFunction.onDatasetName(datasetName)
+    linearFunction.onTools(activatedTools)
+    val eval: Eval = linearFunction.evaluateLinearCombiWithLBFGS(session)
+    eval
+  }
+
 
   def evaluate(resultDF: DataFrame, model: Map[String, Double], activatedTools: Seq[String]): Eval = {
     import org.apache.spark.sql.functions._

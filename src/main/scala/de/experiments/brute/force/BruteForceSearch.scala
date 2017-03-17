@@ -3,7 +3,7 @@ package de.experiments.brute.force
 import de.evaluation.f1.{Eval, F1, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
-import de.model.logistic.regression.{LogisticRegressionCommonBase, TrainData}
+import de.model.logistic.regression.LogisticRegressionCommonBase
 import org.apache.spark.sql.DataFrame
 
 /**
@@ -38,16 +38,18 @@ object BruteForceSearchRunner extends ExperimentsCommonConfig with LogisticRegre
 
                 val toolsToEval: DataFrame = fullDF.select(FullResult.label, tools: _*)
 
-                val linearCombi = F1.evaluateLinearCombi(session, dataSetName, tools)
+                val linearCombi = F1.evaluateLinearCombiWithLBFGS(session, dataSetName, tools)
 
                 val unionAll: Eval = F1.evaluate(toolsToEval)
                 //  unionAll.printResult("Union All: ")
                 val minK: Eval = F1.evaluate(toolsToEval, num)
                 //  minK.printResult(s"min-$num")
 
+                val toolsRealNames: Seq[String] = tools.map(getName(_))
+
                 val latexBruteForceRow =
                   s"""
-                     |\\multirow{3}{*}{\\begin{tabular}[c]{@{}l@{}}${tools.mkString("+")}\\\\ $$ ${linearCombi.info} $$ \\end{tabular}}
+                     |\\multirow{3}{*}{\\begin{tabular}[c]{@{}l@{}}${toolsRealNames.mkString("+")}\\\\ $$ ${linearCombi.info} $$ \\end{tabular}}
                      |                                                                        & UnionAll & ${unionAll.precision} & ${unionAll.recall} & ${unionAll.f1}  \\\\
                      |                                                                        & Min-$num    & ${minK.precision} & ${minK.recall} & ${minK.f1}  \\\\
                      |                                                                        & LinComb  & ${linearCombi.precision} & ${linearCombi.recall} & ${linearCombi.f1} \\\\

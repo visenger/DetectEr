@@ -70,7 +70,9 @@ object ModelEvaluator {
     val wrongPredictions: Double = outcomeCounts
       .count(key => key._1 != key._2)
 
-    TestData(totalData, wrongPredictions.toLong, round(accuracy, 4), round(precision, 4), round(recall, 4), round(F1, 4))
+    val testData = TestData(totalData, wrongPredictions.toLong, round(accuracy, 4), round(precision, 4), round(recall, 4), round(F1, 4))
+    //println(testData)
+    testData
   }
 
 

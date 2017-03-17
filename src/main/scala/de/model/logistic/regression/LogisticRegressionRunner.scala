@@ -2,21 +2,19 @@ package de.model.logistic.regression
 
 
 import java.io.{File, PrintWriter}
-import java.util
 
 import com.typesafe.config.ConfigFactory
 import de.evaluation.f1.FullResult
 import de.evaluation.util.SparkLOAN
 import de.model.util.NumbersUtil
 import de.model.util.NumbersUtil.round
-import org.apache.spark.ml.{Model, Transformer}
 import org.apache.spark.ml.classification.{BinaryLogisticRegressionSummary, LogisticRegression}
-import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tuning.{CrossValidator, CrossValidatorModel, ParamGridBuilder}
-import org.apache.spark.mllib.evaluation.RegressionMetrics
+import org.apache.spark.ml.{Model, Transformer}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 
 import scala.collection.Map
 import scala.collection.immutable.Seq
@@ -50,10 +48,22 @@ trait LogisticRegressionCommonBase {
 
 class LogisticRegressionRunner extends LogisticRegressionCommonBase {
   private var libsvmFile = ""
+  private var testLibsvmFile = ""
+  private var trainLibsvmFile = ""
   private var eNetParam: Double = 0.0
 
   def onLibsvm(file: String): this.type = {
     libsvmFile = ConfigFactory.load().getString(file)
+    this
+  }
+
+  def onTrainLibsvm(file: String): this.type = {
+    trainLibsvmFile = ConfigFactory.load("experiments.conf").getString(file)
+    this
+  }
+
+  def onTestLibsvm(file: String): this.type = {
+    testLibsvmFile = ConfigFactory.load("experiments.conf").getString(file)
     this
   }
 
@@ -65,8 +75,9 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
   def findBestModel(): Unit = {
     SparkLOAN.withSparkSession("LOGREGRESSION") {
       session => {
-        val data: DataFrame = session.read.format("libsvm").load(libsvmFile)
-        val Array(training, test) = data.randomSplit(Array(trainFraction, testFraction))
+        val training: DataFrame = session.read.format("libsvm").load(trainLibsvmFile)
+        val test: DataFrame = session.read.format("libsvm").load(testLibsvmFile)
+        //val Array(training, test) = data.randomSplit(Array(trainFraction, testFraction))
 
         val logRegr = new LogisticRegression()
         val paramGrid = new ParamGridBuilder()
@@ -77,7 +88,7 @@ class LogisticRegressionRunner extends LogisticRegressionCommonBase {
 
         val crossValidator = new CrossValidator()
           .setEstimator(logRegr)
-          .setEvaluator(new RegressionEvaluator())
+          .setEvaluator(new BinaryClassificationEvaluator())
           .setEstimatorParamMaps(paramGrid)
           .setNumFolds(5)
 
@@ -267,6 +278,7 @@ object BlackOakLogisticRegression extends LogisticRegressionCommonBase {
     run()
   }
 
+
   def run(): Tuple2[String, TrainData] = {
     val dataset = blackOakData
     println(dataset)
@@ -277,6 +289,9 @@ object BlackOakLogisticRegression extends LogisticRegressionCommonBase {
     val maxRecall = 0.4739
     val logisticRegressionRunner = new LogisticRegressionRunner()
     logisticRegressionRunner.onLibsvm("model.full.result.file")
+
+    //    logisticRegressionRunner.onTestLibsvm("blackoak.experiments.test.libsvm.file")
+    //    logisticRegressionRunner.onTrainLibsvm("blackoak.experiments.train.libsvm.file")
     //    logisticRegressionRunner.findBestModel()
 
     logisticRegressionRunner.setElasticNetParam(0.1)
@@ -289,6 +304,8 @@ object BlackOakLogisticRegression extends LogisticRegressionCommonBase {
     println(s"BEST LINEAR COMBI FOR $dataset")
     println(bestLinearCombi)
     (dataset, bestLinearCombi._1)
+
+
   }
 }
 
@@ -308,6 +325,7 @@ object HospLogisticRegression extends LogisticRegressionCommonBase {
 
     val logisticRegressionRunner = new LogisticRegressionRunner()
     logisticRegressionRunner.onLibsvm("model.hosp.10k.libsvm.file")
+
     //    logisticRegressionRunner.findBestModel()
 
     logisticRegressionRunner.setElasticNetParam(0.01)
@@ -367,14 +385,14 @@ object LogisticRegressionRunAll extends LogisticRegressionCommonBase {
 
     val allLines = Seq(blackOakLine, hospLine, salariesLine)
 
-//    write_to_file(linearCombiModelPath) {
-//      writer => {
-//        writer.write(s"$linearCombiHeader$newLine")
-//        allLines.foreach(line => {
-//          writer.write(s"$line$newLine")
-//        })
-//      }
-//    }
+    //    write_to_file(linearCombiModelPath) {
+    //      writer => {
+    //        writer.write(s"$linearCombiHeader$newLine")
+    //        allLines.foreach(line => {
+    //          writer.write(s"$line$newLine")
+    //        })
+    //      }
+    //    }
   }
 
   private def constructLine(res: (String, TrainData)) = {

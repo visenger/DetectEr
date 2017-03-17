@@ -8,8 +8,9 @@ case class TestData(totalTest: Long,
                     accuracy: Double,
                     precision: Double,
                     recall: Double,
-                    f1: Double) {
+                    f1: Double,
+                    info: String = "") {
   override def toString: String = {
-    s"TEST: Accuracy: $accuracy, Precision: $precision, Recall: $recall, F1: $f1, totalTest: $totalTest, wrongPrediction: $wrongPrediction"
+    s"TEST DATA INFO: Accuracy: $accuracy, Precision: $precision, Recall: $recall, F1: $f1, totalTest: $totalTest, wrongPrediction: $wrongPrediction"
   }
 }
