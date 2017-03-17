@@ -28,7 +28,7 @@ class FullResultCreator(var session: SparkSession) {
   }
 
   def onToolsResults(res: Seq[DataFrame]): this.type = {
-    if (res.length != FullResult.toolsNumber)
+    if (res.length != FullResult.toolsCount)
       println("check the number of tools in the config file (e.g application.conf)")
 
     toolsResults = res

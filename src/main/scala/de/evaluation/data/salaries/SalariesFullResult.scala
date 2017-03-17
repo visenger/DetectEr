@@ -33,6 +33,7 @@ class SalariesFullResult {
           histOutliers,
           gaussOutliers,
           rulesVioResults)
+
         val fullResultCreator = new FullResultCreator(session)
         fullResultCreator.onGroundTruth(groundTruth)
         fullResultCreator.onToolsResults(allResults)

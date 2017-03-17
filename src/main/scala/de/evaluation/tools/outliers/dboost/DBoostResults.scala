@@ -136,7 +136,7 @@ class DBoostResults {
   private def writeResultForFile(session: SparkSession, file: String, outputFolder: String): Unit = {
 
     val resultDataSet: DataFrame = DataSetCreator
-      .createDataSetFromFileNoHeader(
+      .createFrameNoHeader(
         session,
         file,
         BlackOakSchema.schema: _*)

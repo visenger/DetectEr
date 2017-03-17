@@ -20,7 +20,7 @@ object DataSetCreator {
 
   @Deprecated
   def createDataSetFromFile(sparkSession: SparkSession, dataPath: String, schema: String*): DataFrame = {
-    val namedDF: DataFrame = createDataSetFromFileNoHeader(sparkSession, dataPath, schema: _*)
+    val namedDF: DataFrame = createFrameNoHeader(sparkSession, dataPath, schema: _*)
 
     val head: Row = namedDF.head()
 
@@ -91,12 +91,12 @@ object DataSetCreator {
     val config: Config = ConfigFactory.load()
     val dataPath: String = config.getString(dataPathStr)
 
-    val namedDF: DataFrame = createDataSetFromFileNoHeader(sparkSession, dataPath, schema: _*)
+    val namedDF: DataFrame = createFrameNoHeader(sparkSession, dataPath, schema: _*)
     namedDF
   }
 
-  @Deprecated
-  def createDataSetFromFileNoHeader(sparkSession: SparkSession, dataPath: String, schema: String*): DataFrame = {
+
+  def createFrameNoHeader(sparkSession: SparkSession, dataPath: String, schema: String*): DataFrame = {
     val df: DataFrame = sparkSession.read.csv(dataPath)
     val namedDF: DataFrame = df.toDF(schema: _*)
     namedDF

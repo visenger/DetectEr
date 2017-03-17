@@ -2,7 +2,7 @@ package de.evaluation.data.gold.standard
 
 import com.google.common.base.Strings
 import com.typesafe.config.ConfigFactory
-import de.evaluation.data.schema.{BlackOakSchema, Schema}
+import de.evaluation.data.schema.Schema
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
@@ -12,6 +12,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
   * Fluent interface for ground truth creation and persistence
   */
 object GoldStandardCreator {
+
 
   private var cleanData: String = ""
   //"data.BlackOak.clean-data-path"
@@ -196,6 +197,73 @@ object GoldStandardCreator {
 
 
     join
+  }
+
+  //todo: duplication! this method extends the clean dataframe with an row_id and uses this row_id as recId for the ground truth.
+  private def external_createLogGoldStandardWithGroundTruth(sparkSession: SparkSession,
+                                                            dirtyDF: DataFrame,
+                                                            cleanDF: DataFrame): Dataset[String] = {
+    // val schema = sch// BlackOakSchema.schema
+    import org.apache.spark.sql.functions._
+    import sparkSession.sqlContext.implicits._
+
+
+    val indexedAttributes = schema.indexAttributes //BlackOakSchema.indexedAttributes
+
+    val error = "1"
+    val clean = "0"
+
+    val rowid = "rowid"
+    //here we produce log data for dirty rows and log dirty attributes:
+    val cleanDFWithRowID = cleanDF.withColumn(rowid, lit(monotonically_increasing_id() + 1))
+
+    val joinWith = cleanDFWithRowID
+      .joinWith(dirtyDF, cleanDFWithRowID.col(recid) === dirtyDF.col(recid))
+
+    val join = joinWith
+      .flatMap(row => {
+        val cleanVals = row._1.getValuesMap[String](schema.getSchema ++ Seq(rowid))
+        val dirtyVals = row._2.getValuesMap[String](schema.getSchema)
+        val id = cleanVals.getOrElse(rowid, 0)
+
+        val dirtyAndCleanAttributes = for (attrName <- schema.getSchema;
+                                           if (attrName != recid && attrName != rowid))
+          yield {
+            val cleanValue = cleanVals.getOrElse(attrName, "")
+            val dirtyValue = dirtyVals.getOrElse(attrName, "")
+
+            val idxIfDistinct = if (!Strings.isNullOrEmpty(cleanValue) && !cleanValue.equals(dirtyValue)) {
+
+              s"$id,${indexedAttributes.getOrElse(attrName, 0)},$error"
+            } else {
+              s"$id,${indexedAttributes.getOrElse(attrName, 0)},$clean"
+            }
+            idxIfDistinct.asInstanceOf[String]
+          }
+        dirtyAndCleanAttributes
+      })
+
+
+    join
+  }
+
+
+  def external_GoldStandard() = {
+    val config = ConfigFactory.load("external.conf")
+    SparkLOAN.withSparkSession("EXTERNAL-GROUND-TRUTH") {
+      session => {
+
+        val cleanDF = DataSetCreator.createFrame(session, config.getString(cleanData), schema.getSchema: _*)
+
+        val dirtyDF = DataSetCreator.createFrame(session, config.getString(dirtyData), schema.getSchema: _*)
+
+        val externalGoldStandard: Dataset[String] = external_createLogGoldStandardWithGroundTruth(session, dirtyDF, cleanDF)
+        externalGoldStandard.show()
+
+        val goldStdWithGroundTruth = config.getString(outputFolder)
+        externalGoldStandard.coalesce(1).write.text(goldStdWithGroundTruth)
+      }
+    }
   }
 
 

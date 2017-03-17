@@ -12,8 +12,8 @@ object FullResult {
   val label: String = "label"
 
   //todo: extract howManyTools we have
-  val toolsNumber = 5
-  private val toolsCount = ConfigFactory.load().getInt("tools.available")
+  //val toolsNumber = 5
+   val toolsCount = ConfigFactory.load().getInt("tools.available")
   val tools: Seq[String] = (1 to toolsCount).map(i => s"${GoldStandard.exists}-$i")
   val schema = Seq(recid) ++ Seq(attrnr) ++ Seq(label) ++ tools
 }
@@ -81,7 +81,7 @@ class BlackOakF1 {
       val nameForFile = dir.getName
       val logData = s"$path/$nameForFile.txt"
 
-      val found = DataSetCreator.createDataSetFromFileNoHeader(sparkSession, logData, Cells.schema: _*)
+      val found = DataSetCreator.createFrameNoHeader(sparkSession, logData, Cells.schema: _*)
 
       val eval = F1.evaluateResult(goldStd, found)
       eval.printResult(nameForFile)
