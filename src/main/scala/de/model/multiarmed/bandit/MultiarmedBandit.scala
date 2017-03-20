@@ -29,11 +29,13 @@ trait MultiarmedBanditsExperimentBase {
   def getTestDatasetPath(data: String): String = {
 
     val blackoakTestFile = config.getString("blackoak.experiments.test.file")
+    val extBlackoakTestFile = config.getString("ext.blackoak.experiments.test.file")
     val hospTestFile = config.getString("hosp.experiments.test.file")
     val salariesTestFile = config.getString("salaries.experiments.test.file")
 
     val path = data.toLowerCase() match {
       case "blackoak" => blackoakTestFile
+      case "ext.blackoak" => extBlackoakTestFile
       case "hosp" => hospTestFile
       case "salaries" => salariesTestFile
       case _ => ""
@@ -58,6 +60,7 @@ case class ToolExpectation(id: Int = 0, expectation: Double = 0.0) {
   }
 }
 
+@Deprecated
 object MultiarmedBanditRunner extends MultiarmedBanditsExperimentBase {
   def main(args: Array[String]): Unit = {
     SparkLOAN.withSparkSession("MULTIARMEDBANDIT") {

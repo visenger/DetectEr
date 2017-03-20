@@ -15,6 +15,8 @@ import scala.util.Try
   */
 
 trait SplitterCommonBase {
+  val externalConf = ConfigFactory.load("external.conf")
+
   val experimentsConf = ConfigFactory.load("experiments.conf")
   val trainFraction = experimentsConf.getDouble("train.fraction")
   val testFraction = experimentsConf.getDouble("test.fraction")
@@ -37,6 +39,15 @@ trait SplitterCommonBase {
       .format("com.databricks.spark.csv")
       .option("header", true)
       .save(s"${experimentsConf.getString(folder)}")
+  }
+
+  def writeExtCSV(dataFrame: DataFrame, folder: String): Unit = {
+    dataFrame
+      .coalesce(1)
+      .write
+      .format("com.databricks.spark.csv")
+      .option("header", true)
+      .save(s"${externalConf.getString(folder)}")
   }
 
 }
@@ -100,10 +111,27 @@ class DataSplitter extends SplitterCommonBase {
     this
   }
 
+  def external_run() = {
+
+    SparkLOAN.withSparkSession("SPLIT") {
+      session => {
+
+        val data = DataSetCreator.createFrame(session, datasetFullResult, FullResult.schema: _*)
+        val Array(train, test) = data.randomSplit(Array(trainFraction, testFraction))
+
+        val trainDF = train.toDF(FullResult.schema: _*)
+        writeExtCSV(trainDF, datasetTrain)
+
+        val testDF = test.toDF(FullResult.schema: _*)
+        writeExtCSV(testDF, datasetTest)
+
+      }
+    }
+  }
+
   def run() = {
     SparkLOAN.withSparkSession("SPLIT") {
       session => {
-        import session.implicits._
         val data = DataSetCreator.createDataSetFromCSV(session, datasetFullResult, FullResult.schema: _*)
         val Array(train, test) = data.randomSplit(Array(trainFraction, testFraction))
 
@@ -155,6 +183,23 @@ class DataSplitter extends SplitterCommonBase {
   }
 
 
+}
+
+object ExternalBlackOakDataSplitter extends SplitterCommonBase {
+
+  val blackoakFullResult = "output.blackoak.external.full.result.file"
+
+  val blackoakTrainFolder = "output.blackoak.external.train.folder"
+  val blackoakTestFolder = "output.blackoak.external.test.folder"
+
+  def main(args: Array[String]): Unit = {
+    val splitter = new DataSplitter()
+    splitter.takeFullResult(externalConf.getString(blackoakFullResult))
+    splitter.addTestFolder(blackoakTestFolder)
+    splitter.addTrainFolder(blackoakTrainFolder)
+
+    splitter.external_run()
+  }
 }
 
 object BlackOakDataSplitter {

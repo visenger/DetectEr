@@ -67,6 +67,7 @@ case class AggregatedTools(dataset: String,
                            unionAll: UnionAll,
                            minK: MinK,
                            linearCombi: LinearCombi,
+                           bayesCombi: LinearCombi,
                            allPMI: List[ToolPMI],
                            allCosineSimis: List[Cosine],
                            allKappas: List[Kappa]) extends ExperimentsCommonConfig {
@@ -77,10 +78,11 @@ case class AggregatedTools(dataset: String,
     val num = tools.size
     val latexString =
       s"""
-         |\\multirow{3}{*}{\\begin{tabular}[c]{@{}l@{}}${tools.mkString("+")}\\\\ $$ ${linearCombi.functionStr} $$ \\end{tabular}}
+         |\\multirow{4}{*}{\\begin{tabular}[c]{@{}l@{}}${tools.mkString("+")}\\\\ $$ ${linearCombi.functionStr} $$ \\end{tabular}}
          |                                                                        & UnionAll & ${unionAll.precision} & ${unionAll.recall} & ${unionAll.f1}  \\\\
          |                                                                        & Min-$num    & ${minK.precision} & ${minK.recall} & ${minK.f1}  \\\\
          |                                                                        & LinComb  & ${linearCombi.precision} & ${linearCombi.recall} & ${linearCombi.f1} \\\\
+         |                                                                        & NaiveBayes  & ${bayesCombi.precision} & ${bayesCombi.recall} & ${bayesCombi.f1} \\\\
          |\\midrule
          |
                  """.stripMargin
@@ -148,12 +150,19 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig
             val minKEval = F1.evaluate(labelAndTools, k)
             val minK = MinK(k, minKEval.precision, minKEval.recall, minKEval.f1)
 
-            val linearCombiEval: Eval = F1.evaluateLinearCombi(session, data, tools)
+            val linearCombiEval: Eval = F1.evaluateLinearCombiWithLBFGS(session, data, tools)
             val linearCombi = LinearCombi(
               linearCombiEval.precision,
               linearCombiEval.recall,
               linearCombiEval.f1,
               linearCombiEval.info)
+
+            val combiWithNaiveBayes = F1.evaluateLinearCombiWithNaiveBayes(session, data, tools)
+            val naiveBayesCombi = LinearCombi(
+              combiWithNaiveBayes.precision,
+              combiWithNaiveBayes.recall,
+              combiWithNaiveBayes.f1,
+              combiWithNaiveBayes.info)
 
 
             val allMetrics: List[(ToolPMI, Kappa, Cosine)] = tools.combinations(2).map(pair => {
@@ -174,7 +183,7 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig
             val allCosine: List[Cosine] = allMetrics.map(_._3)
 
 
-            AggregatedTools(data, toolsCombination, unionAll, minK, linearCombi, allPMIs, allCosine, allKappas)
+            AggregatedTools(data, toolsCombination, unionAll, minK, linearCombi, naiveBayesCombi, allPMIs, allCosine, allKappas)
           })
 
           //todo: perform aggregation here - all information already there!
@@ -187,12 +196,11 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig
             .sortWith((t1, t2)
             => t1.minK.precision >= t2.minK.precision
                 && t1.unionAll.recall >= t2.unionAll.recall
-                && t1.linearCombi.f1 >= t2.linearCombi.f1)
+                && t1.linearCombi.f1 >= t2.linearCombi.f1
+                && t1.bayesCombi.f1 >= t2.bayesCombi.f1)
           //.take(4)
 
           topCombinations.filter(_.combi.combi.size > 2).foreach(combi => {
-
-
             val latexString = combi.makeLatexString()
             println(latexString)
 
@@ -212,11 +220,12 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig
         //pro algorithm on dataset:
         val banditRow: Map[String, String] = banditAlg.getValuesMap[String](schema)
         val expectations = banditRow.getOrElse("expectations", "")
-        val Array(a, b, c, d, e) = expectations.split("\\|")
+        //val Array(a, b, c, d, e) = expectations.split("\\|")
         //1:0.4143 -> toolId:expectation
         val resultOfBanditRun: Seq[ToolExpectation] =
-          Seq(a, b, c, d, e)
-            .map(e => new ToolExpectation().apply(e))
+        expectations.split("\\|").toList
+          .map(e => new ToolExpectation().apply(e))
+
         val sortedResults = resultOfBanditRun
           .sortWith((t1, t2) => t1.expectation > t2.expectation)
 

@@ -1,28 +1,45 @@
 package de.experiments.brute.force
 
+import com.typesafe.config.ConfigFactory
 import de.evaluation.f1.{Eval, F1, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
-import de.experiments.ExperimentsCommonConfig
-import de.model.logistic.regression.LogisticRegressionCommonBase
 import org.apache.spark.sql.DataFrame
 
 /**
-  * Created by visenger on 27/02/17.
+  * Created by visenger on 20/03/17.
   */
-class BruteForceSearch {
+
+trait ExternalExterimentsCommonBase {
+
+  val experimentsConf = ConfigFactory.load("experiments.conf")
+
+  val allTestData: Map[String, String] = Map("ext.blackoak" -> experimentsConf
+    .getString("ext.blackoak.experiments.test.file"))
+
+  def process_ext_test_data(f: Tuple2[String, String] => Unit): Unit = {
+    allTestData.foreach(t => f(t))
+  }
+
+  def getName(alias: String): String = {
+    experimentsConf.getString(s"ext.dictionary.names.$alias")
+  }
+
 
 }
 
-object BruteForceSearchRunner extends ExperimentsCommonConfig with LogisticRegressionCommonBase {
+class ExternalToolsBruteForceSearch {
+
+}
+
+object ExternalToolsBruteForceSearchRunner extends ExternalExterimentsCommonBase {
   def main(args: Array[String]): Unit = {
     val allTools = FullResult.tools
 
     val toolsNumber = allTools.size
 
-    SparkLOAN.withSparkSession("BRUTE-FORCE") {
+    SparkLOAN.withSparkSession("EXT-BRUTE-FORCE") {
       session => {
-
-        process_test_data {
+        process_ext_test_data {
           data => {
 
             val dataSetName = data._1
@@ -67,5 +84,6 @@ object BruteForceSearchRunner extends ExperimentsCommonConfig with LogisticRegre
 
 
   }
-
 }
+
+

@@ -1,8 +1,10 @@
 package de.evaluation.f1
 
 
-import de.model.logistic.regression.LinearFunction
+import de.model.logistic.regression.{LinearFunction, TestData}
+import de.model.naive.bayes.BernoulliNaiveBayes
 import de.model.util.NumbersUtil
+import de.model.util.NumbersUtil.round
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 
@@ -12,6 +14,14 @@ import scala.collection.Map
   * Created by visenger on 07/12/16.
   */
 object F1 {
+
+  def evaluateLinearCombiWithNaiveBayes(session: SparkSession, datasetName: String, activatedTools: Seq[String] = Seq()): Eval = {
+    val bernoulliNaiveBayes = new BernoulliNaiveBayes()
+    bernoulliNaiveBayes.onDatasetName(datasetName)
+    bernoulliNaiveBayes.onTools(activatedTools)
+    val eval: Eval = bernoulliNaiveBayes.run(session)
+    eval
+  }
 
   def evaluateLinearCombi(session: SparkSession, datasetName: String, activatedTools: Seq[String] = Seq()): Eval = {
 
@@ -29,6 +39,48 @@ object F1 {
     linearFunction.onTools(activatedTools)
     val eval: Eval = linearFunction.evaluateLinearCombiWithLBFGS(session)
     eval
+  }
+
+  def evalPredictionAndLabels(predictionAndLabels: RDD[(Double, Double)]): Eval = {
+    val outcomeCounts: Map[(Double, Double), Long] = predictionAndLabels.countByValue()
+
+    var tp = 0.0
+    var fn = 0.0
+    var tn = 0.0
+    var fp = 0.0
+
+    outcomeCounts.foreach(elem => {
+      val values = elem._1
+      val count = elem._2
+      values match {
+        //(prediction, label)
+        case (0.0, 0.0) => tn = count
+        case (1.0, 1.0) => tp = count
+        case (1.0, 0.0) => fp = count
+        case (0.0, 1.0) => fn = count
+      }
+    })
+
+    //    println(s"true positives: $tp")
+
+    val totalData = predictionAndLabels.count()
+
+    val accuracy = (tp + tn) / totalData.toDouble
+    //    println(s"Accuracy: $accuracy")
+    val precision = tp / (tp + fp).toDouble
+    //    println(s"Precision: $precision")
+
+    val recall = tp / (tp + fn).toDouble
+    //    println(s"Recall: $recall")
+
+    val F1 = 2 * precision * recall / (precision + recall)
+    //    println(s"F-1 Score: $F1")
+
+    val wrongPredictions: Double = outcomeCounts
+      .count(key => key._1 != key._2)
+
+    val testData = TestData(totalData, wrongPredictions.toLong, round(accuracy, 4), round(precision, 4), round(recall, 4), round(F1, 4))
+    Eval(testData.precision, testData.recall, testData.f1, testData.info)
   }
 
 

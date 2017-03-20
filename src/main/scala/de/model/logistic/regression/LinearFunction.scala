@@ -1,8 +1,9 @@
 package de.model.logistic.regression
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.f1.{Eval, FullResult}
+import de.evaluation.f1.{Eval, F1, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
+import de.model.util.FormatUtil
 import de.model.util.NumbersUtil.round
 import org.apache.spark.ml.classification.{BinaryLogisticRegressionSummary, LogisticRegression, LogisticRegressionModel}
 import org.apache.spark.ml.linalg.Vectors
@@ -82,8 +83,8 @@ class LinearFunction {
     val trainDataDF: DataFrame = DataSetCreator.createFrame(session, trainDataPath, FullResult.schema: _*)
     val testDataDF = DataSetCreator.createFrame(session, testDataPath, FullResult.schema: _*)
 
-    val train: RDD[LabeledPoint] = prepareDataToLabeledPoints(session, trainDataDF)
-    val test = prepareDataToLabeledPoints(session, testDataDF)
+    val train: RDD[LabeledPoint] = FormatUtil.prepareDataToLabeledPoints(session, trainDataDF, toolsForLinearCombi)
+    val test = FormatUtil.prepareDataToLabeledPoints(session, testDataDF, toolsForLinearCombi)
 
     val eval = trainModelWithLBFGS(train, test)
 
@@ -240,9 +241,9 @@ class LinearFunction {
     val model = new LogisticRegressionWithLBFGS()
       .setNumClasses(2)
       .setIntercept(true)
-      .run(train, initialWeights)
+      .run(train /*, initialWeights*/)
 
-    println(initialWeights.toJson)
+    // println(initialWeights.toJson)
 
     val allThresholds = Seq(0.5, 0.45, 0.4,
       0.39, 0.38, 0.377, 0.375, 0.374, 0.37,
@@ -260,10 +261,10 @@ class LinearFunction {
       val intercept: Double = model.intercept
       val modelFormula = createModelFormula(intercept, coefficients)
 
-      if (testResult.precision <= maxPrecision && testResult.recall <= maxRecall) {
-        println(s"models threshold: ${model.getThreshold.get}")
-        println(testResult)
-      }
+//      if (testResult.precision <= maxPrecision && testResult.recall <= maxRecall) {
+//        println(s"models threshold: ${model.getThreshold.get}")
+//        println(testResult)
+//      }
 
       TestData(testResult.totalTest,
         testResult.wrongPrediction,

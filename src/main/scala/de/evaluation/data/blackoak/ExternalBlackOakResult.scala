@@ -54,7 +54,7 @@ object ExternalBlackOakFullResultRunner {
 
     val groundTruthPath = config.getString("output.blackoak.external.goldstandard.ground.truth.file")
 
-    val dboostPath = config.getString("tools.dboost")
+    //val dboostPath = config.getString("tools.dboost")
     val gaussianPath = config.getString("tools.gaussian")
     val googleRefinePath = config.getString("tools.google.refine")
     val histogramsPath = config.getString("tools.histograms")
@@ -69,7 +69,7 @@ object ExternalBlackOakFullResultRunner {
       session => {
         val groundTruth = DataSetCreator.createFrameNoHeader(session, groundTruthPath, GoldStandard.schema: _*)
 
-        val dboostResult = DataSetCreator.createFrameNoHeader(session, dboostPath, Cells.schema: _*)
+        //val dboostResult = DataSetCreator.createFrameNoHeader(session, dboostPath, Cells.schema: _*)
         val gaussianResult = DataSetCreator.createFrameNoHeader(session, gaussianPath, Cells.schema: _*)
         val googleRefineResult = DataSetCreator.createFrameNoHeader(session, googleRefinePath, Cells.schema: _*)
         val histogramResult = DataSetCreator.createFrameNoHeader(session, histogramsPath, Cells.schema: _*)
@@ -79,22 +79,21 @@ object ExternalBlackOakFullResultRunner {
         val tamrResult = DataSetCreator.createFrameNoHeader(session, tamrPath, Cells.schema: _*)
         val trifactaResult = DataSetCreator.createFrameNoHeader(session, trifactaPath, Cells.schema: _*)
 
-        val allResults: Seq[DataFrame] = Seq(dboostResult,
-          gaussianResult,
-          googleRefineResult,
-          histogramResult,
-          kataraResult,
-          mixtureResult,
-          rulebasedResult,
-          tamrResult,
-          trifactaResult)
+        val allResults: Seq[DataFrame] =
+          Seq(gaussianResult,
+            googleRefineResult,
+            histogramResult,
+            kataraResult,
+            mixtureResult,
+            rulebasedResult,
+            tamrResult,
+            trifactaResult)
 
         val fullResultCreator = new FullResultCreator(session)
         fullResultCreator.onToolsResults(allResults)
         fullResultCreator.onGroundTruth(groundTruth)
         val fullResult: DataFrame = fullResultCreator.getFullResult
         fullResult.show()
-        //todo: persist
 
         val outputPath = config.getString("output.blackoak.external.full.result.folder")
 

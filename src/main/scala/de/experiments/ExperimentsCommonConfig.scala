@@ -17,6 +17,7 @@ trait ExperimentsCommonConfig {
   val hospTestFile = experimentsConf.getString("hosp.experiments.test.file")
   val salariesTestFile = experimentsConf.getString("salaries.experiments.test.file")
 
+
   val allTestDataSets: Seq[String] = Seq(blackoakTestFile, hospTestFile, salariesTestFile)
 
 
@@ -28,6 +29,20 @@ trait ExperimentsCommonConfig {
     "hosp" -> hospTrainFile,
     "salaries" -> salariesTrainFile)
 
+  val allTrainAndTestData: Map[String, (String, String)] = Map(
+    "blackoak" -> (blackoakTrainFile, blackoakTestFile),
+    "hosp" -> (hospTrainFile, hospTestFile),
+    "salaries" -> (salariesTrainFile, salariesTestFile))
+
+  val extBlackoakTrainFile = experimentsConf.getString("ext.blackoak.experiments.train.file")
+  val extBlackoakTestFile = experimentsConf.getString("ext.blackoak.experiments.test.file")
+
+  val allExternalData: Map[String, (String, String)] = Map("ext.blackoak" -> (extBlackoakTrainFile, extBlackoakTestFile))
+
+  def process_ext_data(f: Tuple2[String, (String, String)] => Unit): Unit = {
+    allExternalData.foreach(data => f(data))
+  }
+
 
   def process_test_data(f: Tuple2[String, String] => Unit): Unit = {
     allTestData.foreach(data => f(data))
@@ -35,6 +50,10 @@ trait ExperimentsCommonConfig {
 
   def process_train_data(f: Tuple2[String, String] => Unit): Unit = {
     allTrainData.foreach(data => f(data))
+  }
+
+  def process_data(f: Tuple2[String, (String, String)] => Unit): Unit = {
+    allTrainAndTestData.foreach(data => f(data))
   }
 
   def getName(tool: String) = experimentsConf.getString(s"dictionary.names.$tool")
