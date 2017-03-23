@@ -1,6 +1,6 @@
 package de.evaluation.data.truth.matrix
 
-import de.evaluation.f1.FullResult
+import de.evaluation.f1.{Eval, F1, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
 import de.experiments.cosine.similarity.{AllToolsSimilarity, Cosine}
@@ -9,7 +9,7 @@ import de.model.mutual.information.{PMIEstimator, ToolPMI}
 import org.apache.spark.ml.clustering.{BisectingKMeans, KMeans}
 import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 
 /**
   * Created by visenger on 21/03/17.
@@ -18,14 +18,25 @@ class TruthMatrix {
 
 }
 
+object ClusteringAllRunner {
+  def main(args: Array[String]): Unit = {
+    TruthMatrixClusteringRunner.run()
+    ErrorMatrixClusteringRunner.run()
+  }
+}
+
 object TruthMatrixClusteringRunner extends ExperimentsCommonConfig {
   def main(args: Array[String]): Unit = {
+    run()
+  }
+
+  def run(): Unit = {
 
     SparkLOAN.withSparkSession("WAHRHEITSMATRIX") {
       session => {
 
         println(s"CLUSTERING ON TRUTH MATRIX")
-
+        val dataSetName = "ext.blackoak"
         import org.apache.spark.sql.functions._
         import session.implicits._
 
@@ -78,58 +89,111 @@ object TruthMatrixClusteringRunner extends ExperimentsCommonConfig {
           .fit(transposedDF)
           .transform(transposedDF)
 
-        val kMeans = new KMeans()
-          .setMaxIter(200)
-          .setK(3)
-          .setSeed(5L)
+        (2 to 4).foreach(k => {
+          println(s"k = $k")
+          val kMeans = new KMeans()
+            //          .setMaxIter(200)
+            .setK(k)
+          //.setSeed(5L)
 
 
-        val kMeansModel = kMeans.fit(truthMatrixWithIndx)
-        val kMeansClusters: DataFrame = kMeansModel
-          .transform(truthMatrixWithIndx)
-          .withColumn("tool", getRealName(truthMatrixWithIndx("tool-name"))).toDF()
+          val kMeansModel = kMeans.fit(truthMatrixWithIndx)
+          val kMeansClusters: DataFrame = kMeansModel
+            .transform(truthMatrixWithIndx)
+            .withColumn("tool", truthMatrixWithIndx("tool-name"))
+            .toDF()
 
-        val kMeansResult = kMeansClusters.select("prediction", "tool").groupByKey(row => {
-          row.getInt(0)
-        }).mapGroups((num, row) => {
-          val clusterTools: Seq[String] = row.map(_.getString(1)).toSeq
-          (num, clusterTools.mkString(", "))
-        }).rdd.collect().toSeq
+          val kMeansResult = kMeansClusters
+            .select("prediction", "tool")
+            .groupByKey(row => {
+              row.getInt(0)
+            }).mapGroups((num, row) => {
+            val clusterTools: Seq[String] = row.map(_.getString(1)).toSeq
+            (num, clusterTools.mkString(splitter))
+          }).rdd.collect().toSeq
 
-        println(s"kMeans")
-        kMeansResult.foreach(println)
+          println(s"kMeans")
+          kMeansResult.foreach(cluster => {
+            val evals: String = evaluateCluster(session, dataSetName, trainDF, cluster)
+            println(evals)
+          })
 
-        //hierarchical clustering
-        val bisectingKMeans = new BisectingKMeans()
-          .setSeed(5L)
-          .setK(3)
-        val bisectingKMeansModel = bisectingKMeans.fit(truthMatrixWithIndx)
-        val bisectingKMeansClusters = bisectingKMeansModel
-          .transform(truthMatrixWithIndx)
-          .withColumn("tool", getRealName(truthMatrixWithIndx("tool-name")))
+          //hierarchical clustering
+          val bisectingKMeans = new BisectingKMeans()
+            //.setSeed(5L)
+            .setK(k)
+          val bisectingKMeansModel = bisectingKMeans.fit(truthMatrixWithIndx)
+          val bisectingKMeansClusters = bisectingKMeansModel
+            .transform(truthMatrixWithIndx)
+            .withColumn("tool", truthMatrixWithIndx("tool-name"))
 
 
-        val bisectingKMeansResult: Seq[(Int, String)] = bisectingKMeansClusters.select("prediction", "tool").groupByKey(row => {
-          row.getInt(0)
-        }).mapGroups((num, row) => {
-          val clusterTools: Seq[String] = row.map(_.getString(1)).toSeq
-          (num, clusterTools.mkString(", "))
-        }).rdd.collect().toSeq
+          val bisectingKMeansResult: Seq[(Int, String)] = bisectingKMeansClusters
+            .select("prediction", "tool")
+            .groupByKey(row => {
+              row.getInt(0)
+            }).mapGroups((num, row) => {
+            val clusterTools: Seq[String] = row.map(_.getString(1)).toSeq
+            (num, clusterTools.mkString(splitter))
+          }).rdd.collect().toSeq
 
-        println(s"bisecting kMeans")
-        bisectingKMeansResult.foreach(println)
+          println(s"bisecting kMeans")
+          bisectingKMeansResult.foreach(cluster => {
+            val evals: String = evaluateCluster(session, dataSetName, trainDF, cluster)
+            println(evals)
+          })
+        })
 
       }
     }
+  }
+
+
+  private def evaluateCluster(session: SparkSession, dataSetName: String, trainDF: DataFrame, cluster: (Int, String)) = {
+
+    val nr = cluster._1
+    val tools: Seq[String] = cluster._2.split(splitter).toSeq
+
+    val toolsToEval: DataFrame = trainDF.select(FullResult.label, tools: _*)
+
+    val linearCombi = F1.evaluateLinearCombiWithLBFGS(session, dataSetName, tools)
+
+    val bayesCombi = F1.evaluateLinearCombiWithNaiveBayes(session, dataSetName, tools)
+
+    val unionAll: Eval = F1.evaluate(toolsToEval)
+
+    val num = tools.size
+    //  unionAll.printResult("Union All: ")
+    val minK: Eval = F1.evaluate(toolsToEval, num)
+    //  minK.printResult(s"min-$num")
+
+    val toolsRealNames: Seq[String] = tools.map(getExtName(_))
+
+    val latexBruteForceRow =
+      s"""
+         |\\multirow{4}{*}{\\begin{tabular}[c]{@{}l@{}}${toolsRealNames.mkString("+")}\\\\ $$ ${linearCombi.info} $$ \\end{tabular}}
+         |                                                                        & UnionAll & ${unionAll.precision} & ${unionAll.recall} & ${unionAll.f1}  \\\\
+         |                                                                        & Min-$num    & ${minK.precision} & ${minK.recall} & ${minK.f1}  \\\\
+         |                                                                        & LinComb  & ${linearCombi.precision} & ${linearCombi.recall} & ${linearCombi.f1} \\\\
+         |                                                                        & NaiveBayes  & ${bayesCombi.precision} & ${bayesCombi.recall} & ${bayesCombi.f1} \\\\
+         |\\midrule
+         |
+                 """.stripMargin
+
+    latexBruteForceRow
   }
 }
 
 object ErrorMatrixClusteringRunner extends ExperimentsCommonConfig {
   def main(args: Array[String]): Unit = {
+    run()
+  }
+
+  def run(): Unit = {
 
     SparkLOAN.withSparkSession("ERRORMATRIX-CLUSTERING") {
       session => {
-
+        val dataSetName = "ext.blackoak"
         println(s"CLUSTERING ON ERROR MATRIX")
 
         import org.apache.spark.sql.functions._
@@ -156,10 +220,6 @@ object ErrorMatrixClusteringRunner extends ExperimentsCommonConfig {
           (columnName, valsVector)
         }).toDF("tool-name", "features")
 
-
-        transposedDF.withColumn(s"correct/total", sum(transposedDF("features"))).show()
-
-
         val indexer = new StringIndexer()
           .setInputCol("tool-name")
           .setOutputCol("label")
@@ -168,49 +228,96 @@ object ErrorMatrixClusteringRunner extends ExperimentsCommonConfig {
           .fit(transposedDF)
           .transform(transposedDF)
 
-        val kMeans = new KMeans()
-          .setMaxIter(200)
-          .setK(3)
-          .setSeed(5L)
+        (2 to 4).foreach(k => {
+          println(s"k = $k")
+          val kMeans = new KMeans()
+            //.setMaxIter(200)
+            .setK(k)
+          //.setSeed(5L)
 
 
-        val kMeansModel = kMeans.fit(truthMatrixWithIndx)
-        val kMeansClusters: DataFrame = kMeansModel
-          .transform(truthMatrixWithIndx)
-          .withColumn("tool", getRealName(truthMatrixWithIndx("tool-name"))).toDF()
+          val kMeansModel = kMeans.fit(truthMatrixWithIndx)
+          val kMeansClusters: DataFrame = kMeansModel
+            .transform(truthMatrixWithIndx)
+            .withColumn("tool", truthMatrixWithIndx("tool-name"))
+            .toDF()
 
-        val kMeansResult = kMeansClusters.select("prediction", "tool").groupByKey(row => {
-          row.getInt(0)
-        }).mapGroups((num, row) => {
-          val clusterTools: Seq[String] = row.map(_.getString(1)).toSeq
-          (num, clusterTools.mkString(", "))
-        }).rdd.collect().toSeq
+          val kMeansResult: Seq[(Int, String)] = kMeansClusters.select("prediction", "tool").groupByKey(row => {
+            row.getInt(0)
+          }).mapGroups((num, row) => {
+            val clusterTools: Seq[String] = row.map(_.getString(1)).toSeq
+            (num, clusterTools.mkString(splitter))
+          }).rdd.collect().toSeq
 
-        println(s"kMeans")
-        kMeansResult.foreach(println)
+          println(s"kMeans")
 
-        //hierarchical clustering
-        val bisectingKMeans = new BisectingKMeans()
-          .setSeed(5L)
-          .setK(3)
-        val bisectingKMeansModel = bisectingKMeans.fit(truthMatrixWithIndx)
-        val bisectingKMeansClusters = bisectingKMeansModel
-          .transform(truthMatrixWithIndx)
-          .withColumn("tool", getRealName(truthMatrixWithIndx("tool-name")))
+          kMeansResult.foreach(cluster => {
+            val latexBruteForceRow: String = evaluateCluster(session, dataSetName, trainDF, cluster)
+            println(latexBruteForceRow)
+          })
+
+          //hierarchical clustering
+          val bisectingKMeans = new BisectingKMeans()
+            //  .setSeed(5L)
+            .setK(k)
+
+          val bisectingKMeansModel = bisectingKMeans.fit(truthMatrixWithIndx)
+          val bisectingKMeansClusters = bisectingKMeansModel
+            .transform(truthMatrixWithIndx)
+            .withColumn("tool", truthMatrixWithIndx("tool-name"))
+            .toDF()
 
 
-        val bisectingKMeansResult: Seq[(Int, String)] = bisectingKMeansClusters.select("prediction", "tool").groupByKey(row => {
-          row.getInt(0)
-        }).mapGroups((num, row) => {
-          val clusterTools: Seq[String] = row.map(_.getString(1)).toSeq
-          (num, clusterTools.mkString(", "))
-        }).rdd.collect().toSeq
+          val bisectingKMeansResult: Seq[(Int, String)] = bisectingKMeansClusters.select("prediction", "tool").groupByKey(row => {
+            row.getInt(0)
+          }).mapGroups((num, row) => {
+            val clusterTools: Seq[String] = row.map(_.getString(1)).toSeq
+            (num, clusterTools.mkString(splitter))
+          }).rdd.collect().toSeq
 
-        println(s"bisecting kMeans")
-        bisectingKMeansResult.foreach(println)
+          println(s"bisecting kMeans")
+          bisectingKMeansResult.foreach(cluster => {
+            val evals: String = evaluateCluster(session, dataSetName, trainDF, cluster)
+            println(evals)
+          })
+        })
 
       }
     }
+  }
+
+  private def evaluateCluster(session: SparkSession, dataSetName: String, trainDF: DataFrame, cluster: (Int, String)) = {
+
+    val nr = cluster._1
+    val tools: Seq[String] = cluster._2.split(splitter).toSeq
+
+    val toolsToEval: DataFrame = trainDF.select(FullResult.label, tools: _*)
+
+    val linearCombi = F1.evaluateLinearCombiWithLBFGS(session, dataSetName, tools)
+
+    val bayesCombi = F1.evaluateLinearCombiWithNaiveBayes(session, dataSetName, tools)
+
+    val unionAll: Eval = F1.evaluate(toolsToEval)
+
+    val num = tools.size
+    //  unionAll.printResult("Union All: ")
+    val minK: Eval = F1.evaluate(toolsToEval, num)
+    //  minK.printResult(s"min-$num")
+
+    val toolsRealNames: Seq[String] = tools.map(getExtName(_))
+
+    val latexBruteForceRow =
+      s"""
+         |\\multirow{4}{*}{\\begin{tabular}[c]{@{}l@{}}${toolsRealNames.mkString("+")}\\\\ $$ ${linearCombi.info} $$ \\end{tabular}}
+         |                                                                        & UnionAll & ${unionAll.precision} & ${unionAll.recall} & ${unionAll.f1}  \\\\
+         |                                                                        & Min-$num    & ${minK.precision} & ${minK.recall} & ${minK.f1}  \\\\
+         |                                                                        & LinComb  & ${linearCombi.precision} & ${linearCombi.recall} & ${linearCombi.f1} \\\\
+         |                                                                        & NaiveBayes  & ${bayesCombi.precision} & ${bayesCombi.recall} & ${bayesCombi.f1} \\\\
+         |\\midrule
+         |
+                 """.stripMargin
+
+    latexBruteForceRow
   }
 }
 

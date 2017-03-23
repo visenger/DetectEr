@@ -1,5 +1,7 @@
 package de.experiments.brute.force
 
+import java.io.{File, PrintWriter}
+
 import com.typesafe.config.ConfigFactory
 import de.evaluation.f1.{Eval, F1, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
@@ -13,6 +15,9 @@ trait ExternalExterimentsCommonBase {
 
   val experimentsConf = ConfigFactory.load("experiments.conf")
 
+  val newLine = "\n"
+  val extBruteForceSearchOut = experimentsConf.getString("ext.brute.force.search.file")
+
   val allTestData: Map[String, String] = Map("ext.blackoak" -> experimentsConf
     .getString("ext.blackoak.experiments.test.file"))
 
@@ -22,6 +27,12 @@ trait ExternalExterimentsCommonBase {
 
   def getName(alias: String): String = {
     experimentsConf.getString(s"ext.dictionary.names.$alias")
+  }
+
+  def write_to_file(path: String)(writer: PrintWriter => Unit) = {
+    val file = new PrintWriter(new File(path))
+    writer(file)
+    file.close()
   }
 
 
@@ -37,51 +48,62 @@ object ExternalToolsBruteForceSearchRunner extends ExternalExterimentsCommonBase
 
     val toolsNumber = allTools.size
 
-    SparkLOAN.withSparkSession("EXT-BRUTE-FORCE") {
-      session => {
-        process_ext_test_data {
-          data => {
+    write_to_file(extBruteForceSearchOut) {
+      file => {
 
-            val dataSetName = data._1
-            println(s" DATASET: ${dataSetName}")
-            val pathToData = data._2
-            val fullDF: DataFrame = DataSetCreator.createFrame(session, pathToData, FullResult.schema: _*)
 
-            (2 to toolsNumber).foreach(num => {
-              val combiOfK: List[Seq[String]] = allTools.combinations(num).toList
-              combiOfK.foreach(tools => {
+        SparkLOAN.withSparkSession("EXT-BRUTE-FORCE") {
+          session => {
+            process_ext_test_data {
+              data => {
 
-                val toolsToEval: DataFrame = fullDF.select(FullResult.label, tools: _*)
+                val dataSetName = data._1
+                println(s" DATASET: ${dataSetName}")
+                val pathToData = data._2
+                val fullDF: DataFrame = DataSetCreator.createFrame(session, pathToData, FullResult.schema: _*)
 
-                val linearCombi = F1.evaluateLinearCombiWithLBFGS(session, dataSetName, tools)
+                (2 to toolsNumber).foreach(num => {
+                  val combiOfK: List[Seq[String]] = allTools.combinations(num).toList
+                  combiOfK.foreach(tools => {
 
-                val unionAll: Eval = F1.evaluate(toolsToEval)
-                //  unionAll.printResult("Union All: ")
-                val minK: Eval = F1.evaluate(toolsToEval, num)
-                //  minK.printResult(s"min-$num")
+                    val toolsToEval: DataFrame = fullDF.select(FullResult.label, tools: _*)
 
-                val toolsRealNames: Seq[String] = tools.map(getName(_))
+                    val linearCombi = F1.evaluateLinearCombiWithLBFGS(session, dataSetName, tools)
 
-                val latexBruteForceRow =
-                  s"""
-                     |\\multirow{3}{*}{\\begin{tabular}[c]{@{}l@{}}${toolsRealNames.mkString("+")}\\\\ $$ ${linearCombi.info} $$ \\end{tabular}}
-                     |                                                                        & UnionAll & ${unionAll.precision} & ${unionAll.recall} & ${unionAll.f1}  \\\\
-                     |                                                                        & Min-$num    & ${minK.precision} & ${minK.recall} & ${minK.f1}  \\\\
-                     |                                                                        & LinComb  & ${linearCombi.precision} & ${linearCombi.recall} & ${linearCombi.f1} \\\\
-                     |\\midrule
-                     |
+                    val bayesCombi = F1.evaluateLinearCombiWithNaiveBayes(session, dataSetName, tools)
+
+                    val unionAll: Eval = F1.evaluate(toolsToEval)
+                    //  unionAll.printResult("Union All: ")
+                    val minK: Eval = F1.evaluate(toolsToEval, num)
+                    //  minK.printResult(s"min-$num")
+
+                    val toolsRealNames: Seq[String] = tools.map(getName(_))
+
+                    val latexBruteForceRow =
+                      s"""
+                         |\\multirow{4}{*}{\\begin{tabular}[c]{@{}l@{}}${toolsRealNames.mkString("+")}\\\\ $$ ${linearCombi.info} $$ \\end{tabular}}
+                         |                                                                        & UnionAll & ${unionAll.precision} & ${unionAll.recall} & ${unionAll.f1}  \\\\
+                         |                                                                        & Min-$num    & ${minK.precision} & ${minK.recall} & ${minK.f1}  \\\\
+                         |                                                                        & LinComb  & ${linearCombi.precision} & ${linearCombi.recall} & ${linearCombi.f1} \\\\
+                         |                                                                        & NaiveBayes  & ${bayesCombi.precision} & ${bayesCombi.recall} & ${bayesCombi.f1} \\\\
+                         |\\midrule
+                         |
                  """.stripMargin
 
-                println(latexBruteForceRow)
 
-              })
-            })
+                    println(latexBruteForceRow)
+
+                    file.write(latexBruteForceRow)
+
+                  })
+                })
+              }
+            }
+
           }
         }
-
       }
     }
-
 
   }
 }

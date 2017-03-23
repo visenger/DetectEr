@@ -55,8 +55,8 @@ class BernoulliNaiveBayes extends ExperimentsCommonConfig {
     val trainDF = DataSetCreator.createFrame(session, trainDataPath, FullResult.schema: _*)
     val testDF = DataSetCreator.createFrame(session, testDataPath, FullResult.schema: _*)
 
-    val trainLabeledPoints = FormatUtil.prepareDataToLabeledPoints(session, trainDF, toolsForLinearCombi)
-    val testLabeledPoints = FormatUtil.prepareDataToLabeledPoints(session, testDF, toolsForLinearCombi)
+    val trainLabeledPoints: RDD[LabeledPoint] = FormatUtil.prepareDataToLabeledPoints(session, trainDF, toolsForLinearCombi)
+    val testLabeledPoints: RDD[LabeledPoint] = FormatUtil.prepareDataToLabeledPoints(session, testDF, toolsForLinearCombi)
 
     val naiveBayesModel = NaiveBayes.train(trainLabeledPoints, lambda = 1.0, modelType = "bernoulli")
 
@@ -65,6 +65,7 @@ class BernoulliNaiveBayes extends ExperimentsCommonConfig {
         val prediction = naiveBayesModel.predict(features)
         (prediction, label)
     }
+
 
     val evalTestData: Eval = F1.evalPredictionAndLabels(predictionAndLabels)
     //    println(s"Naive Bayes for: $datasetName")

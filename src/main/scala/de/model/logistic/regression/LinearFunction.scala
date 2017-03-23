@@ -1,7 +1,7 @@
 package de.model.logistic.regression
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.f1.{Eval, F1, FullResult}
+import de.evaluation.f1.{Eval, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.model.util.FormatUtil
 import de.model.util.NumbersUtil.round
@@ -91,6 +91,7 @@ class LinearFunction {
     eval
   }
 
+  @Deprecated
   def evaluateLinearCombi(session: SparkSession): Eval = {
     val dataDF: DataFrame = DataSetCreator.createFrame(session, trainDataPath, FullResult.schema: _*)
     val train: DataFrame = prepareDataToLIBSVM(session, dataDF)
@@ -261,10 +262,10 @@ class LinearFunction {
       val intercept: Double = model.intercept
       val modelFormula = createModelFormula(intercept, coefficients)
 
-//      if (testResult.precision <= maxPrecision && testResult.recall <= maxRecall) {
-//        println(s"models threshold: ${model.getThreshold.get}")
-//        println(testResult)
-//      }
+      //      if (testResult.precision <= maxPrecision && testResult.recall <= maxRecall) {
+      //        println(s"models threshold: ${model.getThreshold.get}")
+      //        println(testResult)
+      //      }
 
       TestData(testResult.totalTest,
         testResult.wrongPrediction,

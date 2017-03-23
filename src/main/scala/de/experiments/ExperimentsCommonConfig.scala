@@ -7,6 +7,8 @@ import com.typesafe.config.ConfigFactory
   */
 trait ExperimentsCommonConfig {
 
+  val splitter = ","
+
   val experimentsConf = ConfigFactory.load("experiments.conf")
 
   val blackoakTrainFile = experimentsConf.getString("blackoak.experiments.train.file")
