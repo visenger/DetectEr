@@ -42,6 +42,7 @@ object F1 {
   }
 
   def evalPredictionAndLabels(predictionAndLabels: RDD[(Double, Double)]): Eval = {
+
     val outcomeCounts: Map[(Double, Double), Long] = predictionAndLabels.countByValue()
 
     var tp = 0.0
@@ -54,10 +55,10 @@ object F1 {
       val count = elem._2
       values match {
         //(prediction, label)
-        case (0.0, 0.0) => tn = count
         case (1.0, 1.0) => tp = count
         case (1.0, 0.0) => fp = count
         case (0.0, 1.0) => fn = count
+        case (0.0, 0.0) => tn = count
       }
     })
 
@@ -229,6 +230,23 @@ object F1 {
   }
 
   def getEvalForTool(resultDF: DataFrame, tool: String): Eval = {
+
+    val toolAndLabel = resultDF.select(tool, FullResult.label)
+
+    //predictionAndLabels: RDD[(Double, Double)]
+    //predict->value by tool
+    //label -> real error
+
+    val predictAndLabel: RDD[(Double, Double)] = toolAndLabel
+      .rdd
+      .map(row => (row.getString(0).toDouble, row.getString(1).toDouble))
+
+    val eval = evalPredictionAndLabels(predictAndLabel)
+    eval
+  }
+
+  @Deprecated
+  def _getEvalForTool(resultDF: DataFrame, tool: String): Eval = {
     val labelAndTool = resultDF.select(FullResult.label, tool)
     val toolIndicatedError = labelAndTool.filter(resultDF.col(tool) === "1")
 

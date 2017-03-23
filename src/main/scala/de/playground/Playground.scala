@@ -73,7 +73,7 @@ object F1Calculator extends App {
 
   import de.model.util.NumbersUtil.round
 
-  val prTuples: Seq[(Double, Double)] = Seq((0.98, 0.47), (0.93, 0.9994), (0.7674, 0.1399))
+  val prTuples: Seq[(Double, Double)] = Seq((0.81, 0.97))
 
   prTuples.foreach(tuple => {
     val f1 = 2 * (tuple._1.toDouble * tuple._2.toDouble) / (tuple._1 + tuple._2)

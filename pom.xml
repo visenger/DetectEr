@@ -81,6 +81,13 @@
         </dependency>
 
 
+        <dependency>
+            <groupId>org.scalanlp</groupId>
+            <artifactId>breeze-viz_2.11</artifactId>
+            <version>0.13</version>
+        </dependency>
+
+
         <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
         <dependency>
             <groupId>org.postgresql</groupId>

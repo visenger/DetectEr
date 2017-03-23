@@ -1,7 +1,7 @@
 package de.model.baseline
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.f1.{F1, FullResult}
+import de.evaluation.f1.{Eval, F1, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.sql._
 
@@ -9,6 +9,7 @@ import org.apache.spark.sql._
   * Created by visenger on 08/02/17.
   */
 class Baseline {
+
 
   private var fullResult = ""
 
@@ -18,6 +19,7 @@ class Baseline {
   }
 
   def calculateEvalForEachTool(): Unit = {
+    val config = ConfigFactory.load("experiments.conf")
     SparkLOAN.withSparkSession("F1FOREACHTOOL") {
       session => {
 
@@ -28,7 +30,25 @@ class Baseline {
         tools.foreach(tool => {
           val eval = F1.getEvalForTool(data, tool)
           //eval.printResult(tool)
-          eval.printLatexString(tool)
+          eval.printLatexString(config.getString(s"dictionary.names.$tool"))
+        })
+      }
+    }
+  }
+
+  def ext_calculateEvalForEachTool(): Unit = {
+    val config = ConfigFactory.load("experiments.conf")
+    SparkLOAN.withSparkSession("F1FOREACHTOOL") {
+      session => {
+
+        val data: DataFrame = getData(session)
+
+        val tools = FullResult.tools
+
+        tools.foreach(tool => {
+          val eval = F1.getEvalForTool(data, tool)
+          //eval.printResult(tool)
+          eval.printLatexString(config.getString(s"ext.dictionary.names.$tool"))
         })
       }
     }
@@ -96,4 +116,25 @@ object BlackOackBaselineRunner {
 
   }
 
+}
+
+object ExtBlackoakBaselineRunner {
+  def main(args: Array[String]): Unit = {
+    val config = ConfigFactory.load("experiments.conf")
+    val baseline = new Baseline()
+    baseline.onData(config.getString("ext.blackoak.experiments.train.file"))
+    baseline.ext_calculateEvalForEachTool()
+    baseline.calculateBaseline()
+
+    SparkLOAN.withSparkSession("LINCOMBI") {
+      session => {
+        val data = "ext.blackoak"
+        val tools = FullResult.tools
+        val linearCombiEval: Eval = F1.evaluateLinearCombiWithLBFGS(session, data, tools)
+        linearCombiEval.printResult("all tools lin combi: ")
+        val combiWithNaiveBayes = F1.evaluateLinearCombiWithNaiveBayes(session, data, tools)
+        combiWithNaiveBayes.printResult("all tools naive bayes: ")
+      }
+    }
+  }
 }

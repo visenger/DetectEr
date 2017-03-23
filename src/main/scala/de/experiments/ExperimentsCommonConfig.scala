@@ -20,7 +20,6 @@ trait ExperimentsCommonConfig {
 
   val allTestDataSets: Seq[String] = Seq(blackoakTestFile, hospTestFile, salariesTestFile)
 
-
   val allTestData: Map[String, String] = Map("blackoak" -> blackoakTestFile,
     "hosp" -> hospTestFile,
     "salaries" -> salariesTestFile)
@@ -37,7 +36,8 @@ trait ExperimentsCommonConfig {
   val extBlackoakTrainFile = experimentsConf.getString("ext.blackoak.experiments.train.file")
   val extBlackoakTestFile = experimentsConf.getString("ext.blackoak.experiments.test.file")
 
-  val allExternalData: Map[String, (String, String)] = Map("ext.blackoak" -> (extBlackoakTrainFile, extBlackoakTestFile))
+  val allExternalData: Map[String, (String, String)] =
+    Map("ext.blackoak" -> (extBlackoakTrainFile, extBlackoakTestFile))
 
   def process_ext_data(f: Tuple2[String, (String, String)] => Unit): Unit = {
     allExternalData.foreach(data => f(data))
@@ -57,6 +57,7 @@ trait ExperimentsCommonConfig {
   }
 
   def getName(tool: String) = experimentsConf.getString(s"dictionary.names.$tool")
+  def getExtName(tool: String) = experimentsConf.getString(s"ext.dictionary.names.$tool")
 
 
 }

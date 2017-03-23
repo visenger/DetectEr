@@ -20,7 +20,6 @@ object ToolsClustering extends ExperimentsCommonConfig {
         process_train_data {
           trainFile => {
 
-            import org.apache.spark.sql.functions._
             import session.implicits._
 
             val dataSetName = trainFile._1
@@ -29,10 +28,6 @@ object ToolsClustering extends ExperimentsCommonConfig {
             println(s"processing: $dataSetName")
 
             val fullDF = DataSetCreator.createFrame(session, trainFilePath, FullResult.schema: _*)
-
-            // val withIdx = fullDF.withColumn("idx", monotonically_increasing_id())
-            //  val idxTools = withIdx.select("idx", FullResult.tools: _*)
-
 
             val columns = (FullResult.tools).map(tool => (tool, fullDF.col(tool)))
 
@@ -44,7 +39,7 @@ object ToolsClustering extends ExperimentsCommonConfig {
               (colName, valsVector)
             }).toDF("toolName", "features")
 
-           // transposeMatrix.show()
+            // transposeMatrix.show()
 
             val indexer = new StringIndexer()
             indexer.setInputCol("toolName")

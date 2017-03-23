@@ -8,6 +8,7 @@ import de.experiments.ExperimentsCommonConfig
 import de.model.multiarmed.bandit.{MultiarmedBanditsExperimentBase, ToolExpectation}
 import org.apache.spark.sql.{KeyValueGroupedDataset, Row}
 
+
 /**
   * Created by visenger on 13/03/17.
   */
@@ -22,11 +23,14 @@ object ToolsAggregatorRunner
     with ExperimentsCommonConfig {
 
   def convert(expectations: String): Seq[ToolExpectation] = {
-    val Array(a, b, c, d, e) = expectations.split("\\|")
+    //val Array(a, b, c, d, e) = expectations.split("\\|")
     //1:0.4143 -> toolId:expectation
     val resultOfBanditRun: Seq[ToolExpectation] =
-      Seq(a, b, c, d, e)
-        .map(e => new ToolExpectation().apply(e))
+    expectations.split("\\|").toList
+      .map(e => new ToolExpectation().apply(e))
+//    val resultOfBanditRun: Seq[ToolExpectation] =
+//      expectations.split("\\|").toList
+//        .map(e => new ToolExpectation().apply(e))
     resultOfBanditRun
   }
 
@@ -41,6 +45,7 @@ object ToolsAggregatorRunner
     SparkLOAN.withSparkSession("AGGREGATOR") {
       session => {
         import session.implicits._
+        // val experimentsCSV = DataSetCreator.createFrame(session, multiArmedBandResults, schema: _*)
         val experimentsCSV = DataSetCreator.createFrame(session, multiArmedBandResults, schema: _*)
 
         val groupedDataset: KeyValueGroupedDataset[String, Row] = experimentsCSV.groupByKey(row => row.getAs[String]("dataset"))
@@ -74,13 +79,15 @@ object ToolsAggregatorRunner
 
           val toolsCombinationsByAlgorithm = algorithmResults.flatMap(alg => {
             val algName: String = alg.algName
-            val sortedExpectations: Seq[ToolExpectation] = alg.expectations.sortWith((e1, e2) => e1.expectation > e2.expectation)
+            val sortedExpectations: Seq[ToolExpectation] = alg.expectations
+              .sortWith((e1, e2) => e1.expectation > e2.expectation)
             val toolsNumber = sortedExpectations.size
 
             val toolsCombinations = (3 until toolsNumber).map(howManyTools => {
               val combi: Seq[ToolExpectation] = sortedExpectations.take(howManyTools).toSeq
               val toolsCombi = combi
                 .map(tool => s"${GoldStandard.exists}-${tool.id}")
+                //.map(tool => getExtName(tool))
                 .map(tool => Tool(tool))
               ToolsCombination(toolsCombi.toList)
             }).toSet.toSeq
