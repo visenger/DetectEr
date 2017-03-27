@@ -43,5 +43,21 @@ object FormatUtil {
     data
   }
 
+  def prepareClustersToLabeledPoints(session: SparkSession, dataDF: DataFrame, tools: Seq[String]): RDD[LabeledPoint] = {
+    import session.implicits._
+
+    val labelAndTools = dataDF.select(FullResult.label, tools: _*)
+
+    val data: RDD[LabeledPoint] = labelAndTools.map(row => {
+      val label: Double = row.get(0).toString.toDouble
+      val toolsVals: Array[Double] = (1 until row.size)
+        .map(idx => row.getDouble(idx)).toArray
+      val features = org.apache.spark.mllib.linalg.Vectors.dense(toolsVals)
+      LabeledPoint(label, features)
+    }).rdd
+
+    data
+  }
+
 
 }

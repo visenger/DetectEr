@@ -238,7 +238,6 @@ class LinearFunction {
                                   test: RDD[LabeledPoint]): Eval = {
 
 
-    var maxTestResult: TestData = null
     val model = new LogisticRegressionWithLBFGS()
       .setNumClasses(2)
       .setIntercept(true)
@@ -284,10 +283,11 @@ class LinearFunction {
       val sortedList = acceptableTests
         .sortWith((t1, t2) => t1.accuracy >= t2.accuracy)
         .sortWith((t1, t2) => t1.f1 >= t2.f1)
-      maxTestResult = sortedList.head
+
+      val maxTestResult = sortedList.head
       Eval(maxTestResult.precision, maxTestResult.recall, maxTestResult.f1, maxTestResult.info)
     } else {
-      Eval(0.0, 0.0, 0.0, alltestResults.head.info)
+      Eval(0.0, 0.0, 0.0, "")
     }
 
     eval

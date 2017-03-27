@@ -66,15 +66,12 @@ class BernoulliNaiveBayes extends ExperimentsCommonConfig {
         (prediction, label)
     }
 
-
     val evalTestData: Eval = F1.evalPredictionAndLabels(predictionAndLabels)
     //    println(s"Naive Bayes for: $datasetName")
     //    println(evalTestData)
 
     evalTestData
   }
-
-
 }
 
 
