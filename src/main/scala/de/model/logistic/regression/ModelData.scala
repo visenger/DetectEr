@@ -31,7 +31,6 @@ case class ModelData(bestThreshold: Double,
       }
       if (c < 0) s"(${c})t_{$idx}" else s"${c}t_{$idx}"
     }).mkString(" + ")
-    function
     //s"""P(err)=\\frac{1}{1+\\exp ^{-($modelIntercept+$function)}}"""
     s""" y_{$ind}=$intercept+$function """
   }

@@ -5,9 +5,11 @@ import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
 import de.model.logistic.regression.ModelData
 import de.model.util.FormatUtil
+import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 import org.apache.spark.mllib.classification.{LogisticRegressionModel, LogisticRegressionWithLBFGS, NaiveBayes}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Column, DataFrame}
 
 import scala.collection.mutable
 
@@ -19,11 +21,207 @@ class ModelsCombiner {
 }
 
 object ModelsCombinerStrategy extends ExperimentsCommonConfig {
+  val unionall = "unionAll"
+  val min8 = "min8"
+
   def main(args: Array[String]): Unit = {
-    run()
+    runCombineClassifiers()
   }
 
-  def run(): Unit = {
+  def runCombineClassifiers(): Unit = {
+
+    SparkLOAN.withSparkSession("MODELS-COMBINER") {
+      session => {
+
+        import org.apache.spark.sql.functions._
+        import session.implicits._
+
+        val dataSetName = "ext.blackoak"
+        val maxPrecision = experimentsConf.getDouble(s"${dataSetName}.max.precision")
+        val maxRecall = experimentsConf.getDouble(s"${dataSetName}.max.recall")
+
+        val maximumF1 = experimentsConf.getDouble(s"${dataSetName}.max.F1")
+        val minimumF1 = experimentsConf.getDouble(s"${dataSetName}.min.F1")
+
+
+        val trainDF = DataSetCreator.createFrame(session, extBlackoakTrainFile, FullResult.schema: _*)
+        val testDF = DataSetCreator.createFrame(session, extBlackoakTestFile, FullResult.schema: _*)
+
+
+        val trainLabeledPointsTools = FormatUtil
+          .prepareDataToLabeledPoints(session, trainDF, FullResult.tools)
+
+        val bayesModel = NaiveBayes.train(trainLabeledPointsTools, lambda = 1.0, modelType = "bernoulli")
+        val (bestLogRegrData, bestLogRegModel) = getBestModel(maxPrecision, maxRecall, trainLabeledPointsTools, trainLabeledPointsTools)
+
+        val predictByLogRegr = udf { features: org.apache.spark.mllib.linalg.Vector => {
+          bestLogRegModel.setThreshold(bestLogRegrData.bestThreshold)
+          bestLogRegModel.predict(features)
+        }
+        }
+        val predictByBayes = udf { features: org.apache.spark.mllib.linalg.Vector => bayesModel.predict(features) }
+        val minKTools = udf { (k: Int, tools: org.apache.spark.mllib.linalg.Vector) => {
+          val sum = tools.toArray.sum
+          val errorDecision = if (sum >= k) 1.0 else 0.0
+          errorDecision
+        }
+        }
+
+        val features = "features"
+
+        val rowId = "row-id"
+        val testLabeledPointsTools: DataFrame = FormatUtil
+          .prepareDataToLabeledPoints(session, testDF, FullResult.tools)
+          .toDF(FullResult.label, features)
+          .withColumn(rowId, monotonically_increasing_id())
+
+        val naiveBayesCol = "naive-bayes"
+        val logRegrCol = "log-regr"
+        val predictCol = "prediction"
+
+        var allClassifiers = testLabeledPointsTools
+          .withColumn(naiveBayesCol, predictByBayes(testLabeledPointsTools(features)))
+          .withColumn(logRegrCol, predictByLogRegr(testLabeledPointsTools(features)))
+          .withColumn(unionall, minKTools(lit(1), testLabeledPointsTools(features)))
+          .withColumn(min8, minKTools(lit(8), testLabeledPointsTools(features)))
+          .select(rowId, FullResult.label, naiveBayesCol, logRegrCol, unionall, min8)
+          .toDF()
+
+        //start:neural networks
+        val layers = Array[Int](8, 9, 8, 2)
+        val trainer = new MultilayerPerceptronClassifier()
+          .setLayers(layers)
+          .setBlockSize(128)
+          .setSeed(1234L)
+          .setMaxIter(100)
+        val nnTrain = FormatUtil.prepareDataToLIBSVM(session, trainDF, FullResult.tools)
+        val networkModel = trainer.fit(nnTrain)
+        val testWithRowId = testDF.withColumn(rowId, monotonically_increasing_id())
+        val nnTest = FormatUtil.prepareDataWithRowIdToLIBSVM(session, testWithRowId, FullResult.tools)
+        val result = networkModel.transform(nnTest)
+        val nnPrediction = result.select(rowId, predictCol)
+        //end:neural networks
+
+        val nNetworksCol = "n-networks"
+        allClassifiers = allClassifiers
+          .join(nnPrediction, rowId)
+          .withColumnRenamed(predictCol, nNetworksCol)
+          .select(rowId, FullResult.label, nNetworksCol, naiveBayesCol, logRegrCol, unionall, min8)
+
+        /*
+        //all possible combinations of errors classification and their counts
+        val allResults: RDD[(Double, Double, Double, Double, Double, Double)] = allClassifiers.rdd.map(row => {
+          //val rowId = row.getLong(0)
+          val label = row.getDouble(1)
+          val nn = row.getDouble(2)
+          val bayes = row.getDouble(3)
+          val logregr = row.getDouble(4)
+          val unionAll = row.getDouble(5)
+          val min8 = row.getDouble(6)
+          (label, nn, bayes, logregr, unionAll, min8)
+        })
+
+        val countByValue = allResults.countByValue()
+
+        println(s"label, nn, naive bayes, log regression, unionall, min8 : count")
+        countByValue.foreach(entry => {
+          println(s"(${entry._1._1.toInt}, ${entry._1._2.toInt}, ${entry._1._3.toInt}, ${entry._1._4.toInt}, ${entry._1._5.toInt}, ${entry._1._6.toInt}) : ${entry._2}")
+        })*/
+
+        val minK = udf { (k: Int, tools: mutable.WrappedArray[Double]) => {
+          val sum = tools.count(_ == 1.0)
+          val errorDecision = if (sum >= k) 1.0 else 0.0
+          errorDecision
+        }
+        }
+
+        val clColumns: Array[Column] = Array(
+          allClassifiers(nNetworksCol),
+          allClassifiers(naiveBayesCol),
+          allClassifiers(logRegrCol),
+          allClassifiers(unionall),
+          allClassifiers(min8))
+
+        val finalCombiCol = "final-combi"
+        val finalResult: DataFrame =
+          allClassifiers
+            .withColumn(finalCombiCol, minK(lit(2), array(clColumns: _*)))
+            .select(FullResult.label, finalCombiCol)
+            .toDF()
+
+        val predictionAndLabel = finalResult.rdd.map(row => {
+          val label = row.getDouble(0)
+          val prediction = row.getDouble(1)
+          (prediction, label)
+        })
+
+        val eval = F1.evalPredictionAndLabels(predictionAndLabel)
+        eval.printResult("combination of neural networks, naive-bayes, log regression, unionall, min8:")
+/*
+        val allClassifiersCols = Array(nNetworksCol, naiveBayesCol, logRegrCol, unionall, min8).toSeq
+
+        val labeledPointsClassifiers = FormatUtil.prepareDoublesToLabeledPoints(session, allClassifiers, allClassifiersCols)
+
+        val Array(trainClassifiers, testClassifiers) = labeledPointsClassifiers.randomSplit(Array(0.2, 0.8))
+
+        /*Logistic Regression for classifier combination:*/
+        val (classiBestModelData, classiBestModel) =
+        //todo: Achtung: we removed the max precision and max recall threshold
+          getBestModel(0.99, 0.99, trainClassifiers, trainClassifiers)
+
+        val predictByLogRegrCombi = udf { features: org.apache.spark.mllib.linalg.Vector => {
+          classiBestModel.setThreshold(classiBestModelData.bestThreshold)
+          classiBestModel.predict(features)
+        }
+        }
+
+        val testClassifiersDF = testClassifiers.toDF()
+
+        val logRegrOfAllCombi: RDD[(Double, Double)] = testClassifiersDF
+          .withColumn("lr-of-combi", predictByLogRegrCombi(testClassifiersDF(features)))
+          .select(FullResult.label, "lr-of-combi")
+          .rdd.map(row => {
+          val label = row.getDouble(0)
+          val prediction = row.getDouble(1)
+          (prediction, label)
+        })
+
+        val evalCombi = F1.evalPredictionAndLabels(logRegrOfAllCombi)
+        evalCombi.printResult("linear combi of all")
+
+        /*Naive Bayes for classifier combination:*/
+        val naiveBayesModel = NaiveBayes.train(trainClassifiers, lambda = 1.0, modelType = "bernoulli")
+        val predictByNaiveBayes = udf { features: org.apache.spark.mllib.linalg.Vector => {
+          naiveBayesModel.predict(features)
+        }
+        }
+
+        val bayesOfAllCombi: RDD[(Double, Double)] = testClassifiersDF
+          .withColumn("bayes-of-combi", predictByNaiveBayes(testClassifiersDF(features)))
+          .select(FullResult.label, "bayes-of-combi")
+          .rdd.map(row => {
+          val label = row.getDouble(0)
+          val prediction = row.getDouble(1)
+          (prediction, label)
+        })
+
+
+        val evalCombiBayes = F1.evalPredictionAndLabels(bayesOfAllCombi)
+        evalCombiBayes.printResult("bayes combi of all")*/
+
+
+        //todo: rules!
+
+        //allClassifiers.show()
+
+
+      }
+    }
+
+  }
+
+
+  def runCombineTools(): Unit = {
 
     SparkLOAN.withSparkSession("MODELS-COMBINER") {
       session => {
@@ -51,29 +249,29 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
         val toolsCols = FullResult.tools.map(t => trainDF(t)).toArray
 
         val extendedTrainDF = trainDF
-          .withColumn("unionAll", minK(lit(1), array(toolsCols: _*)))
+          .withColumn(unionall, minK(lit(1), array(toolsCols: _*)))
           .withColumn("min2", minK(lit(2), array(toolsCols: _*)))
           .withColumn("min3", minK(lit(3), array(toolsCols: _*)))
           .withColumn("min4", minK(lit(4), array(toolsCols: _*)))
           .withColumn("min5", minK(lit(5), array(toolsCols: _*)))
           .withColumn("min6", minK(lit(6), array(toolsCols: _*)))
           .withColumn("min7", minK(lit(7), array(toolsCols: _*)))
-          .withColumn("min8", minK(lit(8), array(toolsCols: _*)))
+          .withColumn(min8, minK(lit(8), array(toolsCols: _*)))
           .toDF()
 
         val testToolsCols = FullResult.tools.map(t => testDF(t)).toArray
         val extendedTestDF = testDF
-          .withColumn("unionAll", minK(lit(1), array(testToolsCols: _*)))
+          .withColumn(unionall, minK(lit(1), array(testToolsCols: _*)))
           .withColumn("min2", minK(lit(2), array(testToolsCols: _*)))
           .withColumn("min3", minK(lit(3), array(testToolsCols: _*)))
           .withColumn("min4", minK(lit(4), array(testToolsCols: _*)))
           .withColumn("min5", minK(lit(5), array(testToolsCols: _*)))
           .withColumn("min6", minK(lit(6), array(testToolsCols: _*)))
           .withColumn("min7", minK(lit(7), array(testToolsCols: _*)))
-          .withColumn("min8", minK(lit(8), array(testToolsCols: _*)))
+          .withColumn(min8, minK(lit(8), array(testToolsCols: _*)))
           .toDF()
 
-        val features = FullResult.tools ++ Seq("min2", "min3", "min4", "min5", "min6", "min7", "min8", "unionAll")
+        val features = FullResult.tools ++ Seq("min2", "min3", "min4", "min5", "min6", "min7", min8, unionall)
         val trainLabeledPoints = FormatUtil.prepareDataToLabeledPoints(session, extendedTrainDF, features)
         val testLabeledPoints: RDD[LabeledPoint] = FormatUtil.prepareDataToLabeledPoints(session, extendedTestDF, features)
 
@@ -86,21 +284,24 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
         }
 
         val evalTestData: Eval = F1.evalPredictionAndLabels(predictionAndLabels)
-        evalTestData.printResult("naive bayes")
+        evalTestData.printResult("naive bayes (all tools and all minK's): ")
 
         val (bestModelData, bestModel) = getBestModel(maxPrecision, maxRecall, trainLabeledPoints, testLabeledPoints)
 
-        println(bestModelData)
+        println(s"Log regression (all tools and all minK's):${bestModelData}")
 
       }
     }
 
   }
 
+
   private def getBestModel(maxPrecision: Double,
                            maxRecall: Double,
                            train: RDD[LabeledPoint],
-                           test: RDD[LabeledPoint]): (ModelData, LogisticRegressionModel) = {
+                           test: RDD[LabeledPoint]): (ModelData, LogisticRegressionModel)
+
+  = {
 
     val model: LogisticRegressionModel = new LogisticRegressionWithLBFGS()
       .setNumClasses(2)
@@ -114,7 +315,7 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
 
     val allModels: Seq[ModelData] = allThresholds.map(τ => {
       model.setThreshold(τ)
-      val predictionAndLabels: RDD[(Double, Double)] = train.map { case LabeledPoint(label, features) =>
+      val predictionAndLabels: RDD[(Double, Double)] = test.map { case LabeledPoint(label, features) =>
         val prediction = model.predict(features)
         (prediction, label)
       }

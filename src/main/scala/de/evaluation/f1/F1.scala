@@ -212,6 +212,7 @@ object F1 {
   //  }
 
   private def toolsAgreeOnError(resultDF: DataFrame, k: Int = 0): Dataset[Row] = {
+
     val toolsReturnedErrors: Dataset[Row] = resultDF.filter(row => {
       val fieldNames = row.schema.fieldNames
       val rowAsMap: Map[String, String] = row.getValuesMap[String](fieldNames)
@@ -225,6 +226,7 @@ object F1 {
       }
 
       toolsAgreeOnError
+
     })
     toolsReturnedErrors
   }

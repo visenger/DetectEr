@@ -384,7 +384,6 @@ class LinearFunction {
       val coef = round(c)
       if (coef < 0) s"(${coef})t_{$idx}" else s"${coef}t_{$idx}"
     }).mkString(" + ")
-    function
     //s"""P(err)=\\frac{1}{1+\\exp ^{-($modelIntercept+$function)}}"""
     s""" z=${round(intercept)}+$function """
   }
