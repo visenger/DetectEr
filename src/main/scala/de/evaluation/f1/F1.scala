@@ -54,6 +54,7 @@ object F1 {
       val values = elem._1
       val count = elem._2
       values match {
+        //confusion matrix
         //(prediction, label)
         case (1.0, 1.0) => tp = count
         case (1.0, 0.0) => fp = count
