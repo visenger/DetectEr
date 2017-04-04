@@ -11,6 +11,15 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
   */
 object FormatUtil {
 
+  def getPredictionAndLabel(dataDF: DataFrame, column: String): RDD[(Double, Double)] = {
+    dataDF.select(FullResult.label, column).rdd.map(row => {
+      val label = row.getDouble(0)
+      val prediction = row.getDouble(1)
+      (prediction, label)
+    })
+  }
+
+
   def prepareDataWithRowIdToLIBSVM(session: SparkSession, dataDF: DataFrame, tools: Seq[String]): DataFrame = {
     import session.implicits._
     val labelAndToolsCols = Seq(FullResult.label) ++ tools
@@ -38,6 +47,22 @@ object FormatUtil {
       val label: Double = row.get(0).toString.toDouble
       val toolsVals: Array[Double] = (1 until row.size)
         .map(idx => row.getString(idx).toDouble).toArray
+      val features = Vectors.dense(toolsVals)
+      (label, features)
+    }).toDF("label", "features")
+
+    data
+  }
+
+  def prepareDoublesToLIBSVM(session: SparkSession, dataDF: DataFrame, tools: Seq[String]): DataFrame = {
+    import session.implicits._
+
+    val labelAndTools = dataDF.select(FullResult.label, tools: _*)
+
+    val data: DataFrame = labelAndTools.map(row => {
+      val label: Double = row.get(0).toString.toDouble
+      val toolsVals: Array[Double] = (1 until row.size)
+        .map(idx => row.getDouble(idx)).toArray
       val features = Vectors.dense(toolsVals)
       (label, features)
     }).toDF("label", "features")
@@ -73,6 +98,22 @@ object FormatUtil {
       val features = org.apache.spark.mllib.linalg.Vectors.dense(toolsVals)
       LabeledPoint(label, features)
     }).rdd
+
+    data
+  }
+
+  def prepareToolsDataToLabPointsDF(session: SparkSession, dataDF: DataFrame, tools: Seq[String]): DataFrame = {
+    import session.implicits._
+
+    val labelAndTools = dataDF.select(FullResult.label, tools: _*)
+
+    val data: DataFrame = labelAndTools.map(row => {
+      val label: Double = row.get(0).toString.toDouble
+      val toolsVals: Array[Double] = (1 until row.size)
+        .map(idx => row.getString(idx).toDouble).toArray
+      val features = org.apache.spark.mllib.linalg.Vectors.dense(toolsVals)
+      (label, features)
+    }).toDF("label", "features")
 
     data
   }

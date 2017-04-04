@@ -43,9 +43,9 @@ object SimilaritiesOnTruthMatrixRunner extends ExperimentsCommonConfig {
           labelAndTruth = labelAndTruth.withColumnRenamed(s"truth-$tool", tool)
         })
 
-        val labelAndTools = Seq(FullResult.label) ++ tools
+        //val labelAndTools = Seq(FullResult.label) ++ tools
 
-        val allMetrics: List[(ToolPMI, Kappa, Cosine)] = labelAndTools
+        val allMetrics: List[(ToolPMI, Kappa, Cosine)] = tools
           .combinations(2)
           .map(pair => {
 
