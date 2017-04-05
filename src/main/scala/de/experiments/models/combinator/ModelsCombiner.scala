@@ -38,7 +38,7 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
   def main(args: Array[String]): Unit = {
     runBagging()
     //runCombineClassifiers()
-    //runCombineTools()
+    // runCombineTools()
   }
 
   def getDecisionTreeModels(trainSamples: Seq[RDD[LabeledPoint]], tools: Seq[String]): Seq[DecisionTreeModel] = {
@@ -72,19 +72,19 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
             val trainDF = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
             val testDF = DataSetCreator.createFrame(session, testFile, FullResult.schema: _*)
 
-            val allTools = FullResult.tools
-            val train = FormatUtil.prepareDataToLabeledPoints(session, trainDF, allTools)
+            val allColumns = FullResult.tools
+            val train = FormatUtil.prepareDataToLabeledPoints(session, trainDF, allColumns)
 
-            val Array(train1, _) = train.randomSplit(Array(0.7, 0.3), seed = 123L)
-            val Array(train2, _) = train.randomSplit(Array(0.7, 0.3), seed = 23L)
-            val Array(train3, _) = train.randomSplit(Array(0.7, 0.3), seed = 593L)
-            val Array(train4, _) = train.randomSplit(Array(0.7, 0.3), seed = 941L)
-            val Array(train5, _) = train.randomSplit(Array(0.7, 0.3), seed = 3L)
-            val Array(train6, _) = train.randomSplit(Array(0.7, 0.3), seed = 623L)
+            val Array(_, train1) = train.randomSplit(Array(0.7, 0.3), seed = 123L)
+            val Array(_, train2) = train.randomSplit(Array(0.7, 0.3), seed = 23L)
+            val Array(_, train3) = train.randomSplit(Array(0.7, 0.3), seed = 593L)
+            val Array(_, train4) = train.randomSplit(Array(0.7, 0.3), seed = 941L)
+            val Array(_, train5) = train.randomSplit(Array(0.7, 0.3), seed = 3L)
+            val Array(_, train6) = train.randomSplit(Array(0.7, 0.3), seed = 623L)
 
             val trainSamples = Seq(train1, train2, train3, train4, train5, train6)
 
-            val Array(model1, model2, model3, model4, model5, model6) = getDecisionTreeModels(trainSamples, allTools).toArray
+            val Array(model1, model2, model3, model4, model5, model6) = getDecisionTreeModels(trainSamples, allColumns).toArray
 
             val bagging1 = udf { (features: org.apache.spark.mllib.linalg.Vector) => model1.predict(features) }
             val bagging2 = udf { (features: org.apache.spark.mllib.linalg.Vector) => model2.predict(features) }
@@ -93,7 +93,8 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
             val bagging5 = udf { (features: org.apache.spark.mllib.linalg.Vector) => model5.predict(features) }
             val bagging6 = udf { (features: org.apache.spark.mllib.linalg.Vector) => model6.predict(features) }
 
-            val test = FormatUtil.prepareToolsDataToLabPointsDF(session, testDF, allTools)
+
+            val test = FormatUtil.prepareToolsDataToLabPointsDF(session, testDF, allColumns)
             val featuresCol = "features"
             val baggingDF = test
               .withColumn(s"model-1", bagging1(test(featuresCol)))
@@ -113,6 +114,8 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
             }
             }
 
+            //todo: make decision rule more sophisticated -> weight classifiers
+
             val allModelsColumns = (1 to trainSamples.size).map(id => baggingDF(s"model-$id"))
 
             val majorityCol = "majority-vote"
@@ -122,7 +125,7 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
 
             val predictAndLabelMajority = FormatUtil.getPredictionAndLabel(majorityDF, majorityCol)
             val evalMajority = F1.evalPredictionAndLabels(predictAndLabelMajority)
-            evalMajority.printResult(s"$datasetName majority vote")
+            evalMajority.printResult(s"$datasetName majority vote for ${allColumns.mkString(", ")}")
 
 
           }
@@ -423,93 +426,107 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
   def runCombineTools(): Unit = {
 
     SparkLOAN.withSparkSession("MODELS-COMBINER") {
+
       session => {
-        val dataSetName = "ext.blackoak"
-        val maxPrecision = experimentsConf.getDouble(s"${dataSetName}.max.precision")
-        val maxRecall = experimentsConf.getDouble(s"${dataSetName}.max.recall")
 
-        val maximumF1 = experimentsConf.getDouble(s"${dataSetName}.max.F1")
-        val minimumF1 = experimentsConf.getDouble(s"${dataSetName}.min.F1")
+        process_ext_data {
+          data => {
+            val dataSetName = data._1
 
-        import org.apache.spark.sql.functions._
+            println(s"processing: $dataSetName")
+            val trainFile = data._2._1
+            val testFile = data._2._2
 
-        val trainDF = DataSetCreator.createFrame(session, extBlackoakTrainFile, FullResult.schema: _*)
-        val testDF = DataSetCreator.createFrame(session, extBlackoakTestFile, FullResult.schema: _*)
+            val maxPrecision = experimentsConf.getDouble(s"${dataSetName}.max.precision")
+            val maxRecall = experimentsConf.getDouble(s"${dataSetName}.max.recall")
 
-        val minK = udf { (k: Int, tools: mutable.WrappedArray[String]) => {
-          val sum = tools.map(t => t.toInt).count(_ == 1)
-          val errorDecision = if (sum >= k) "1" else "0"
-          errorDecision
+            val maximumF1 = experimentsConf.getDouble(s"${dataSetName}.max.F1")
+            val minimumF1 = experimentsConf.getDouble(s"${dataSetName}.min.F1")
+
+            import org.apache.spark.sql.functions._
+
+            val trainDF = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
+            val testDF = DataSetCreator.createFrame(session, testFile, FullResult.schema: _*)
+
+            val minK = udf { (k: Int, tools: mutable.WrappedArray[String]) => {
+              val sum = tools.map(t => t.toInt).count(_ == 1)
+              val errorDecision = if (sum >= k) "1" else "0"
+              errorDecision
+            }
+            }
+
+
+            /*see: Spark UDF with varargs: http://stackoverflow.com/questions/33151866/spark-udf-with-varargs?rq=1*/
+
+            val toolsCols = FullResult.tools.map(t => trainDF(t)).toArray
+            val k = 1
+            val extendedTrainDF = trainDF
+              .withColumn(unionall, minK(lit(k), array(toolsCols: _*)))
+              .withColumn("min2", minK(lit(2), array(toolsCols: _*)))
+              .withColumn("min3", minK(lit(3), array(toolsCols: _*)))
+              .withColumn("min4", minK(lit(4), array(toolsCols: _*)))
+              .withColumn("min5", minK(lit(5), array(toolsCols: _*)))
+              .withColumn("min6", minK(lit(6), array(toolsCols: _*)))
+              .withColumn("min7", minK(lit(7), array(toolsCols: _*)))
+              .withColumn(min8, minK(lit(8), array(toolsCols: _*)))
+              .toDF()
+
+            val testToolsCols = FullResult.tools.map(t => testDF(t)).toArray
+            val extendedTestDF = testDF
+              .withColumn(unionall, minK(lit(k), array(testToolsCols: _*)))
+              .withColumn("min2", minK(lit(2), array(testToolsCols: _*)))
+              .withColumn("min3", minK(lit(3), array(testToolsCols: _*)))
+              .withColumn("min4", minK(lit(4), array(testToolsCols: _*)))
+              .withColumn("min5", minK(lit(5), array(testToolsCols: _*)))
+              .withColumn("min6", minK(lit(6), array(testToolsCols: _*)))
+              .withColumn("min7", minK(lit(7), array(testToolsCols: _*)))
+              .withColumn(min8, minK(lit(8), array(testToolsCols: _*)))
+              .toDF()
+
+
+            val features = FullResult.tools ++ Seq("min2", "min3", "min4", "min5", "min6", "min7", min8, unionall)
+            println(s"aggregation running for: ${features.mkString(", ")}")
+            val trainLabeledPoints = FormatUtil.prepareDataToLabeledPoints(session, extendedTrainDF, features)
+            val testLabeledPoints: RDD[LabeledPoint] = FormatUtil.prepareDataToLabeledPoints(session, extendedTestDF, features)
+
+            val naiveBayesModel = NaiveBayes.train(trainLabeledPoints, lambda = 1.0, modelType = "bernoulli")
+
+            val predictionAndLabels: RDD[(Double, Double)] = testLabeledPoints.map {
+              case LabeledPoint(label, features) =>
+                val prediction = naiveBayesModel.predict(features)
+                (prediction, label)
+            }
+
+            val evalTestData: Eval = F1.evalPredictionAndLabels(predictionAndLabels)
+            evalTestData.printResult("naive bayes : ")
+
+            val (bestModelData, _) = getBestModel(maxPrecision, maxRecall, trainLabeledPoints, testLabeledPoints)
+
+            println(s"Log regression :${bestModelData}")
+
+            // Majority wins
+            val majorityVoter = udf { tools: org.apache.spark.mllib.linalg.Vector => {
+              val total = tools.size
+              val sum1 = tools.numNonzeros
+              var sum0 = total - sum1
+              val errorDecision = if (sum1 >= sum0) 1.0 else 0.0
+              errorDecision
+            }
+            }
+            val testLabPointsDF: DataFrame = FormatUtil.prepareToolsDataToLabPointsDF(session, extendedTestDF, features)
+            val majorityVoterCol = "majority-voter"
+            val majorityVoterStrategy = testLabPointsDF
+              .withColumn(majorityVoterCol, majorityVoter(testLabPointsDF("features")))
+              .select(FullResult.label, majorityVoterCol)
+              .toDF()
+
+            val majorityVotersPredAndLabels = FormatUtil.getPredictionAndLabel(majorityVoterStrategy, majorityVoterCol)
+            val majorityEval = F1.evalPredictionAndLabels(majorityVotersPredAndLabels)
+            majorityEval.printResult("tools and minK majority voters")
+
+
+          }
         }
-        }
-
-
-        /*see: Spark UDF with varargs: http://stackoverflow.com/questions/33151866/spark-udf-with-varargs?rq=1*/
-
-        val toolsCols = FullResult.tools.map(t => trainDF(t)).toArray
-
-        val extendedTrainDF = trainDF
-          .withColumn(unionall, minK(lit(1), array(toolsCols: _*)))
-          .withColumn("min2", minK(lit(2), array(toolsCols: _*)))
-          .withColumn("min3", minK(lit(3), array(toolsCols: _*)))
-          .withColumn("min4", minK(lit(4), array(toolsCols: _*)))
-          .withColumn("min5", minK(lit(5), array(toolsCols: _*)))
-          .withColumn("min6", minK(lit(6), array(toolsCols: _*)))
-          .withColumn("min7", minK(lit(7), array(toolsCols: _*)))
-          .withColumn(min8, minK(lit(8), array(toolsCols: _*)))
-          .toDF()
-
-        val testToolsCols = FullResult.tools.map(t => testDF(t)).toArray
-        val extendedTestDF = testDF
-          .withColumn(unionall, minK(lit(1), array(testToolsCols: _*)))
-          .withColumn("min2", minK(lit(2), array(testToolsCols: _*)))
-          .withColumn("min3", minK(lit(3), array(testToolsCols: _*)))
-          .withColumn("min4", minK(lit(4), array(testToolsCols: _*)))
-          .withColumn("min5", minK(lit(5), array(testToolsCols: _*)))
-          .withColumn("min6", minK(lit(6), array(testToolsCols: _*)))
-          .withColumn("min7", minK(lit(7), array(testToolsCols: _*)))
-          .withColumn(min8, minK(lit(8), array(testToolsCols: _*)))
-          .toDF()
-
-        val features = FullResult.tools ++ Seq("min2", "min3", "min4", "min5", "min6", "min7", min8, unionall)
-        val trainLabeledPoints = FormatUtil.prepareDataToLabeledPoints(session, extendedTrainDF, features)
-        val testLabeledPoints: RDD[LabeledPoint] = FormatUtil.prepareDataToLabeledPoints(session, extendedTestDF, features)
-
-        val naiveBayesModel = NaiveBayes.train(trainLabeledPoints, lambda = 1.0, modelType = "bernoulli")
-
-        val predictionAndLabels: RDD[(Double, Double)] = testLabeledPoints.map {
-          case LabeledPoint(label, features) =>
-            val prediction = naiveBayesModel.predict(features)
-            (prediction, label)
-        }
-
-        val evalTestData: Eval = F1.evalPredictionAndLabels(predictionAndLabels)
-        evalTestData.printResult("naive bayes (all tools and all minK's): ")
-
-        val (bestModelData, bestModel) = getBestModel(maxPrecision, maxRecall, trainLabeledPoints, testLabeledPoints)
-
-        println(s"Log regression (all tools and all minK's):${bestModelData}")
-
-        // Majority wins
-        val majorityVoter = udf { tools: org.apache.spark.mllib.linalg.Vector => {
-          val total = tools.size
-          val sum1 = tools.numNonzeros
-          var sum0 = total - sum1
-          val errorDecision = if (sum1 >= sum0) 1.0 else 0.0
-          errorDecision
-        }
-        }
-        val testLabPointsDF: DataFrame = FormatUtil.prepareToolsDataToLabPointsDF(session, extendedTestDF, features)
-        val majorityVoterCol = "majority-voter"
-        val majorityVoterStrategy = testLabPointsDF
-          .withColumn(majorityVoterCol, majorityVoter(testLabPointsDF("features")))
-          .select(FullResult.label, majorityVoterCol)
-          .toDF()
-
-        val majorityVotersPredAndLabels = FormatUtil.getPredictionAndLabel(majorityVoterStrategy, majorityVoterCol)
-        val majorityEval = F1.evalPredictionAndLabels(majorityVotersPredAndLabels)
-        majorityEval.printResult("tools and all minK majority voters")
-
 
       }
     }
