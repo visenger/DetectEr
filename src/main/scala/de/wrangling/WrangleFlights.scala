@@ -7,7 +7,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 
 /**
-  * Created by visenger on 05/04/17.
+  * preprocess data with: LC_CTYPE=C sed -i.bak 's/,/_/g' *-data.txt
   */
 object WrangleFlights {
 
@@ -27,6 +27,8 @@ object WrangleFlights {
         val cleanFilesDir = new File(cleanDir)
 
         val allDirtyFiles: Array[File] = dirtyFilesDir.listFiles()
+
+        println(s"dirty files: ${allDirtyFiles.mkString(",")}")
 
         val allJoinedFlights: List[DataFrame] = allDirtyFiles
           .filter(file => file.isFile && file.getName.endsWith("txt"))
@@ -50,6 +52,9 @@ object WrangleFlights {
               .option("delimiter", "\\t")
               .csv(flightTruthFile)
               .toDF(trueFlightsSchema: _*)
+
+            //flights.withColumn("x4New", regexp_replace(flights("x4"), "\\,", ".")).show
+
 
 
             val joinedFlights = flights
