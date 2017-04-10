@@ -65,7 +65,10 @@ object WrangleFlights {
 
         val flights: DataFrame = allJoinedFlights.reduce((df1, df2) => df1.union(df2))
         val rowid = "RowId"
-        val joinedFlights = flights.withColumn(rowid, monotonically_increasing_id())
+
+        val joinedFlights = flights
+          .repartition(1)
+          .withColumn(rowid, monotonically_increasing_id())
         joinedFlights.printSchema()
 
         val schema = Seq(rowid, "Source", "Flight", "ScheduledDeparture", "ActualDeparture", "DepartureGate", "ScheduledArrival", "ActualArrival", "ArrivalGate")

@@ -63,7 +63,7 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
     SparkLOAN.withSparkSession("BAGGING") {
       session => {
 
-        process_ext_data {
+        process_data {
           data => {
             val datasetName = data._1
             val trainFile = data._2._1

@@ -100,6 +100,7 @@ object GoldStandardCreator {
         val cleanDF: DataFrame = DataSetCreator.createDataSet(session, cleanData, schema.getSchema: _*)
 
         val groundTruth: Dataset[String] = createLogGoldStandardWithGroundTruth(session, dirtyDF, cleanDF)
+
         val goldStdWithGroundTruth = conf.getString(outputFolder)
         groundTruth.coalesce(1).write.text(goldStdWithGroundTruth)
       }
@@ -173,7 +174,8 @@ object GoldStandardCreator {
     val joinWith = cleanDF
       .joinWith(dirtyDF, cleanDF.col(recid) === dirtyDF.col(recid))
 
-    joinWith.show()
+    //joinWith.show( false)
+
     val join = joinWith
       .flatMap(row => {
         val cleanVals = row._1.getValuesMap[String](schema.getSchema)

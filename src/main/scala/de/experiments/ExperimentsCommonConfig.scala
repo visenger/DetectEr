@@ -1,6 +1,7 @@
 package de.experiments
 
 import com.typesafe.config.ConfigFactory
+import de.evaluation.data.schema.{BlackOakSchema, HospSchema, SalariesSchema, Schema}
 
 /**
   * Common config variables for experiments.
@@ -8,6 +9,8 @@ import com.typesafe.config.ConfigFactory
 trait ExperimentsCommonConfig {
 
   val splitter = ","
+
+  val defaultConfig = ConfigFactory.load()
 
   val experimentsConf = ConfigFactory.load("experiments.conf")
 
@@ -21,6 +24,23 @@ trait ExperimentsCommonConfig {
 
 
   val allTestDataSets: Seq[String] = Seq(blackoakTestFile, hospTestFile, salariesTestFile)
+
+  val allSchemasByName: Map[String, Schema] = Map(
+    "blackoak" -> BlackOakSchema,
+    "hosp" -> HospSchema,
+    "salaries" -> SalariesSchema
+  )
+
+  val allMetadataByName: Map[String, String] = Map(
+    "blackoak" -> defaultConfig.getString("metadata.blackoak.path"),
+    "hosp" -> defaultConfig.getString("metadata.hosp.path"),
+    "salaries" -> defaultConfig.getString("metadata.salaries.path")
+  )
+
+  val allRawData: Map[String, String] = Map(
+    "blackoak" -> defaultConfig.getString("data.BlackOak.dirty-data-path"),
+    "hosp" -> defaultConfig.getString("data.hosp.dirty.10k"),
+    "salaries" -> defaultConfig.getString("data.salaries.dirty"))
 
   val allTestData: Map[String, String] = Map("blackoak" -> blackoakTestFile,
     "hosp" -> hospTestFile,
@@ -59,6 +79,7 @@ trait ExperimentsCommonConfig {
   }
 
   def getName(tool: String) = experimentsConf.getString(s"dictionary.names.$tool")
+
   def getExtName(tool: String) = experimentsConf.getString(s"ext.dictionary.names.$tool")
 
 

@@ -1,16 +1,27 @@
 package de.evaluation.data.schema
 
-import scala.collection.generic.GenericCompanion
-
 /**
   * Created by visenger on 27/11/16.
   */
 
-object BlackOakSchema extends Schema {
+object BlackOakSchema extends Schema with AttributesDataType {
 
 
   private val recid = "RecID"
-  val schema = Seq(recid, "FirstName", "MiddleName", "LastName", "Address", "City", "State", "ZIP", "POBox", "POCityStateZip", "SSN", "DOB")
+  private val firstname = "FirstName"
+  private val middlename = "MiddleName"
+  private val lastname = "LastName"
+  private val address = "Address"
+  private val city = "City"
+  private val stateAttr = "State"
+  private val zipAttr = "ZIP"
+  private val pobox = "POBox"
+  private val pocitystatezip = "POCityStateZip"
+  private val ssnAttr = "SSN"
+  private val dobAttr = "DOB"
+
+  val schema = Seq(recid, firstname, middlename,
+    lastname, address, city, stateAttr, zipAttr, pobox, pocitystatezip, ssnAttr, dobAttr)
 
   val indexedAttributes: Map[String, Int] = indexAttributes
 
@@ -39,4 +50,19 @@ object BlackOakSchema extends Schema {
   override def getSchema(): Seq[String] = schema
 
   override def getRecID: String = recid
+
+  override def dataTypesDictionary: Map[String, String] = Map(
+    recid -> string,
+    firstname -> string,
+    middlename -> string,
+    lastname -> string,
+    address -> address,
+    city -> string,
+    stateAttr -> string,
+    zipAttr -> zipType,
+    pobox -> string,
+    pocitystatezip -> address,
+    ssnAttr -> ssn,
+    dobAttr -> date
+  )
 }

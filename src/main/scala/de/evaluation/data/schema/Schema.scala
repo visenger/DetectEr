@@ -5,6 +5,12 @@ package de.evaluation.data.schema
   */
 trait Schema extends Serializable {
 
+  def getSchema: Seq[String]
+
+  def getRecID: String
+
+  def dataTypesDictionary: Map[String, String]
+
   // def getIndexesByAttrNames(attributes: List[String]): List[Int]
 
   def getIndexesByAttrNames(attributes: List[String]): List[Int] = {
@@ -19,9 +25,6 @@ trait Schema extends Serializable {
     indexAttributes.map(a => (a._1.toLowerCase, a._2))
   }
 
-  def getSchema: Seq[String]
-
-  def getRecID: String
 
   def indexAttributes = {
     getSchema.zipWithIndex.toMap.map(
