@@ -157,7 +157,7 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
         val testDF = DataSetCreator.createFrame(session, salariesTestFile, FullResult.schema: _*)
 
         val allTools = FullResult.tools
-        val trainLabeledPointsTools = FormatUtil
+        val trainLabeledPointsTools: RDD[LabeledPoint] = FormatUtil
           .prepareDataToLabeledPoints(session, trainDF, allTools)
 
         val bayesModel = NaiveBayes.train(trainLabeledPointsTools, lambda = 1.0, modelType = "bernoulli")
@@ -439,9 +439,6 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
 
             val maxPrecision = experimentsConf.getDouble(s"${dataSetName}.max.precision")
             val maxRecall = experimentsConf.getDouble(s"${dataSetName}.max.recall")
-
-            val maximumF1 = experimentsConf.getDouble(s"${dataSetName}.max.F1")
-            val minimumF1 = experimentsConf.getDouble(s"${dataSetName}.min.F1")
 
             import org.apache.spark.sql.functions._
 

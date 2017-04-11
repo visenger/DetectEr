@@ -86,6 +86,17 @@ object FormatUtil {
     data
   }
 
+  def prepareDFToLabeledPointRDD(session: SparkSession, labelAndTools: DataFrame): RDD[LabeledPoint] = {
+    import session.implicits._
+    val data: RDD[LabeledPoint] = labelAndTools.map(row => {
+      val label: Double = row.get(0).toString.toDouble
+      val initVector = row.getAs[org.apache.spark.ml.linalg.Vector](1)
+      val features = org.apache.spark.mllib.linalg.Vectors.dense(initVector.toArray)
+      LabeledPoint(label, features)
+    }).rdd
+    data
+  }
+
   def prepareDataToLabeledPoints(session: SparkSession, dataDF: DataFrame, tools: Seq[String]): RDD[LabeledPoint] = {
     import session.implicits._
 
