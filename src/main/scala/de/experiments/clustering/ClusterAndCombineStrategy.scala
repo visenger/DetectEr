@@ -1,13 +1,13 @@
 package de.experiments.clustering
 
 import de.evaluation.f1.{Eval, F1, FullResult}
-import de.evaluation.util.{DataSetCreator, SparkLOAN}
+import de.evaluation.util.{DataSetCreator, SparkLOAN, Timer}
 import de.experiments.ExperimentsCommonConfig
 import de.experiments.models.combinator.ModelsCombinerStrategy.predictCol
 import de.model.logistic.regression.ModelData
 import de.model.util.{FormatUtil, ModelUtil}
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
-import org.apache.spark.ml.clustering.{BisectingKMeans, KMeans}
+import org.apache.spark.ml.clustering.BisectingKMeans
 import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.classification.{LogisticRegressionModel, LogisticRegressionWithLBFGS, NaiveBayes}
@@ -32,14 +32,20 @@ object ClusterAndCombineStrategyRunner extends ExperimentsCommonConfig {
   val rowIdCol = "row-id"
 
   def main(args: Array[String]): Unit = {
-    val K = 4
-    println("######## CLUSTERING ON THRUTH MATRIX:")
-    (2 to K).foreach(k => runOnTruthMatrixAllClusters(k))
-    println("######## CLUSTERING ON ERROR MATRIX:")
-    (2 to K).foreach(k => runOnErrorMatrixAllClusters(k))
-    println("######## CLUSTERING ON TRUTH MATRIX AND AGGREGATING TOOLS FROM THE BEST CLUSTER:")
-    (2 to K).foreach(k => runOnBestCluster(k))
+    //    val K = 4
+    //    println("######## CLUSTERING ON THRUTH MATRIX:")
+    //    (2 to K).foreach(k => runOnTruthMatrixAllClusters(k))
+    //    println("######## CLUSTERING ON ERROR MATRIX:")
+    //    (2 to K).foreach(k => runOnErrorMatrixAllClusters(k))
+    //    println("######## CLUSTERING ON TRUTH MATRIX AND AGGREGATING TOOLS FROM THE BEST CLUSTER:")
+    //    (2 to K).foreach(k => runOnBestCluster(k))
 
+    measureClustering()
+
+  }
+
+  def measureClustering(): Unit = {
+    Timer.measureRuntime(() => runOnTruthMatrixAllClusters())
   }
 
   def runOnTruthMatrixAllClusters(k: Int = 3): Unit = {

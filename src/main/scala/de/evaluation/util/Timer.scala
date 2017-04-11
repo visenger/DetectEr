@@ -12,7 +12,7 @@ object Timer {
     f()
     val finish = System.nanoTime()
     val durationInMillisec = TimeUnit.NANOSECONDS.toMillis(finish - start)
-    println(s"Duration time: $durationInMillisec ms")
+    println(s"Duration time: $durationInMillisec ms (${TimeUnit.MILLISECONDS.toSeconds(durationInMillisec)} sec)")
   }
 
 }

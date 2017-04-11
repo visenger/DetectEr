@@ -26,7 +26,7 @@ object ToolsAndMetadataCombinerRunner {
   def main(args: Array[String]): Unit = {
     Seq("blackoak", "hosp", "salaries").foreach(datasetName => {
       Timer.measureRuntime {
-        () => runSingleDecisionTreeOn(datasetName)
+        () => runBaggingOnDecisionTreeFor(datasetName)
       }
     })
 

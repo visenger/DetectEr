@@ -19,6 +19,14 @@ object FormatUtil {
     })
   }
 
+  def getStringPredictionAndLabel(dataDF: DataFrame, column: String): RDD[(Double, Double)] = {
+    dataDF.select(FullResult.label, column).rdd.map(row => {
+      val label = row.getString(0).toDouble
+      val prediction = row.getString(1).toDouble
+      (prediction, label)
+    })
+  }
+
 
   def prepareDataWithRowIdToLIBSVM(session: SparkSession, dataDF: DataFrame, tools: Seq[String]): DataFrame = {
     import session.implicits._

@@ -1,7 +1,7 @@
 package de.experiments.models.combinator
 
 import de.evaluation.f1.{Eval, F1, FullResult}
-import de.evaluation.util.{DataSetCreator, SparkLOAN}
+import de.evaluation.util.{DataSetCreator, SparkLOAN, Timer}
 import de.experiments.ExperimentsCommonConfig
 import de.model.logistic.regression.ModelData
 import de.model.util.FormatUtil
@@ -36,9 +36,12 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
   val nNetworksCol = "n-networks"
 
   def main(args: Array[String]): Unit = {
-    runBagging()
+    Timer.measureRuntime(() => runBagging())
+   // Timer.measureRuntime(() => runCombineClassifiers())
+    Timer.measureRuntime(() => runCombineTools())
     //runCombineClassifiers()
     // runCombineTools()
+    //runBagging()
   }
 
   def getDecisionTreeModels(trainSamples: Seq[RDD[LabeledPoint]], tools: Seq[String]): Seq[DecisionTreeModel] = {
@@ -191,16 +194,6 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
           errorDecision
         }
         }
-
-
-        //        val majorityVoterTools = udf { (features: org.apache.spark.mllib.linalg.Vector) => {
-        //          val total = features.size
-        //          val sum1 = features.numNonzeros
-        //          val sum0 = total - sum1
-        //          val errorDecision = if (sum1 >= sum0) 1.0 else 0.0
-        //          errorDecision
-        //        }
-        //        }
 
         val features = "features"
         val rowId = "row-id"
@@ -429,7 +422,7 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
 
       session => {
 
-        process_ext_data {
+        process_data {
           data => {
             val dataSetName = data._1
 
@@ -451,8 +444,6 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
               errorDecision
             }
             }
-
-
             /*see: Spark UDF with varargs: http://stackoverflow.com/questions/33151866/spark-udf-with-varargs?rq=1*/
 
             val toolsCols = FullResult.tools.map(t => trainDF(t)).toArray
@@ -481,7 +472,7 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
               .toDF()
 
 
-            val features = FullResult.tools ++ Seq("min2", "min3", "min4", "min5", "min6", "min7", min8, unionall)
+            val features = FullResult.tools // ++ Seq("min2", "min3", "min4", "min5", "min6", "min7", min8, unionall)
             println(s"aggregation running for: ${features.mkString(", ")}")
             val trainLabeledPoints = FormatUtil.prepareDataToLabeledPoints(session, extendedTrainDF, features)
             val testLabeledPoints: RDD[LabeledPoint] = FormatUtil.prepareDataToLabeledPoints(session, extendedTestDF, features)
