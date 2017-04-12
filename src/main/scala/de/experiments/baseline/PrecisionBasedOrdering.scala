@@ -34,21 +34,24 @@ object PrecisionBasedOrderingRunner {
         process_data {
           data => {
             val datasetName = data._1
+            println(s"precision based ordering for $datasetName")
             val trainFile = data._2._1
             val testFile = data._2._2
 
             val trainDF = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
             //val testDF = DataSetCreator.createFrame(session, testFile, FullResult.schema: _*)
 
-            val threshold = 0.1
-            val allTools = FullResult.tools
-            val precisonBasedOrdering: DataFrame = getBestTool(session, trainDF, threshold, allTools)
-            precisonBasedOrdering.printSchema()
+            Array(0.1, 0.2, 0.3, 0.4, 0.5).foreach(threshold => {
+              val allTools = FullResult.tools
+              val precisonBasedOrdering: DataFrame = getBestTool(session, trainDF, threshold, allTools)
+              //precisonBasedOrdering.printSchema()
 
-            val predictionAndLabel: RDD[(Double, Double)] = FormatUtil.getStringPredictionAndLabel(precisonBasedOrdering, detected)
+              val predictionAndLabel: RDD[(Double, Double)] = FormatUtil.getStringPredictionAndLabel(precisonBasedOrdering, detected)
 
-            val precisionBasedEval = F1.evalPredictionAndLabels(predictionAndLabel)
-            precisionBasedEval.printResult(s"Precision based ordering for $datasetName")
+              val precisionBasedEval = F1.evalPredictionAndLabels(predictionAndLabel)
+              precisionBasedEval.printLatexString(s"$$\\delta$$=$threshold  ")
+
+            })
 
 
           }
@@ -82,12 +85,12 @@ object PrecisionBasedOrderingRunner {
         .toDF(FullResult.label, detected)
 
       val remainingTools: Seq[String] = allTools.diff(Seq(bestToolPrecision._1))
-      println(s"processing tools: ${allTools.mkString(", ")}")
+      //println(s"processing tools: ${allTools.mkString(", ")}")
       bestDF
         .union(getBestTool(session, remainingDataset, threshold, remainingTools))
         .repartition(1)
     } else {
-
+      //there are no tools left, so we pass the remaining tools
       val df = trainDF.select(FullResult.label).withColumn(detected, lit("0"))
       df.select(FullResult.label, detected)
         .toDF(FullResult.label, detected)
