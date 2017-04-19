@@ -52,8 +52,6 @@ object PrecisionBasedOrderingRunner {
               precisionBasedEval.printLatexString(s"$$\\delta$$=$threshold  ")
 
             })
-
-
           }
         }
       }
