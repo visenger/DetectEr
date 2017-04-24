@@ -2,7 +2,7 @@ package de.evaluation.tools.pattern.violation
 
 import com.google.common.base.Strings
 import com.typesafe.config.ConfigFactory
-import de.evaluation.data.schema.{BlackOakSchema, HospSchema, SalariesSchema}
+import de.evaluation.data.schema.{BlackOakSchema, FlightsSchema, HospSchema, SalariesSchema}
 import de.evaluation.f1.Cells
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.rdd.RDD
@@ -23,6 +23,50 @@ trait TrifactaSchema extends Serializable {
   def getSchema: Seq[String]
 
   def getAttributesIdx(): Map[String, Int]
+}
+
+object TrifactaFlightsSchema extends TrifactaSchema {
+  private val prefix = "ismissing_"
+
+  private val recid = "RowId"
+  //  private val source = "Source"
+  //  private val flight = "Flight"
+  private val scheduleddeparture = "ScheduledDeparture"
+  private val actualdeparture = "ActualDeparture"
+  private val departuregate = "DepartureGate"
+  private val scheduledarrival = "ScheduledArrival"
+  private val actualarrival = "ActualArrival"
+  private val arrivalgate = "ArrivalGate"
+  private val attributes = Seq(recid,
+    scheduleddeparture, actualdeparture,
+    departuregate, scheduledarrival,
+    actualarrival, arrivalgate)
+
+
+  private val flightsAttrs = attributes
+
+  private val schema = Seq(recid,
+    scheduleddeparture, s"$prefix$scheduleddeparture",
+    actualdeparture, s"$prefix$actualdeparture",
+    departuregate, s"$prefix$departuregate",
+    scheduledarrival, s"$prefix$scheduledarrival",
+    actualarrival, s"$prefix$actualarrival",
+    arrivalgate, s"$prefix$arrivalgate")
+
+  //
+  override def getRecId: String = recid
+
+  override def getPrefix: String = prefix
+
+  override def getSchema: Seq[String] = schema
+
+  override def getAttributesIdx(): Map[String, Int] = {
+    val flightsAttributes = FlightsSchema.indexAttributes
+    flightsAttrs.map(attr => {
+      val idx = flightsAttributes.getOrElse(attr, 0)
+      attr -> idx
+    }).toMap
+  }
 }
 
 object TrifactaSalariesSchema extends TrifactaSchema {
@@ -174,6 +218,19 @@ class TrifactaResults {
   }
 
 
+}
+
+object TrifactaFlightsResults {
+  def main(args: Array[String]): Unit = {
+    val result = "trifacta.flights.vio"
+    val outputFolder = "trifacta.flights.result.folder"
+
+    val fTrifacta = new TrifactaResults()
+    fTrifacta.onSchema(TrifactaFlightsSchema)
+    fTrifacta.onTrifactaResult(result)
+    fTrifacta.addOutputFolder(outputFolder)
+    fTrifacta.writePatternVioLog()
+  }
 }
 
 object TrifactaSalariesResults {

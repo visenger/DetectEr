@@ -1,0 +1,11 @@
+splitrows col: column1 on: '\n'
+split col: column1 on: ',' limit: 8 quote: '\"'
+header
+derive value: ismissing([ScheduledDeparture]) as: 'ismissing_ScheduledDeparture'
+derive value: ismissing([ActualDeparture]) as: 'ismissing_ActualDeparture'
+derive value: ismissing([DepartureGate]) as: 'ismissing_DepartureGate'
+derive value: ismissing([ScheduledArrival]) as: 'ismissing_ScheduledArrival'
+derive value: ismissing([ActualArrival]) as: 'ismissing_ActualArrival'
+derive value: ismissing([ArrivalGate]) as: 'ismissing_ArrivalGate'
+drop col: Source
+drop col: Flight

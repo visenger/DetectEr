@@ -15,7 +15,6 @@ import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 import org.apache.spark.mllib.classification.NaiveBayes
 import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.functions.{array, lit, monotonically_increasing_id, udf}
 import org.apache.spark.sql._
 
 import scala.collection.immutable.Seq
@@ -109,16 +108,6 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig
       session => {
         import org.apache.spark.sql.functions._
         import session.implicits._
-
-        val dataSetName = "ext.blackoak"
-        val maxPrecision = experimentsConf.getDouble(s"${dataSetName}.max.precision")
-        val maxRecall = experimentsConf.getDouble(s"${dataSetName}.max.recall")
-
-        val maximumF1 = experimentsConf.getDouble(s"${dataSetName}.max.F1")
-        val minimumF1 = experimentsConf.getDouble(s"${dataSetName}.min.F1")
-
-        val trainDF = DataSetCreator.createFrame(session, extBlackoakTrainFile, FullResult.schema: _*)
-        val testDF = DataSetCreator.createFrame(session, extBlackoakTestFile, FullResult.schema: _*)
 
 
         val experimentsCSV = DataSetCreator.createFrame(session, multiArmedBandResults, schema: _*)
@@ -217,23 +206,24 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig
             => t1.minK.precision >= t2.minK.precision
                 && t1.unionAll.recall >= t2.unionAll.recall
                 && t1.linearCombi.f1 >= t2.linearCombi.f1
-              //  && t1.bayesCombi.f1 >= t2.bayesCombi.f1
             )
 
-
-          //          topCombinations.filter(_.combi.combi.size > 2).foreach(combi => {
-          //            val latexString = combi.makeLatexString()
-          //            println(latexString)
-          //
-          //          })
-
-          val topCombi = topCombinations.filter(_.combi.combi.size > 3).head
+          val topCombi = topCombinations.filter(_.combi.combi.size >= 3).head
           val bestTools: Seq[String] = topCombi.combi.combi.map(_.name)
 
-          println(s"top tools to consider: ${bestTools.map(getExtName(_)).mkString(",")}")
+          println(s"top tools to consider: ${bestTools.map(getName(_)).mkString(",")}")
 
 
           /* TODO: the following code is duplication from the class de.experiments.clustering.ClusterAndCombineStrategy*/
+          val dataSetName = data
+          val maxPrecision = experimentsConf.getDouble(s"${dataSetName}.max.precision")
+          val maxRecall = experimentsConf.getDouble(s"${dataSetName}.max.recall")
+
+          val trainFile = allTrainData.getOrElse(dataSetName, "unknown")
+          val testFile = allTestData.getOrElse(dataSetName, "unknown")
+
+          val trainDF = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
+          val testDF = DataSetCreator.createFrame(session, testFile, FullResult.schema: _*)
 
           //START ensemble learning on best tools:
           val trainLabeledPointsTools = FormatUtil
@@ -484,7 +474,6 @@ object AllocateAndFoldStrategyRunner extends ExperimentsCommonConfig
 
           val evalDT = F1.evalPredictionAndLabels(predictionAndLabel)
           evalDT.printResult(s"decision tree combi based on $impurity")
-
 
 
           /* the  code above is duplication*/
