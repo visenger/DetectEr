@@ -231,6 +231,12 @@ object TrifactaFlightsResults {
     fTrifacta.addOutputFolder(outputFolder)
     fTrifacta.writePatternVioLog()
   }
+
+  def getResults(session: SparkSession): DataFrame = {
+    val confString = "result.flights.pattern.vio"
+    val trifactaOutput = DataSetCreator.createDataSetNoHeader(session, confString, Cells.schema: _*)
+    trifactaOutput
+  }
 }
 
 object TrifactaSalariesResults {
@@ -243,7 +249,6 @@ object TrifactaSalariesResults {
     sTrifacta.onTrifactaResult(result)
     sTrifacta.addOutputFolder(outputFolder)
     sTrifacta.writePatternVioLog()
-
   }
 
   def getResult(session: SparkSession): DataFrame = {

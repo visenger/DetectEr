@@ -4,7 +4,7 @@ import java.io.File
 
 import com.google.common.base.Strings
 import com.typesafe.config.ConfigFactory
-import de.evaluation.data.schema.{BlackOakSchema, HospSchema, SalariesSchema, Schema}
+import de.evaluation.data.schema._
 import de.evaluation.f1.Cells
 import de.evaluation.util.{DataSetCreator, SparkLOAN, SparkSessionCreator}
 import org.apache.spark.rdd.RDD
@@ -213,6 +213,34 @@ object DBoostResults {
     new DBoostResults().getGaussResultForOutlierDetection(session)
   }
 
+}
+
+object FlightsHistDBoostResults {
+  val outlierDetectFile = "dboost.flights.detect.hist"
+  val folder = "dboost.flights.result.hist"
+
+  def main(args: Array[String]): Unit = {
+    val dboost = new DBoostResults()
+    dboost.onSchema(FlightsSchema)
+    dboost.addDetectFile(outlierDetectFile)
+    dboost.addOutputFolder(folder)
+    dboost.writeOutliersLog()
+
+  }
+}
+
+object FlightsGaussDBoostResults {
+  val outlierDetectFile = "dboost.flights.detect.gauss"
+  val folder = "dboost.flights.result.gauss"
+
+  def main(args: Array[String]): Unit = {
+    val dboost = new DBoostResults()
+    dboost.onSchema(FlightsSchema)
+    dboost.addDetectFile(outlierDetectFile)
+    dboost.addOutputFolder(folder)
+    dboost.writeOutliersLog()
+
+  }
 }
 
 object HospHistDBoostResults {
