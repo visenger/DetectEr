@@ -50,12 +50,14 @@ trait ExperimentsCommonConfig {
     "salaries" -> defaultConfig.getString("data.salaries.dirty"),
     "flights" -> defaultConfig.getString("data.flights.dirty"))
 
-  val allTestData: Map[String, String] = Map("blackoak" -> blackoakTestFile,
+  val allTestData: Map[String, String] = Map(
+    "blackoak" -> blackoakTestFile,
     "hosp" -> hospTestFile,
     "salaries" -> salariesTestFile,
     "flights" -> flightsTestFile)
 
-  val allTrainData: Map[String, String] = Map("blackoak" -> blackoakTrainFile,
+  val allTrainData: Map[String, String] = Map(
+    "blackoak" -> blackoakTrainFile,
     "hosp" -> hospTrainFile,
     "salaries" -> salariesTrainFile,
     "flights" -> flightsTrainFile

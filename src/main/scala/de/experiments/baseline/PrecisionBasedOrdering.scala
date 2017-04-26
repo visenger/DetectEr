@@ -41,7 +41,7 @@ object PrecisionBasedOrderingRunner {
             val trainDF = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
             //val testDF = DataSetCreator.createFrame(session, testFile, FullResult.schema: _*)
 
-            Array(0.1, 0.2, 0.3, 0.4, 0.5).foreach(threshold => {
+            Array(0.1, 0.2, 0.3, 0.4, 0.5, 0.6).foreach(threshold => {
               val allTools = FullResult.tools
               val precisonBasedOrdering: DataFrame = getBestTool(session, trainDF, threshold, allTools)
               //precisonBasedOrdering.printSchema()
@@ -49,7 +49,7 @@ object PrecisionBasedOrderingRunner {
               val predictionAndLabel: RDD[(Double, Double)] = FormatUtil.getStringPredictionAndLabel(precisonBasedOrdering, detected)
 
               val precisionBasedEval = F1.evalPredictionAndLabels(predictionAndLabel)
-              precisionBasedEval.printLatexString(s"$$\\delta$$=$threshold  ")
+              precisionBasedEval.printLatexString(s"PBO $$\\delta$$=$threshold  ")
 
             })
           }
