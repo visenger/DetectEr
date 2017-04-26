@@ -227,6 +227,13 @@ object FlightsHistDBoostResults {
     dboost.writeOutliersLog()
 
   }
+
+  def getResult(session: SparkSession): DataFrame = {
+
+    val flightsOutput = "result.flights.outlier.hist"
+    new DBoostResults().getOutliersByAlgorithm(session, flightsOutput)
+
+  }
 }
 
 object FlightsGaussDBoostResults {
@@ -239,6 +246,13 @@ object FlightsGaussDBoostResults {
     dboost.addDetectFile(outlierDetectFile)
     dboost.addOutputFolder(folder)
     dboost.writeOutliersLog()
+
+  }
+
+  def getResult(session: SparkSession): DataFrame = {
+
+    val flightsOutput = "result.flights.outlier.gauss"
+    new DBoostResults().getOutliersByAlgorithm(session, flightsOutput)
 
   }
 }

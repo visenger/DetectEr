@@ -1,7 +1,7 @@
 package de.evaluation.tools.deduplication.nadeef
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.data.schema.{HospSchema, SalariesSchema, Schema}
+import de.evaluation.data.schema.{FlightsSchema, HospSchema, SalariesSchema, Schema}
 import de.evaluation.f1.Cells
 import de.evaluation.util.{DataSetCreator, DatabaseProps, SparkLOAN}
 import org.apache.spark.sql._
@@ -160,6 +160,26 @@ object HospDuplicatesHandler {
   def getResults(session: SparkSession): DataFrame = {
     val hospOutput = "result.hosp.10k.deduplication"
     new NadeefDeduplicationResults().getDedupResult(session, hospOutput)
+  }
+}
+
+object FlightsDeduplicatesHandler {
+  val outputFolder = "nadeef.flights.dedup.result.folder"
+  val dedupRule = "dedupFlights"
+  val dirtyTableName = "tb_flights_dirty"
+
+  def main(args: Array[String]): Unit = {
+    val deduplicator = new NadeefDeduplicationResults()
+    deduplicator.onSchema(FlightsSchema)
+    deduplicator.onDirtyTable(dirtyTableName)
+    deduplicator.onRule(dedupRule)
+    deduplicator.addOutputFolder(outputFolder)
+    deduplicator.handleDuplicates()
+  }
+
+  def getResult(session: SparkSession): DataFrame = {
+    val flightsOutput = "result.flights.deduplication"
+    new NadeefDeduplicationResults().getDedupResult(session, flightsOutput)
   }
 }
 

@@ -5,7 +5,6 @@ import java.io.File
 import com.typesafe.config.ConfigFactory
 import de.evaluation.f1.FullResult
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
-import de.model.util.LibsvmConverter
 import org.apache.spark.sql.DataFrame
 
 import scala.util.Try
@@ -135,23 +134,24 @@ class DataSplitter extends SplitterCommonBase {
         val data = DataSetCreator.createDataSetFromCSV(session, datasetFullResult, FullResult.schema: _*)
         val Array(train, test) = data.randomSplit(Array(trainFraction, testFraction))
 
-        val libsvmConverter = new LibsvmConverter()
-
-        val trainLibsvm: DataFrame = libsvmConverter.toLibsvmFormat(train)
-
-        val testLibsvm: DataFrame = libsvmConverter.toLibsvmFormat(test)
+        //todo: we do not need libsvm for now....
+        //        val libsvmConverter = new LibsvmConverter()
+        //
+        //        val trainLibsvm: DataFrame = libsvmConverter.toLibsvmFormat(train)
+        //
+        //        val testLibsvm: DataFrame = libsvmConverter.toLibsvmFormat(test)
 
         train.show()
 
-        testLibsvm.show()
+        //        testLibsvm.show()
 
         val trainDF = train.toDF(FullResult.schema: _*)
         writeCSV(trainDF, datasetTrain)
-        writeTextTo(trainLibsvm, datasetTrainLibsvm)
+        //        writeTextTo(trainLibsvm, datasetTrainLibsvm)
 
         val testDF = test.toDF(FullResult.schema: _*)
         writeCSV(testDF, datasetTest)
-        writeTextTo(testLibsvm, datasetTestLibsvm)
+        //        writeTextTo(testLibsvm, datasetTestLibsvm)
 
       }
     }
@@ -307,6 +307,30 @@ object SalariesDataSplitter {
 
     allNewFiles.foreach(file => dataSplitter.renameFile(file))
 
+
+  }
+}
+
+object FlightsDataSplitter {
+  val flightsFullResult = "result.flights.full.result.file"
+
+  val flightsTrainFolder = "flights.experiments.train.folder"
+  val flightsTrainFile = "flights.experiments.train.file"
+
+  val flightsTestFolder = "flights.experiments.test.folder"
+  val flightTestFile = "flights.experiments.test.file"
+
+  val allNewFiles = Seq(flightsTrainFile, flightTestFile)
+
+  def main(args: Array[String]): Unit = {
+
+    val dataSplitter = new DataSplitter()
+    dataSplitter.takeFullResult(flightsFullResult)
+    dataSplitter.addTrainFolder(flightsTrainFolder)
+    dataSplitter.addTestFolder(flightsTestFolder)
+    dataSplitter.run()
+
+    allNewFiles.foreach(file => dataSplitter.renameFile(file))
 
   }
 }

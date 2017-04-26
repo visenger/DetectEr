@@ -41,6 +41,22 @@ object HospBaselineOnTrain extends ExperimentsCommonConfig {
   }
 }
 
+object FlightsBaselingOnTrain extends ExperimentsCommonConfig {
+
+  def main(args: Array[String]): Unit = {
+    println("FLIGHTS:")
+    run()
+  }
+
+  def run() = {
+    val baseline = new Baseline()
+    baseline.onData(flightsTrainFile)
+    baseline.calculateEvalForEachTool()
+    baseline.calculateBaseline()
+  }
+
+}
+
 object SalariesBaselineOnTrain extends ExperimentsCommonConfig {
   def main(args: Array[String]): Unit = {
     println("SALARIES:")

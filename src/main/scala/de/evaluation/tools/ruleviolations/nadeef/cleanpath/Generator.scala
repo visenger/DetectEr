@@ -28,10 +28,10 @@ object NadeefCleanPathRulesGenerator extends App {
   //  val file = "data.hosp.fds.rules.file"
   //  val noisy = "data.hosp.dirty.10k"
 
-  val prefix = "SLR"
-  val folder = "data.salaries.fds.rules.folder"
-  val file = "data.salaries.fds.rules.file"
-  val noisy = "data.salaries.nadeef.dirty"
+  val prefix = "FLGHT"
+  val folder = "data.flights.fds.rules.folder"
+  val file = "data.flights.fds.rules.file"
+  val noisy = "data.flights.dirty"
 
   //general:
   val config = ConfigFactory.load()
@@ -83,8 +83,9 @@ object NadeefCleanPathRulesGenerator extends App {
   println(
     s"""TODO:
        |now,
-       |1) put $cleanPath to NADEEF_HOME
-       |2) check the ${noisyData} header to be conform with NADEEF requirements: https://github.com/daqcri/NADEEF/wiki/NADEEF-CSV-File-Format """
+       |1) put $cleanPath to NADEEF_HOME :${config.getString("nadeef.home.path")}
+       |2) check the ${noisyData} header to be conform with NADEEF requirements:
+       |https://github.com/daqcri/NADEEF/wiki/NADEEF-CSV-File-Format """
       .stripMargin)
 
 

@@ -3,7 +3,7 @@ package de.evaluation.tools.ruleviolations.nadeef
 import java.util.Properties
 
 import com.typesafe.config.ConfigFactory
-import de.evaluation.data.schema.{BlackOakSchema, HospSchema, SalariesSchema, Schema}
+import de.evaluation.data.schema._
 import de.evaluation.f1.Cells
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import org.apache.spark.rdd.RDD
@@ -85,6 +85,8 @@ class NadeefRulesVioResults extends Serializable {
           /*val attribute = "attribute"
           val tupleid = "tupleid"
           val recId = "oid"*/
+
+          //todo: recId should be string
 
           (violationVals.getAs[Int](tupleid), violationVals.getAs[String](attribute), dirtyVals.getAs[String](recId))
         })
@@ -206,6 +208,25 @@ object HospRulesVioRunner {
     rulesVioOutput
   }
 
+}
+
+object FlightsRulesVioRunner {
+  def main(args: Array[String]): Unit = {
+    val dirtyTabName = "tb_flights_dirty"
+    val outputFolder = "nadeef.flights.rules.vio.result.folder"
+
+    val rulesVioRunner = new NadeefRulesVioResults()
+    rulesVioRunner.onSchema(FlightsSchema)
+    rulesVioRunner.addDirtyTableName(dirtyTabName)
+    rulesVioRunner.specifyOutput(outputFolder)
+    rulesVioRunner.createRulesVioLog()
+  }
+
+  def getResult(session: SparkSession): DataFrame = {
+    val confString = "result.flights.rules.vio"
+    val rulesVioOutput = DataSetCreator.createDataSetNoHeader(session, confString, Cells.schema: _*)
+    rulesVioOutput
+  }
 }
 
 object SalariesRulesVioRunner {
