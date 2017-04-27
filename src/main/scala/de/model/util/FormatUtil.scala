@@ -46,6 +46,21 @@ object FormatUtil {
     data
   }
 
+  def convertVectors(session: SparkSession, dataDF: DataFrame, features: String): DataFrame = {
+    import session.implicits._
+
+    val labelAndTools = dataDF.select(FullResult.label, features)
+
+    val data: DataFrame = labelAndTools.map(row => {
+      val label: Double = row.get(0).toString.toDouble
+      val toolsVals: Array[Double] = row.getAs[org.apache.spark.mllib.linalg.Vector](1).toArray
+      val features = Vectors.dense(toolsVals)
+      (label, features)
+    }).toDF("label", "features")
+
+    data
+  }
+
   def prepareDataToLIBSVM(session: SparkSession, dataDF: DataFrame, tools: Seq[String]): DataFrame = {
     import session.implicits._
 

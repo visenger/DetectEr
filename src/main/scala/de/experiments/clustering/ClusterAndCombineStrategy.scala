@@ -3,7 +3,7 @@ package de.experiments.clustering
 import de.evaluation.f1.{Eval, F1, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN, Timer}
 import de.experiments.ExperimentsCommonConfig
-import de.experiments.models.combinator.ModelsCombinerStrategy.predictCol
+import de.experiments.models.combinator.Bagging
 import de.model.logistic.regression.ModelData
 import de.model.util.{FormatUtil, ModelUtil}
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
@@ -30,6 +30,7 @@ class ClusterAndCombineStrategy {
 
 object ClusterAndCombineStrategyRunner extends ExperimentsCommonConfig {
   val rowIdCol = "row-id"
+  val predictCol = "prediction"
 
   def main(args: Array[String]): Unit = {
     //    val K = 4
@@ -40,12 +41,174 @@ object ClusterAndCombineStrategyRunner extends ExperimentsCommonConfig {
     //    println("######## CLUSTERING ON TRUTH MATRIX AND AGGREGATING TOOLS FROM THE BEST CLUSTER:")
     //    (2 to K).foreach(k => runOnBestCluster(k))
 
-    measureClustering()
+    //measureClustering()
+
+    runOnTruthMatrixBestToolByCluster()
 
   }
 
   def measureClustering(): Unit = {
     Timer.measureRuntime(() => runOnTruthMatrixAllClusters())
+  }
+
+  def runOnTruthMatrixBestToolByCluster(k: Int = 3): Unit = {
+    SparkLOAN.withSparkSession("BEST-TOOL-PER-CLUSTER") {
+      session => {
+        import session.implicits._
+        process_data {
+          data => {
+
+            val dataSetName = data._1
+            val trainFile = data._2._1
+            val testFile = data._2._2
+
+            println(s"CLUSTERING ON TRUTH MATRIX: $dataSetName")
+
+            //            val maxPrecision = experimentsConf.getDouble(s"${dataSetName}.max.precision")
+            //            val maxRecall = experimentsConf.getDouble(s"${dataSetName}.max.recall")
+
+
+            val trainDF = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
+            val testDF = DataSetCreator.createFrame(session, testFile, FullResult.schema: _*)
+
+            val nxor = udf { (label: String, tool: String) => if (label.equals(tool)) "1" else "0" }
+            val sum = udf { features: Vector => s"${features.numNonzeros} / ${features.size} " }
+            val getRealName = udf { alias: String => getExtName(alias) }
+
+            var truthDF = trainDF
+            val tools = FullResult.tools
+            tools.foreach(tool => {
+              truthDF = truthDF
+                .withColumn(s"truth-$tool", nxor(trainDF("label"), trainDF(tool)))
+            })
+
+            val truthTools: Seq[String] = tools.map(t => s"truth-$t")
+
+            var labelAndTruth = truthDF.select(FullResult.label, truthTools: _*)
+            tools.foreach(tool => {
+              labelAndTruth = labelAndTruth.withColumnRenamed(s"truth-$tool", tool)
+            })
+
+            /*TRANSPOSE MATRIX*/
+
+            val columns: Seq[(String, Column)] = tools.map(t => (t, labelAndTruth(t)))
+
+            val transposedDF: DataFrame = columns.map(column => {
+              val columnName = column._1
+              val columnForTool = labelAndTruth.select(column._2)
+              val toolsVals: Array[Double] = columnForTool
+                .rdd
+                .map(element => element.getString(0).toDouble)
+                .collect()
+              val valsVector: Vector = Vectors.dense(toolsVals)
+              (columnName, valsVector)
+            }).toDF("tool-name", "features")
+
+            transposedDF.withColumn(s"correct/total", sum(transposedDF("features"))).show()
+
+            val indexer = new StringIndexer()
+              .setInputCol("tool-name")
+              .setOutputCol("label")
+
+            val truthMatrixWithIndx = indexer
+              .fit(transposedDF)
+              .transform(transposedDF)
+
+            //            val k = 3
+            println(s"bisecting kMeans")
+            println(s"k = $k")
+
+            /* val kMeans = new KMeans().setK(k)
+             val kMeansModel = kMeans.fit(truthMatrixWithIndx)
+             val kMeansClusters: DataFrame = kMeansModel
+               .transform(truthMatrixWithIndx)
+               .withColumn("tool", truthMatrixWithIndx("tool-name"))
+               .toDF()
+
+             val kMeansResult: Seq[(Int, String)] = kMeansClusters
+               .select("prediction", "tool")
+               .groupByKey(row => {
+                 row.getInt(0)
+               }).mapGroups((num, row) => {
+               val clusterTools: Seq[String] = row.map(_.getString(1)).toSeq
+               (num, clusterTools.mkString(splitter))
+             }).rdd.collect().toSeq*/
+
+
+            //hierarchical clustering
+            val bisectingKMeans = new BisectingKMeans()
+              .setSeed(5L)
+              .setK(k)
+            val bisectingKMeansModel = bisectingKMeans.fit(truthMatrixWithIndx)
+            val bisectingKMeansClusters = bisectingKMeansModel
+              .transform(truthMatrixWithIndx)
+              .withColumn("tool", truthMatrixWithIndx("tool-name"))
+
+            val bisectingKMeansResult: Seq[(Int, String)] = bisectingKMeansClusters
+              .select("prediction", "tool")
+              .groupByKey(row => {
+                row.getInt(0)
+              }).mapGroups((num, row) => {
+              val clusterTools: Seq[String] = row.map(_.getString(1)).toSeq
+              (num, clusterTools.mkString(splitter))
+            }).rdd.collect().toSeq
+
+
+            /* we need row-id in order to join the prediction column with the core matrix*/
+            var testDataWithRowId: DataFrame = testDF.withColumn(rowIdCol, monotonically_increasing_id())
+
+            var bestToolsByClusters: Seq[String] = Seq()
+
+            /*Start Lin Combi on kMeansResult*/
+            bisectingKMeansResult.foreach(cluster => {
+
+              val clusterNr = cluster._1
+              val clusterTools: Seq[String] = cluster._2.split(splitter).toSeq
+
+              /**
+                *
+                * experiments.conf
+                *
+                * exists-1.precision = 0.0024
+                * exists-2.precision = 0.0989
+                * exists-3.precision = 0.0326
+                * exists-4.precision = 0.1513
+                * exists-5.precision = 0.1313
+                *
+                * todo: select max percision [datasetname].[toolname].precision
+                *
+                **/
+
+              //todo: select best tool per cluster and store it to bestToolsByClusters
+
+              val toolsToPrecisions: Map[String, Double] = clusterTools.map(toolStr => {
+
+                toolStr -> experimentsConf.getDouble(s"$dataSetName.$toolStr.precision")
+              }).toMap
+              val maxPrecision = toolsToPrecisions.values.max
+              val bestTool: String = toolsToPrecisions.filter(entry => {
+                val precision = entry._2
+                precision.equals(maxPrecision)
+              }).head._1
+              bestToolsByClusters = bestToolsByClusters ++ Seq(bestTool)
+
+            })
+
+            println(s" $dataSetName best tools: ${bestToolsByClusters.mkString(splitter)}")
+
+            val clustersBagging = new Bagging()
+            val evalClustering = clustersBagging.onDataSetName(dataSetName)
+              .useTools(bestToolsByClusters)
+              .onTrainDataFrame(trainDF)
+              .onTestDataFrame(testDF)
+              .performEnsambleLearningOnTools(session)
+            evalClustering.printResult(s"CLUSTER AND AGGREGATE BEST TOOLS ON $dataSetName")
+
+          }
+        }
+
+      }
+    }
   }
 
   def runOnTruthMatrixAllClusters(k: Int = 3): Unit = {
@@ -65,8 +228,6 @@ object ClusterAndCombineStrategyRunner extends ExperimentsCommonConfig {
             val maxPrecision = experimentsConf.getDouble(s"${dataSetName}.max.precision")
             val maxRecall = experimentsConf.getDouble(s"${dataSetName}.max.recall")
 
-            val maximumF1 = experimentsConf.getDouble(s"${dataSetName}.max.F1")
-            val minimumF1 = experimentsConf.getDouble(s"${dataSetName}.min.F1")
 
             val trainDF = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
             val testDF = DataSetCreator.createFrame(session, testFile, FullResult.schema: _*)
