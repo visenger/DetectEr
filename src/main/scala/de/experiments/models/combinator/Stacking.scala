@@ -283,6 +283,7 @@ class Stacking extends ExperimentsCommonConfig {
 
     val (train, test) = new WranglingDatasetsToMetadata()
       .onDatasetName(dataset)
+      .onTools(allColumns)
       .createMetadataFeatures(session)
 
     val featuresCol = "features"

@@ -3,7 +3,7 @@ package de.experiments.clustering
 import de.evaluation.f1.{Eval, F1, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN, Timer}
 import de.experiments.ExperimentsCommonConfig
-import de.experiments.models.combinator.Bagging
+import de.experiments.models.combinator.{Bagging, Stacking}
 import de.model.logistic.regression.ModelData
 import de.model.util.{FormatUtil, ModelUtil}
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
@@ -43,7 +43,7 @@ object ClusterAndCombineStrategyRunner extends ExperimentsCommonConfig {
 
     //measureClustering()
 
-    runOnTruthMatrixBestToolByCluster()
+    runOnTruthMatrixBestToolByCluster(4)
 
   }
 
@@ -197,12 +197,42 @@ object ClusterAndCombineStrategyRunner extends ExperimentsCommonConfig {
             println(s" $dataSetName best tools: ${bestToolsByClusters.mkString(splitter)}")
 
             val clustersBagging = new Bagging()
-            val evalClustering = clustersBagging.onDataSetName(dataSetName)
+            val evalClustering = clustersBagging
+              .onDataSetName(dataSetName)
               .useTools(bestToolsByClusters)
               .onTrainDataFrame(trainDF)
               .onTestDataFrame(testDF)
               .performEnsambleLearningOnTools(session)
-            evalClustering.printResult(s"CLUSTER AND AGGREGATE BEST TOOLS ON $dataSetName")
+
+            evalClustering.printResult(s"BAGGING: CLUSTER AND AGGREGATE BEST TOOLS ON $dataSetName")
+
+            val baggingWithMeta = new Bagging()
+            val evalMetaBaggingOnClusters = baggingWithMeta
+              .onDataSetName(dataSetName)
+              .useTools(bestToolsByClusters)
+              .onTrainDataFrame(trainDF)
+              .onTestDataFrame(testDF)
+              .performEnsambleLearningOnToolsAndMetadata(session)
+            evalMetaBaggingOnClusters.printResult(s"BAGGING & METADATA: CLUSTER AND AGGREGATE BEST TOOLS ON $dataSetName")
+
+            val stacking = new Stacking()
+            val evalClustWithStacking = stacking
+              .onDataSetName(dataSetName)
+              .useTools(bestToolsByClusters)
+              .onTrainDataFrame(trainDF)
+              .onTestDataFrame(testDF)
+              .performEnsambleLearningOnTools(session)
+            evalClustWithStacking.printResult(s"STACKING: CLUSTER AND AGGREGATE BEST TOOLS ON $dataSetName")
+
+            val stackingWithMeta = new Stacking()
+            val evalMetaStackingOnClusters = stackingWithMeta
+              .onDataSetName(dataSetName)
+              .useTools(bestToolsByClusters)
+              .onTrainDataFrame(trainDF)
+              .onTestDataFrame(testDF)
+              .performEnsambleLearningOnToolsAndMetadata(session)
+            evalMetaStackingOnClusters.printResult(s"STACKING & METADATA: CLUSTER AND AGGREGATE BEST TOOLS ON $dataSetName")
+
 
           }
         }

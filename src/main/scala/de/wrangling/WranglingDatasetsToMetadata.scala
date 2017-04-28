@@ -28,6 +28,13 @@ class WranglingDatasetsToMetadata extends Serializable with ExperimentsCommonCon
   private var trainDataPath = ""
   private var testDataPath = ""
 
+  private var allTools = FullResult.tools
+
+  def onTools(tools: Seq[String]): this.type = {
+    allTools = tools
+    this
+  }
+
 
   def onDatasetName(name: String): this.type = {
     datasetName = name
@@ -164,8 +171,10 @@ class WranglingDatasetsToMetadata extends Serializable with ExperimentsCommonCon
       }
     }
 
-    val trainToolsCols = FullResult.tools.map(t => trainDF(t)).toArray
-    val testToolsCols = FullResult.tools.map(t => testDF(t)).toArray
+    //val tools = FullResult.tools
+    val tools = allTools
+    val trainToolsCols = tools.map(t => trainDF(t)).toArray
+    val testToolsCols = tools.map(t => testDF(t)).toArray
 
     val trainToolsVectorDF = trainToolsAndMetadataDF
       .withColumn("tools-vector", transformToToolsVector(array(trainToolsCols: _*)))
