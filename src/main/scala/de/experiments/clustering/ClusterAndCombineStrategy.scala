@@ -33,7 +33,7 @@ object ClusterAndCombineStrategyRunner extends ExperimentsCommonConfig {
   val predictCol = "prediction"
 
   def main(args: Array[String]): Unit = {
-    //    val K = 4
+    val K = 4
     //    println("######## CLUSTERING ON THRUTH MATRIX:")
     //    (2 to K).foreach(k => runOnTruthMatrixAllClusters(k))
     //    println("######## CLUSTERING ON ERROR MATRIX:")
@@ -43,7 +43,8 @@ object ClusterAndCombineStrategyRunner extends ExperimentsCommonConfig {
 
     //measureClustering()
 
-    runOnTruthMatrixBestToolByCluster(4)
+
+    runOnTruthMatrixBestToolByCluster()
 
   }
 
@@ -51,12 +52,13 @@ object ClusterAndCombineStrategyRunner extends ExperimentsCommonConfig {
     Timer.measureRuntime(() => runOnTruthMatrixAllClusters())
   }
 
-  def runOnTruthMatrixBestToolByCluster(k: Int = 3): Unit = {
+  def runOnTruthMatrixBestToolByCluster(): Unit = {
     SparkLOAN.withSparkSession("BEST-TOOL-PER-CLUSTER") {
       session => {
         import session.implicits._
         process_data {
           data => {
+
 
             val dataSetName = data._1
             val trainFile = data._2._1
@@ -73,7 +75,7 @@ object ClusterAndCombineStrategyRunner extends ExperimentsCommonConfig {
 
             val nxor = udf { (label: String, tool: String) => if (label.equals(tool)) "1" else "0" }
             val sum = udf { features: Vector => s"${features.numNonzeros} / ${features.size} " }
-            val getRealName = udf { alias: String => getExtName(alias) }
+           // val getRealName = udf { alias: String => getExtName(alias) }
 
             var truthDF = trainDF
             val tools = FullResult.tools
@@ -104,7 +106,7 @@ object ClusterAndCombineStrategyRunner extends ExperimentsCommonConfig {
               (columnName, valsVector)
             }).toDF("tool-name", "features")
 
-            transposedDF.withColumn(s"correct/total", sum(transposedDF("features"))).show()
+          //  transposedDF.withColumn(s"correct/total", sum(transposedDF("features"))).show()
 
             val indexer = new StringIndexer()
               .setInputCol("tool-name")
@@ -115,124 +117,129 @@ object ClusterAndCombineStrategyRunner extends ExperimentsCommonConfig {
               .transform(transposedDF)
 
             //            val k = 3
-            println(s"bisecting kMeans")
-            println(s"k = $k")
 
-            /* val kMeans = new KMeans().setK(k)
-             val kMeansModel = kMeans.fit(truthMatrixWithIndx)
-             val kMeansClusters: DataFrame = kMeansModel
-               .transform(truthMatrixWithIndx)
-               .withColumn("tool", truthMatrixWithIndx("tool-name"))
-               .toDF()
+            (2 to 4).foreach(k => {
+              println(s"bisecting kMeans")
+             // println(s"k = $k")
 
-             val kMeansResult: Seq[(Int, String)] = kMeansClusters
-               .select("prediction", "tool")
-               .groupByKey(row => {
-                 row.getInt(0)
-               }).mapGroups((num, row) => {
-               val clusterTools: Seq[String] = row.map(_.getString(1)).toSeq
-               (num, clusterTools.mkString(splitter))
-             }).rdd.collect().toSeq*/
+              /* val kMeans = new KMeans().setK(k)
+               val kMeansModel = kMeans.fit(truthMatrixWithIndx)
+               val kMeansClusters: DataFrame = kMeansModel
+                 .transform(truthMatrixWithIndx)
+                 .withColumn("tool", truthMatrixWithIndx("tool-name"))
+                 .toDF()
 
-
-            //hierarchical clustering
-            val bisectingKMeans = new BisectingKMeans()
-              .setSeed(5L)
-              .setK(k)
-            val bisectingKMeansModel = bisectingKMeans.fit(truthMatrixWithIndx)
-            val bisectingKMeansClusters = bisectingKMeansModel
-              .transform(truthMatrixWithIndx)
-              .withColumn("tool", truthMatrixWithIndx("tool-name"))
-
-            val bisectingKMeansResult: Seq[(Int, String)] = bisectingKMeansClusters
-              .select("prediction", "tool")
-              .groupByKey(row => {
-                row.getInt(0)
-              }).mapGroups((num, row) => {
-              val clusterTools: Seq[String] = row.map(_.getString(1)).toSeq
-              (num, clusterTools.mkString(splitter))
-            }).rdd.collect().toSeq
+               val kMeansResult: Seq[(Int, String)] = kMeansClusters
+                 .select("prediction", "tool")
+                 .groupByKey(row => {
+                   row.getInt(0)
+                 }).mapGroups((num, row) => {
+                 val clusterTools: Seq[String] = row.map(_.getString(1)).toSeq
+                 (num, clusterTools.mkString(splitter))
+               }).rdd.collect().toSeq*/
 
 
-            /* we need row-id in order to join the prediction column with the core matrix*/
-            var testDataWithRowId: DataFrame = testDF.withColumn(rowIdCol, monotonically_increasing_id())
+              //hierarchical clustering
+              val bisectingKMeans = new BisectingKMeans()
+                .setSeed(5L)
+                .setK(k)
+              val bisectingKMeansModel = bisectingKMeans.fit(truthMatrixWithIndx)
+              val bisectingKMeansClusters = bisectingKMeansModel
+                .transform(truthMatrixWithIndx)
+                .withColumn("tool", truthMatrixWithIndx("tool-name"))
 
-            var bestToolsByClusters: Seq[String] = Seq()
+              val bisectingKMeansResult: Seq[(Int, String)] = bisectingKMeansClusters
+                .select("prediction", "tool")
+                .groupByKey(row => {
+                  row.getInt(0)
+                }).mapGroups((num, row) => {
+                val clusterTools: Seq[String] = row.map(_.getString(1)).toSeq
+                (num, clusterTools.mkString(splitter))
+              }).rdd.collect().toSeq
 
-            /*Start Lin Combi on kMeansResult*/
-            bisectingKMeansResult.foreach(cluster => {
 
-              val clusterNr = cluster._1
-              val clusterTools: Seq[String] = cluster._2.split(splitter).toSeq
+              /* we need row-id in order to join the prediction column with the core matrix*/
+              // var testDataWithRowId: DataFrame = testDF.withColumn(rowIdCol, monotonically_increasing_id())
 
-              /**
-                *
-                * experiments.conf
-                *
-                * exists-1.precision = 0.0024
-                * exists-2.precision = 0.0989
-                * exists-3.precision = 0.0326
-                * exists-4.precision = 0.1513
-                * exists-5.precision = 0.1313
-                *
-                * todo: select max percision [datasetname].[toolname].precision
-                *
-                **/
+              var bestToolsByClusters: Seq[String] = Seq()
 
-              //todo: select best tool per cluster and store it to bestToolsByClusters
+              /*Start Lin Combi on kMeansResult*/
+              bisectingKMeansResult.foreach(cluster => {
 
-              val toolsToPrecisions: Map[String, Double] = clusterTools.map(toolStr => {
+                // val clusterNr = cluster._1
+                val clusterTools: Seq[String] = cluster._2.split(splitter).toSeq
 
-                toolStr -> experimentsConf.getDouble(s"$dataSetName.$toolStr.precision")
-              }).toMap
-              val maxPrecision = toolsToPrecisions.values.max
-              val bestTool: String = toolsToPrecisions.filter(entry => {
-                val precision = entry._2
-                precision.equals(maxPrecision)
-              }).head._1
-              bestToolsByClusters = bestToolsByClusters ++ Seq(bestTool)
+                /**
+                  *
+                  * experiments.conf
+                  *
+                  * exists-1.precision = 0.0024
+                  * exists-2.precision = 0.0989
+                  * exists-3.precision = 0.0326
+                  * exists-4.precision = 0.1513
+                  * exists-5.precision = 0.1313
+                  *
+                  * todo: select max percision [datasetname].[toolname].precision
+                  *
+                  **/
+
+
+                val toolsToPrecisions: Map[String, Double] = clusterTools.map(toolStr => {
+
+                  toolStr -> experimentsConf.getDouble(s"$dataSetName.$toolStr.precision")
+                }).toMap
+                val maxPrecision = toolsToPrecisions.values.max
+                val bestTool: String = toolsToPrecisions.filter(entry => {
+                  val precision = entry._2
+                  precision.equals(maxPrecision)
+                }).head._1
+                bestToolsByClusters = bestToolsByClusters ++ Seq(bestTool)
+
+              })
+
+              println(s" $dataSetName $k-best tools: ${bestToolsByClusters.map(getName(_)).mkString(splitter)}")
+
+              val clustersBagging = new Bagging()
+              val evalClustering = clustersBagging
+                .onDataSetName(dataSetName)
+                .useTools(bestToolsByClusters)
+                .onTrainDataFrame(trainDF)
+                .onTestDataFrame(testDF)
+                .performEnsambleLearningOnTools(session)
+
+              // evalClustering.printResult(s"BAGGING: CLUSTER AND AGGREGATE BEST TOOLS ON $dataSetName")
+
+              val baggingWithMeta = new Bagging()
+              val evalMetaBaggingOnClusters = baggingWithMeta
+                .onDataSetName(dataSetName)
+                .useTools(bestToolsByClusters)
+                .onTrainDataFrame(trainDF)
+                .onTestDataFrame(testDF)
+                .performEnsambleLearningOnToolsAndMetadata(session)
+              // evalMetaBaggingOnClusters.printResult(s"BAGGING & METADATA: CLUSTER AND AGGREGATE BEST TOOLS ON $dataSetName")
+              println(s"bagging: ${k}\t${evalClustering.precision}\t${evalClustering.recall}\t${evalClustering.f1}\t${evalMetaBaggingOnClusters.precision}\t${evalMetaBaggingOnClusters.recall}\t${evalMetaBaggingOnClusters.f1}")
+
+              val stacking = new Stacking()
+              val evalClustWithStacking = stacking
+                .onDataSetName(dataSetName)
+                .useTools(bestToolsByClusters)
+                .onTrainDataFrame(trainDF)
+                .onTestDataFrame(testDF)
+                .performEnsambleLearningOnTools(session)
+              //              evalClustWithStacking.printResult(s"STACKING: CLUSTER AND AGGREGATE BEST TOOLS ON $dataSetName")
+
+
+              val stackingWithMeta = new Stacking()
+              val evalMetaStackingOnClusters = stackingWithMeta
+                .onDataSetName(dataSetName)
+                .useTools(bestToolsByClusters)
+                .onTrainDataFrame(trainDF)
+                .onTestDataFrame(testDF)
+                .performEnsambleLearningOnToolsAndMetadata(session)
+              //              evalMetaStackingOnClusters.printResult(s"STACKING & METADATA: CLUSTER AND AGGREGATE BEST TOOLS ON $dataSetName")
+              println(s"stacking: $k\t${evalClustWithStacking.precision}\t${evalClustWithStacking.recall}\t${evalClustWithStacking.f1}\t${evalMetaStackingOnClusters.precision}\t${evalMetaStackingOnClusters.recall}\t${evalMetaStackingOnClusters.f1}")
 
             })
-
-            println(s" $dataSetName best tools: ${bestToolsByClusters.mkString(splitter)}")
-
-            val clustersBagging = new Bagging()
-            val evalClustering = clustersBagging
-              .onDataSetName(dataSetName)
-              .useTools(bestToolsByClusters)
-              .onTrainDataFrame(trainDF)
-              .onTestDataFrame(testDF)
-              .performEnsambleLearningOnTools(session)
-
-            evalClustering.printResult(s"BAGGING: CLUSTER AND AGGREGATE BEST TOOLS ON $dataSetName")
-
-            val baggingWithMeta = new Bagging()
-            val evalMetaBaggingOnClusters = baggingWithMeta
-              .onDataSetName(dataSetName)
-              .useTools(bestToolsByClusters)
-              .onTrainDataFrame(trainDF)
-              .onTestDataFrame(testDF)
-              .performEnsambleLearningOnToolsAndMetadata(session)
-            evalMetaBaggingOnClusters.printResult(s"BAGGING & METADATA: CLUSTER AND AGGREGATE BEST TOOLS ON $dataSetName")
-
-            val stacking = new Stacking()
-            val evalClustWithStacking = stacking
-              .onDataSetName(dataSetName)
-              .useTools(bestToolsByClusters)
-              .onTrainDataFrame(trainDF)
-              .onTestDataFrame(testDF)
-              .performEnsambleLearningOnTools(session)
-            evalClustWithStacking.printResult(s"STACKING: CLUSTER AND AGGREGATE BEST TOOLS ON $dataSetName")
-
-            val stackingWithMeta = new Stacking()
-            val evalMetaStackingOnClusters = stackingWithMeta
-              .onDataSetName(dataSetName)
-              .useTools(bestToolsByClusters)
-              .onTrainDataFrame(trainDF)
-              .onTestDataFrame(testDF)
-              .performEnsambleLearningOnToolsAndMetadata(session)
-            evalMetaStackingOnClusters.printResult(s"STACKING & METADATA: CLUSTER AND AGGREGATE BEST TOOLS ON $dataSetName")
-
 
           }
         }
