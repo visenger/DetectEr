@@ -15,7 +15,7 @@ object WrangleJSON {
     SparkLOAN.withSparkSession("JSON") {
       session => {
         val config = ConfigFactory.load()
-        val jsonPath = config.getString("metadata.blackoak.path")
+        val jsonPath = config.getString("metadata.flights.path")
 
         val top10Values = extractTop10Values(session, jsonPath)
         top10Values.show(false)
@@ -29,15 +29,20 @@ object WrangleJSON {
 
     val jsonDF = session.read.json(jsonPath)
     //jsonDF.show(false)
-    // jsonDF.printSchema()
+    //jsonDF.printSchema()
 
     val metadataDF = jsonDF
       .select(
-        jsonDF("columnCombination.columnIdentifiers.columnIdentifier"),
-        jsonDF("statisticMap.Data Type.value"),
-        jsonDF("statisticMap.Nulls.value"),
-        jsonDF("statisticMap.Top 10 frequent items.value"),
-        jsonDF("statisticMap.Frequency Of Top 10 Frequent Items.value"))
+        jsonDF("columnCombination.columnIdentifiers.columnIdentifier").as("id"),
+        //jsonDF("statisticMap.Data Type.value"),
+        jsonDF("statisticMap.Nulls.value").as("nulls count"),
+        jsonDF("statisticMap.Percentage of Nulls.value").as("% of nulls"),
+        jsonDF("statisticMap.Percentage of Distinct Values.value").as("% of distinct vals"),
+        // jsonDF("statisticMap.Top 10 frequent items.value").as("top10")
+        jsonDF("statisticMap.Frequency Of Top 10 Frequent Items.value").as("freqTop10")
+      )
+
+    metadataDF.show(false)
 
 
     //  metadataDF.printSchema()
