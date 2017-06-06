@@ -32,22 +32,39 @@ object ToolsAndMetadataCombinerRunner {
 
     val datasets = Seq("blackoak", "hosp", "salaries", "flights")
 
-    datasets.foreach(datasetName => {
-      Timer.measureRuntime {
-        () => runBaggingOnDecisionTreeFor(datasetName)
-      }
-    })
 
     datasets.foreach(datasetName => {
       Timer.measureRuntime {
-        () => runStackingFor(datasetName)
+        () => runBaggingOnDecisionTreeForMetadata(datasetName)
+      }
+    })
+
+
+
+
+    datasets.foreach(datasetName => {
+      Timer.measureRuntime {
+        () => runStackingForMetadata(datasetName)
       }
     })
 
   }
 
 
-  def runStackingFor(datasetName: String): Unit = {
+//  def runStackingFor(datasetName: String): Unit = {
+//    SparkLOAN.withSparkSession("STACKING-ON-METADATA") {
+//      session => {
+//        val stacking = new Stacking()
+//        val evalStackingWithMetadata = stacking.onDataSetName(datasetName)
+//          .useTools(FullResult.tools)
+//          .performEnsambleLearningOnTools(session)
+//        evalStackingWithMetadata.printResult(s"STACKING ON TOOLS ONLY FOR $datasetName ")
+//
+//      }
+//    }
+//  }
+
+  def runStackingForMetadata(datasetName: String): Unit = {
     SparkLOAN.withSparkSession("STACKING-ON-METADATA") {
       session => {
         val stacking = new Stacking()
@@ -60,7 +77,21 @@ object ToolsAndMetadataCombinerRunner {
     }
   }
 
-  def runBaggingOnDecisionTreeFor(datasetName: String): Unit = {
+//  def runBaggingOnDecisionTreeFor(datasetName: String): Unit = {
+  //    SparkLOAN.withSparkSession("METADATA") {
+  //      session => {
+  //        val bagging = new Bagging()
+  //        val evalBaggingOnToolsAndMetadata: Eval = bagging.onDataSetName(datasetName)
+  //          .useTools(FullResult.tools)
+  //          .performEnsambleLearningOnTools(session)
+  //
+  //        evalBaggingOnToolsAndMetadata.printResult(s"BAGGING ON TOOLS ONLY FOR $datasetName")
+  //
+  //      }
+  //    }
+  //  }
+
+  def runBaggingOnDecisionTreeForMetadata(datasetName: String): Unit = {
     SparkLOAN.withSparkSession("METADATA") {
       session => {
         val bagging = new Bagging()
@@ -72,8 +103,6 @@ object ToolsAndMetadataCombinerRunner {
 
       }
     }
-
-
   }
 
 
@@ -173,14 +202,18 @@ object ToolsAndMetadataCombinerRunner {
     decisionTreeModels
   }
 
-  private def getFeaturesNumber(featuresDF: DataFrame): Int = {
+  private def getFeaturesNumber(featuresDF: DataFrame): Int
+
+  = {
     featuresDF.select("features").head().getAs[org.apache.spark.ml.linalg.Vector](0).size
   }
 
   private def getBestModel(maxPrecision: Double,
                            maxRecall: Double,
                            train: RDD[LabeledPoint],
-                           test: RDD[LabeledPoint]): (ModelData, LogisticRegressionModel) = {
+                           test: RDD[LabeledPoint]): (ModelData, LogisticRegressionModel)
+
+  = {
 
     val model: LogisticRegressionModel = new LogisticRegressionWithLBFGS()
       .setNumClasses(2)

@@ -47,12 +47,12 @@ class Bagging {
 
     val train = FormatUtil.prepareDataToLabeledPoints(session, trainDF, allColumns)
 
-    val Array(_, train1) = train.randomSplit(Array(0.7, 0.3), seed = 123L)
-    val Array(_, train2) = train.randomSplit(Array(0.7, 0.3), seed = 23L)
-    val Array(_, train3) = train.randomSplit(Array(0.7, 0.3), seed = 593L)
-    val Array(_, train4) = train.randomSplit(Array(0.7, 0.3), seed = 941L)
-    val Array(_, train5) = train.randomSplit(Array(0.7, 0.3), seed = 3L)
-    val Array(_, train6) = train.randomSplit(Array(0.7, 0.3), seed = 623L)
+    val Array(train1, _) = train.randomSplit(Array(0.9, 0.1), seed = 123L)
+    val Array(train2, _) = train.randomSplit(Array(0.9, 0.1), seed = 23L)
+    val Array(train3, _) = train.randomSplit(Array(0.9, 0.1), seed = 593L)
+    val Array(train4, _) = train.randomSplit(Array(0.9, 0.1), seed = 941L)
+    val Array(train5, _) = train.randomSplit(Array(0.9, 0.1), seed = 3L)
+    val Array(train6, _) = train.randomSplit(Array(0.9, 0.1), seed = 623L)
 
     val trainSamples = Seq(train1, train2, train3, train4, train5, train6)
 
@@ -105,10 +105,12 @@ class Bagging {
   def performEnsambleLearningOnToolsAndMetadata(session: SparkSession): Eval = {
     import session.implicits._
 
-    val (train, test) = new WranglingDatasetsToMetadata()
+    val (trainFull, test) = new WranglingDatasetsToMetadata()
       .onDatasetName(dataset)
       .onTools(allColumns)
       .createMetadataFeatures(session)
+    //todo: setting training data to 1%
+    val Array(train, _) = trainFull.randomSplit(Array(0.1, 0.9))
 
     val featuresCol = "features"
 
@@ -122,12 +124,12 @@ class Bagging {
     //APPLY CLASSIFICATION
     //start: decision tree
 
-    val Array(_, train1) = trainLabPointRDD.randomSplit(Array(0.5, 0.5), seed = 123L)
-    val Array(train2, _) = trainLabPointRDD.randomSplit(Array(0.5, 0.5), seed = 23L)
-    val Array(_, train3) = trainLabPointRDD.randomSplit(Array(0.5, 0.5), seed = 593L)
-    val Array(train4, _) = trainLabPointRDD.randomSplit(Array(0.5, 0.5), seed = 941L)
-    val Array(_, train5) = trainLabPointRDD.randomSplit(Array(0.5, 0.5), seed = 3L)
-    val Array(train6, _) = trainLabPointRDD.randomSplit(Array(0.5, 0.5), seed = 623L)
+    val Array(_, train1) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 123L)
+    val Array(train2, _) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 23L)
+    val Array(_, train3) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 593L)
+    val Array(train4, _) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 941L)
+    val Array(_, train5) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 3L)
+    val Array(train6, _) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 623L)
 
     val trainSamples = Seq(train1, train2, train3, train4, train5, train6)
 

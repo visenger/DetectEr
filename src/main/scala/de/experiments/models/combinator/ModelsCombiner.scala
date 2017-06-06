@@ -1,7 +1,7 @@
 package de.experiments.models.combinator
 
 import de.evaluation.f1.{F1, FullResult}
-import de.evaluation.util.{DataSetCreator, SparkLOAN}
+import de.evaluation.util.{DataSetCreator, SparkLOAN, Timer}
 import de.experiments.ExperimentsCommonConfig
 import de.model.logistic.regression.ModelData
 import de.model.util.FormatUtil
@@ -21,26 +21,17 @@ class ModelsCombiner {
 
 object ModelsCombinerStrategy extends ExperimentsCommonConfig {
 
-  //  val unionall = "unionAll"
-  //  val minKCol = "minK"
-  //  //val maxK = "maxK"
-  //  //  val majorVote = "major"
-  //  val naiveBayesCol = "naive-bayes"
-  //  val dtCol = "decision-tree"
-  //  val logRegrCol = "log-regr"
-  //  val predictCol = "prediction"
-  //  val nNetworksCol = "n-networks"
 
   def main(args: Array[String]): Unit = {
-    println(s" RUNNING EXPERIMENTS ON TOOLS COMBINATION BY USING SEVERAL STRATEGIES")
+    println(s" RUNNING EXPERIMENTS ON TOOLS COMBINATION BY USING SEVERAL STRATEGIES (train dataset fraction = 1%)")
 
     //Timer.measureRuntime(() => runBagging())
-    //Timer.measureRuntime(() => runCombineClassifiers())
-    //Timer.measureRuntime(() => runCombineTools())
+    Timer.measureRuntime(() => runBagging())
+    Timer.measureRuntime(() => runStacking())
 
-    runCombineTools()
-    runBagging()
-    runStacking()
+    //    runCombineTools()
+    //    runBagging()
+    //    runStacking()
   }
 
 
@@ -54,12 +45,15 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
           val testFile = data._2._2
 
           val trainDF = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
+          //todo: setting train fraction to 1%
+          val Array(train, _) = trainDF.randomSplit(Array(0.1, 0.9))
+
           val testDF = DataSetCreator.createFrame(session, testFile, FullResult.schema: _*)
 
           //          println(s"STACKING: START PROCESSING $dataSetName")
           val stacking = new Stacking()
           val evalStacking = stacking.onDataSetName(dataSetName)
-            .onTrainDataFrame(trainDF)
+            .onTrainDataFrame(train)
             .onTestDataFrame(testDF)
             .useTools(FullResult.tools)
             .performEnsambleLearningOnTools(session)
@@ -69,6 +63,7 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
       }
     }
   }
+
 
   def runBagging(): Unit = {
 
@@ -82,13 +77,16 @@ object ModelsCombinerStrategy extends ExperimentsCommonConfig {
             val testFile = data._2._2
 
             val trainDF = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
+            //todo: setting train fraction to 1%
+            val Array(train, _) = trainDF.randomSplit(Array(0.1, 0.9))
+
             val testDF = DataSetCreator.createFrame(session, testFile, FullResult.schema: _*)
 
             //println(s"BAGGING: START PROCESSING $datasetName")
             val bagging = new Bagging()
             val evalBagging = bagging.onDataSetName(datasetName)
               .useTools(FullResult.tools)
-              .onTrainDataFrame(trainDF)
+              .onTrainDataFrame(train)
               .onTestDataFrame(testDF)
               .performEnsambleLearningOnTools(session)
             evalBagging.printResult(s"BAGGING FOR TOOLS ONLY ON $datasetName ")

@@ -13,7 +13,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.functions.{lit, monotonically_increasing_id, udf}
+import org.apache.spark.sql.functions.{monotonically_increasing_id, udf}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
@@ -27,8 +27,8 @@ class Stacking extends ExperimentsCommonConfig {
 
   private var allColumns: Seq[String] = FullResult.tools
 
-  private val unionall = "unionAll"
-  private val minKCol = "minK"
+  //  private val unionall = "unionAll"
+  //  private val minKCol = "minK"
   //val maxK = "maxK"
   //  val majorVote = "major"
   private val naiveBayesCol = "naive-bayes"
@@ -88,19 +88,19 @@ class Stacking extends ExperimentsCommonConfig {
     //finish: decision tree
     val predictByDT = udf { features: org.apache.spark.mllib.linalg.Vector => decisionTreeModel.predict(features) }
 
-    val predictByLogRegr = udf { features: org.apache.spark.mllib.linalg.Vector => {
-      bestLogRegModel.setThreshold(bestLogRegrData.bestThreshold)
-      bestLogRegModel.predict(features)
-    }
-    }
+    //    val predictByLogRegr = udf { features: org.apache.spark.mllib.linalg.Vector => {
+    //      bestLogRegModel.setThreshold(bestLogRegrData.bestThreshold)
+    //      bestLogRegModel.predict(features)
+    //    }
+    //    }
     val predictByBayes = udf { features: org.apache.spark.mllib.linalg.Vector => bayesModel.predict(features) }
 
-    val minKTools = udf { (k: Int, tools: org.apache.spark.mllib.linalg.Vector) => {
-      val sum = tools.numNonzeros
-      val errorDecision = if (sum >= k) 1.0 else 0.0
-      errorDecision
-    }
-    }
+    //    val minKTools = udf { (k: Int, tools: org.apache.spark.mllib.linalg.Vector) => {
+    //      val sum = tools.numNonzeros
+    //      val errorDecision = if (sum >= k) 1.0 else 0.0
+    //      errorDecision
+    //    }
+    //    }
 
     val features = "features"
     val rowId = "row-id"
@@ -114,10 +114,10 @@ class Stacking extends ExperimentsCommonConfig {
     var allClassifiers = testLabeledPointsTools
       .withColumn(dtCol, predictByDT(testLabeledPointsTools(features)))
       .withColumn(naiveBayesCol, predictByBayes(testLabeledPointsTools(features)))
-      .withColumn(logRegrCol, predictByLogRegr(testLabeledPointsTools(features)))
-      .withColumn(unionall, minKTools(lit(1), testLabeledPointsTools(features)))
-      .withColumn(minKCol, minKTools(lit(toolsNum), testLabeledPointsTools(features)))
-      .select(rowId, FullResult.label, dtCol, naiveBayesCol, logRegrCol, unionall, minKCol)
+      //.withColumn(logRegrCol, predictByLogRegr(testLabeledPointsTools(features)))
+      // .withColumn(unionall, minKTools(lit(1), testLabeledPointsTools(features)))
+      //  .withColumn(minKCol, minKTools(lit(toolsNum), testLabeledPointsTools(features)))
+      .select(rowId, FullResult.label, dtCol, naiveBayesCol)
       .toDF()
 
     //start:neural networks
@@ -140,7 +140,7 @@ class Stacking extends ExperimentsCommonConfig {
     allClassifiers = allClassifiers
       .join(nnPrediction, rowId)
       .withColumnRenamed(predictCol, nNetworksCol)
-      .select(rowId, FullResult.label, nNetworksCol, dtCol, naiveBayesCol, logRegrCol, unionall, minKCol)
+      .select(rowId, FullResult.label, nNetworksCol, dtCol, naiveBayesCol)
 
 
     //all possible combinations of errors classification and their counts
@@ -242,7 +242,7 @@ class Stacking extends ExperimentsCommonConfig {
     //end: Majority wins
 
 
-    val allClassifiersCols: Seq[String] = Array(nNetworksCol, dtCol, naiveBayesCol, logRegrCol, unionall, minKCol).toSeq
+    val allClassifiersCols: Seq[String] = Array(nNetworksCol, dtCol, naiveBayesCol).toSeq
 
     val labeledPointsClassifiers = FormatUtil.prepareDoublesToLabeledPoints(session, allClassifiers, allClassifiersCols)
 
@@ -281,10 +281,13 @@ class Stacking extends ExperimentsCommonConfig {
   def performEnsambleLearningOnToolsAndMetadata(session: SparkSession): Eval = {
     import session.implicits._
 
-    val (train, test) = new WranglingDatasetsToMetadata()
+    val (trainFull, test) = new WranglingDatasetsToMetadata()
       .onDatasetName(dataset)
       .onTools(allColumns)
       .createMetadataFeatures(session)
+
+    //todo: setting training data to 1%
+    val Array(train, _) = trainFull.randomSplit(Array(0.1, 0.9))
 
     val featuresCol = "features"
 
@@ -394,9 +397,9 @@ class Stacking extends ExperimentsCommonConfig {
 
   //Todo: remove thresholds from learning model.
   private def _getBestModel(maxPrecision: Double,
-                           maxRecall: Double,
-                           train: RDD[LabeledPoint],
-                           test: RDD[LabeledPoint]): (ModelData, LogisticRegressionModel)
+                            maxRecall: Double,
+                            train: RDD[LabeledPoint],
+                            test: RDD[LabeledPoint]): (ModelData, LogisticRegressionModel)
 
   = {
 
