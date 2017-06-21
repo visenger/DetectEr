@@ -2,7 +2,7 @@ package de.experiments.baseline
 
 import de.evaluation.f1.{F1, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
-import de.experiments.models.combinator.ModelsCombinerStrategy.process_data
+import de.experiments.ExperimentsCommonConfig
 import de.model.util.FormatUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions._
@@ -15,7 +15,7 @@ class PrecisionBasedOrdering {
 
 }
 
-object PrecisionBasedOrderingRunner {
+object PrecisionBasedOrderingRunner extends ExperimentsCommonConfig {
 
   def maxPrec(e1: (String, Double), e2: (String, Double)): (String, Double) = {
     val maxP = Math.max(e1._2, e2._2)
@@ -36,17 +36,27 @@ object PrecisionBasedOrderingRunner {
             val datasetName = data._1
             println(s"precision based ordering for $datasetName")
             val trainFile = data._2._1
-            val testFile = data._2._2
+            // val testFile = data._2._2
 
-            val trainDF = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
-            //val testDF = DataSetCreator.createFrame(session, testFile, FullResult.schema: _*)
+            val trainDF: DataFrame = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
 
-            Array(0.1, 0.2, 0.3, 0.4, 0.5, 0.6).foreach(threshold => {
+            val Array(limitedSample, _) = trainDF.randomSplit(Array(0.1, 0.9), 123L)
+            val sample: DataFrame = limitedSample.toDF(FullResult.schema: _*)
+
+            // val testDF = DataSetCreator.createFrame(session, testFile, FullResult.schema: _*)
+
+            Array(0.1, 0.2, 0.3, 0.4, 0.5).foreach(threshold => {
+              println(s"threshold: $threshold")
               val allTools = FullResult.tools
-              val precisonBasedOrdering: DataFrame = getBestTool(session, trainDF, threshold, allTools)
-              //precisonBasedOrdering.printSchema()
 
-              val predictionAndLabel: RDD[(Double, Double)] = FormatUtil.getStringPredictionAndLabel(precisonBasedOrdering, detected)
+              val precisionBasedOrdering: DataFrame = getBestTool(session, sample, threshold, allTools)
+
+              //              val precisionBasedOrdering: DataFrame = getBestTool(session, trainDF, threshold, allTools)
+              val pbo: DataFrame = precisionBasedOrdering
+                .select(FullResult.label, detected)
+                .toDF(FullResult.label, detected)
+
+              val predictionAndLabel: RDD[(Double, Double)] = FormatUtil.getStringPredictionAndLabel(pbo, detected)
 
               val precisionBasedEval = F1.evalPredictionAndLabels(predictionAndLabel)
               precisionBasedEval.printLatexString(s"PBO $$\\delta$$=$threshold  ")
@@ -61,6 +71,7 @@ object PrecisionBasedOrderingRunner {
 
   def getBestTool(session: SparkSession, trainDF: DataFrame, threshold: Double, allTools: Seq[String]): DataFrame = {
     val toolToPrecision = allTools.map(t => {
+
       val toolPredictAndLabel = FormatUtil.getStringPredictionAndLabel(trainDF, t)
       val evalTool = F1.evalPredictionAndLabels(toolPredictAndLabel)
       t -> evalTool.precision
@@ -71,10 +82,11 @@ object PrecisionBasedOrderingRunner {
     })
     if (qualifiedTools.nonEmpty) {
       val bestToolPrecision: (String, Double) = qualifiedTools.reduce((e1, e2) => maxPrec(e1, e2))
+      println(s"best system: ${getName(bestToolPrecision._1)}, precision: ${bestToolPrecision._2}")
 
       val remainingDataset: DataFrame = trainDF
         .where(trainDF(bestToolPrecision._1) === "0")
-        .toDF(FullResult.schema: _*)
+      //.toDF(FullResult.schema: _*) <- bug!!!
 
       val bestDF = trainDF
         .select(FullResult.label, bestToolPrecision._1)
@@ -82,16 +94,23 @@ object PrecisionBasedOrderingRunner {
         .withColumnRenamed(bestToolPrecision._1, detected)
         .toDF(FullResult.label, detected)
 
+      // bestDF.printSchema()
+
       val remainingTools: Seq[String] = allTools.diff(Seq(bestToolPrecision._1))
-      //println(s"processing tools: ${allTools.mkString(", ")}")
+      // println(s"remaining tools: ${remainingTools.mkString(", ")}")
       bestDF
         .union(getBestTool(session, remainingDataset, threshold, remainingTools))
-        .repartition(1)
+      //.repartition(1)
     } else {
       //there are no tools left, so we pass the remaining tools
+
       val df = trainDF.select(FullResult.label).withColumn(detected, lit("0"))
-      df.select(FullResult.label, detected)
+      val dataFrame = df.select(FullResult.label, detected)
+        // .repartition(1)
         .toDF(FullResult.label, detected)
+      //      dataFrame.printSchema()
+      //      dataFrame.show()
+      dataFrame
     }
 
   }

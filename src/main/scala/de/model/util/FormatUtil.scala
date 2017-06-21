@@ -20,6 +20,7 @@ object FormatUtil {
   }
 
   def getStringPredictionAndLabel(dataDF: DataFrame, column: String): RDD[(Double, Double)] = {
+    //dataDF.printSchema()
     dataDF.select(FullResult.label, column).rdd.map(row => {
       val label = row.getString(0).toDouble
       val prediction = row.getString(1).toDouble

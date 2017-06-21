@@ -64,10 +64,12 @@ trait ExperimentsCommonConfig {
   )
 
   val allTrainAndTestData: Map[String, (String, String)] = Map(
+
     "blackoak" -> (blackoakTrainFile, blackoakTestFile),
     "hosp" -> (hospTrainFile, hospTestFile),
     "salaries" -> (salariesTrainFile, salariesTestFile),
-    "flights" -> (flightsTrainFile, flightsTestFile))
+    "flights" -> (flightsTrainFile, flightsTestFile)
+  )
 
 
   def process_test_data(f: Tuple2[String, String] => Unit): Unit = {

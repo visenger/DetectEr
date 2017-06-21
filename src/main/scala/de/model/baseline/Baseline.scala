@@ -58,6 +58,7 @@ class Baseline {
   def calculateBaseline(): Unit = {
     SparkLOAN.withSparkSession("BASELINE") {
       session => {
+        //val data: DataFrame = get1PercentData(session)
         val data: DataFrame = getData(session)
 
         /* UNION ALL RESULTS: */
@@ -82,10 +83,29 @@ class Baseline {
     data
   }
 
+  private def get1PercentData(session: SparkSession): DataFrame = {
+    //    val blackOakFullResult = DataSetCreator.createDataSetNoHeader(session, fullResult, FullResult.schema: _*)
+    //    blackOakFullResult
+    val data = DataSetCreator.createFrame(session, fullResult, FullResult.schema: _*)
+    val Array(train, _) = data.randomSplit(Array(0.1, 0.9))
+    train
+  }
+
 }
 
 object HospBaselineRunner {
   def main(args: Array[String]): Unit = {
+    run()
+  }
+
+  def run(): Unit = {
+    println(
+      s"""
+         |
+         |HOSP FULL DATASET:
+         |
+         |
+       """.stripMargin)
     val config = ConfigFactory.load()
     val hospBaseline = new Baseline()
     hospBaseline.onData(config.getString("result.hosp.10k.full.result.file"))
@@ -96,6 +116,17 @@ object HospBaselineRunner {
 
 object SalariesBaselineRunner {
   def main(args: Array[String]): Unit = {
+    run()
+  }
+
+  def run() = {
+    println(
+      s"""
+         |
+         |SALARIES FULL DATASET:
+         |
+         |
+       """.stripMargin)
     val config = ConfigFactory.load()
     val salariesBaseline = new Baseline()
     salariesBaseline.onData(config.getString("result.salaries.full.result.file"))
@@ -107,15 +138,45 @@ object SalariesBaselineRunner {
 object BlackOackBaselineRunner {
 
   def main(args: Array[String]): Unit = {
+    run()
+  }
+
+  def run() = {
+    println(
+      s"""
+         |
+         |ADDRESS FULL DATASET:
+         |
+         |
+       """.stripMargin)
     val config = ConfigFactory.load()
     val blackOakBaseline = new Baseline()
     blackOakBaseline.onData(config.getString("output.full.result.file"))
     blackOakBaseline.calculateEvalForEachTool()
     blackOakBaseline.calculateBaseline()
+  }
+}
 
+object FlightsBaselineRunner {
 
+  def main(args: Array[String]): Unit = {
+    run()
   }
 
+  def run() = {
+    println(
+      s"""
+         |
+         |FLIGHTS FULL DATASET:
+         |
+         |
+       """.stripMargin)
+    val config = ConfigFactory.load()
+    val flightsBaseline = new Baseline()
+    flightsBaseline.onData(config.getString("result.flights.full.result.file"))
+    flightsBaseline.calculateEvalForEachTool()
+    flightsBaseline.calculateBaseline()
+  }
 }
 
 object ExtBlackoakBaselineRunner {
@@ -136,5 +197,15 @@ object ExtBlackoakBaselineRunner {
         combiWithNaiveBayes.printResult("all tools naive bayes: ")
       }
     }
+  }
+}
+
+object AllBaselinesRunner {
+  def main(args: Array[String]): Unit = {
+    println(s"Full datasets evaluation run:")
+    BlackOackBaselineRunner.run
+    HospBaselineRunner.run()
+    SalariesBaselineRunner.run()
+    FlightsBaselineRunner.run()
   }
 }
