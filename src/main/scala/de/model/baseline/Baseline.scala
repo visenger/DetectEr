@@ -29,7 +29,7 @@ class Baseline {
 
         tools.foreach(tool => {
           val eval = F1.getEvalForTool(data, tool)
-          //eval.printResult(tool)
+          eval.printResult(tool)
           eval.printLatexString(config.getString(s"dictionary.names.$tool"))
         })
       }
