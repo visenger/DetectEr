@@ -3,12 +3,11 @@ package de.experiments.models.combinator
 import de.evaluation.f1.{Eval, F1, FullResult}
 import de.experiments.ExperimentsCommonConfig
 import de.experiments.metadata.ToolsAndMetadataCombinerRunner.getDecisionTreeModels
-import de.model.logistic.regression.ModelData
 import de.model.util.{FormatUtil, ModelUtil}
 import de.wrangling.WranglingDatasetsToMetadata
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 import org.apache.spark.ml.feature.VectorAssembler
-import org.apache.spark.mllib.classification.{LogisticRegressionModel, LogisticRegressionWithLBFGS, NaiveBayes}
+import org.apache.spark.mllib.classification.NaiveBayes
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
@@ -141,106 +140,6 @@ class Stacking extends ExperimentsCommonConfig {
       .join(nnPrediction, rowId)
       .withColumnRenamed(predictCol, nNetworksCol)
       .select(rowId, FullResult.label, nNetworksCol, dtCol, naiveBayesCol)
-
-
-    //all possible combinations of errors classification and their counts
-    //    val allResults = allClassifiers
-    //      .rdd
-    //      .map(row => {
-    //        //val rowId = row.getLong(0)
-    //        val label = row.getDouble(1)
-    //        val nn = row.getDouble(2)
-    //        val dt = row.getDouble(3)
-    //        val bayes = row.getDouble(4)
-    //        val logregr = row.getDouble(5)
-    //        val unionAll = row.getDouble(6)
-    //        val minK = row.getDouble(7)
-    //        (label, nn, dt, bayes, logregr, unionAll, minK)
-    //      })
-    //
-    //    val countByValue = allResults.countByValue()
-    //
-    //    println(s"label, nn, dt, nb, logreg, unionall, minK: count")
-    //    countByValue.foreach(entry => {
-    //      println(s"(${entry._1._1.toInt}, ${entry._1._2.toInt}, ${entry._1._3.toInt}, ${entry._1._4.toInt}, ${entry._1._5.toInt}, ${entry._1._6.toInt}, ${entry._1._7.toInt}) : ${entry._2}")
-    //    })
-
-    //F1 for all classifiers performed on tools result:
-    //    val predAndLabelNN = FormatUtil.getPredictionAndLabel(allClassifiers, nNetworksCol)
-    //    val evalNN = F1.evalPredictionAndLabels(predAndLabelNN)
-    //    evalNN.printResult("Neural Networks")
-
-    //    val predictionAndLabelDT = FormatUtil.getPredictionAndLabel(allClassifiers, dtCol)
-    //    val evalDTrees = F1.evalPredictionAndLabels(predictionAndLabelDT)
-    //    evalDTrees.printResult("decision trees")
-
-    //    val predAndLabelLogReg = FormatUtil.getPredictionAndLabel(allClassifiers, logRegrCol)
-    //    val evalLogReg = F1.evalPredictionAndLabels(predAndLabelLogReg)
-    //    evalLogReg.printResult("logistic regression")
-
-    //    val predictionAndLabelNB = FormatUtil.getPredictionAndLabel(allClassifiers, naiveBayesCol)
-    //    val evalNB = F1.evalPredictionAndLabels(predictionAndLabelNB)
-    //    evalNB.printResult("naive bayes")
-
-
-    //Now combine all classifiers:
-    //    println(s"COMBINE CLASSIFIERS")
-
-    //    val minK = udf { (k: Int, tools: mutable.WrappedArray[Double]) => {
-    //      val sum = tools.count(_ == 1.0)
-    //      val errorDecision = if (sum >= k) 1.0 else 0.0
-    //      errorDecision
-    //    }
-    //    }
-
-    //    val clColumns: Array[Column] = Array(
-    //      allClassifiers(nNetworksCol),
-    //      allClassifiers(dtCol),
-    //      allClassifiers(naiveBayesCol),
-    //      allClassifiers(logRegrCol),
-    //      allClassifiers(unionall),
-    //      allClassifiers(minKCol))
-
-    //    val finalCombiCol = "final-combi"
-
-    //    (1 to clColumns.length).foreach(k => {
-    //      val finalResult: DataFrame =
-    //        allClassifiers
-    //          .withColumn(finalCombiCol, minK(lit(k), array(clColumns: _*)))
-    //
-    //      val predictionAndLabel = FormatUtil.getPredictionAndLabel(finalResult, finalCombiCol)
-    //      val eval = F1.evalPredictionAndLabels(predictionAndLabel)
-    //      eval.printResult(s"min-$k combination of nn, dt, nb, logreg, unionall, min5")
-    //    })
-
-    //    val maxKClassifiers = udf { (k: Int, tools: mutable.WrappedArray[Double]) => {
-    //      val sum = tools.count(_ == 1.0)
-    //      val errorDecision = if (1 to k contains sum) 1.0 else 0.0
-    //      errorDecision
-    //    }
-    //    }
-
-    // Majority wins
-    //    val majorityVoter = udf { (tools: mutable.WrappedArray[Double]) => {
-    //      val total = tools.length
-    //      val sum1 = tools.count(_ == 1.0)
-    //      var sum0 = total - sum1
-    //      val errorDecision = if (sum1 >= sum0) 1.0 else 0.0
-    //      errorDecision
-    //    }
-    //    }
-    //
-    //    val majorityVoterCol = "majority-voter"
-    //    val majorityVoterStrategy = allClassifiers
-    //      .withColumn(majorityVoterCol, majorityVoter(array(clColumns: _*)))
-    //      .select(FullResult.label, majorityVoterCol)
-    //      .toDF()
-    //
-    //    val majorityVotersPredAndLabels = FormatUtil.getPredictionAndLabel(majorityVoterStrategy, majorityVoterCol)
-    //    val majorityEval = F1.evalPredictionAndLabels(majorityVotersPredAndLabels)
-    //    majorityEval.printResult(": majority voters")
-    //end: Majority wins
-
 
     val allClassifiersCols: Seq[String] = Array(nNetworksCol, dtCol, naiveBayesCol).toSeq
 
@@ -394,60 +293,5 @@ class Stacking extends ExperimentsCommonConfig {
   private def getFeaturesNumber(featuresDF: DataFrame): Int = {
     featuresDF.select("features").head().getAs[org.apache.spark.ml.linalg.Vector](0).size
   }
-
-  //Todo: remove thresholds from learning model.
-  private def _getBestModel(maxPrecision: Double,
-                            maxRecall: Double,
-                            train: RDD[LabeledPoint],
-                            test: RDD[LabeledPoint]): (ModelData, LogisticRegressionModel)
-
-  = {
-
-    val model: LogisticRegressionModel = new LogisticRegressionWithLBFGS()
-      .setNumClasses(2)
-      .setIntercept(true)
-      .run(train)
-
-
-    val allThresholds = Seq(0.6, 0.55, 0.53, 0.5, 0.45, 0.4,
-      0.39, 0.38, 0.377, 0.375, 0.374, 0.37,
-      0.369, 0.368, 0.3675, 0.367, 0.365, 0.36, 0.34, 0.33, 0.32, 0.31,
-      0.3, 0.25, 0.2, 0.17, 0.15, 0.13, 0.1, 0.09, 0.05, 0.01)
-
-    val allModels: Seq[ModelData] = allThresholds.map(τ => {
-      model.setThreshold(τ)
-      val predictionAndLabels: RDD[(Double, Double)] = test.map { case LabeledPoint(label, features) =>
-        val prediction = model.predict(features)
-        (prediction, label)
-      }
-      val testResult = F1.evalPredictionAndLabels(predictionAndLabels)
-
-      val coefficients: Array[Double] = model.weights.toArray
-      val intercept: Double = model.intercept
-
-      ModelData(model.getThreshold.get,
-        coefficients,
-        intercept,
-        testResult.precision,
-        testResult.recall,
-        testResult.f1)
-    })
-
-    val acceptableTests = allModels.filter(modelData =>
-      modelData.precision <= maxPrecision
-        && modelData.recall <= maxRecall)
-
-    val modelData: ModelData = if (acceptableTests.nonEmpty) {
-      val sortedList = acceptableTests
-        .sortWith((t1, t2) => t1.f1 >= t2.f1)
-      val bestModel: ModelData = sortedList.head
-      bestModel
-    } else {
-      //empty model data
-      ModelData.emptyModel
-    }
-    (modelData, model)
-  }
-
 
 }
