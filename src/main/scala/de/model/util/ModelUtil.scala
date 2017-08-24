@@ -61,8 +61,8 @@ object ModelUtil {
     (modelData, model)
   }
 
-  def getBestModel(train: RDD[LabeledPoint],
-                   test: RDD[LabeledPoint]): (ModelData, LogisticRegressionModel) = {
+  def getBestLogRegressionModel(train: RDD[LabeledPoint],
+                                test: RDD[LabeledPoint]): (ModelData, LogisticRegressionModel) = {
 
     val model: LogisticRegressionModel = new LogisticRegressionWithLBFGS()
       .setNumClasses(2)

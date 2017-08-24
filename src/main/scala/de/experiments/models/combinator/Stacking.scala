@@ -251,7 +251,7 @@ class Stacking extends ExperimentsCommonConfig {
     //Logistic Regression for classifier combination:
     val (classiBestModelData, classiBestModel) =
     //todo: Achtung: we removed the max precision and max recall threshold
-      ModelUtil.getBestModel(trainClassifiers, trainClassifiers)
+      ModelUtil.getBestLogRegressionModel(trainClassifiers, trainClassifiers)
 
     val predictByLogRegrCombi = udf { features: org.apache.spark.mllib.linalg.Vector => {
       classiBestModel.setThreshold(classiBestModelData.bestThreshold)
@@ -367,7 +367,7 @@ class Stacking extends ExperimentsCommonConfig {
 
     //Train LogModel
     val trainLabeledRDD: RDD[LabeledPoint] = FormatUtil.prepareDFToLabeledPointRDD(session, allTrainClassifiers)
-    val (modelData, lrModel) = ModelUtil.getBestModel(trainLabeledRDD, trainLabeledRDD)
+    val (modelData, lrModel) = ModelUtil.getBestLogRegressionModel(trainLabeledRDD, trainLabeledRDD)
 
     val logRegPredictor = udf { features: org.apache.spark.ml.linalg.Vector => {
       lrModel.setThreshold(modelData.bestThreshold)
