@@ -68,7 +68,8 @@ object ToolsAndMetadataCombinerRunner {
     SparkLOAN.withSparkSession("STACKING-ON-METADATA") {
       session => {
         val stacking = new Stacking()
-        val evalStackingWithMetadata = stacking.onDataSetName(datasetName)
+        val evalStackingWithMetadata = stacking
+          .onDataSetName(datasetName)
           .useTools(FullResult.tools)
           .performEnsambleLearningOnToolsAndMetadata(session)
         evalStackingWithMetadata.printResult(s"STACKING ON TOOLS AND METADATA FOR $datasetName ")
