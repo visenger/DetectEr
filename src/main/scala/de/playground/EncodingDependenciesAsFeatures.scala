@@ -33,16 +33,11 @@ object EncodingDependenciesAsFeaturesPlayground {
 
     val dirtyData = "data.hosp.dirty.10k"
 
-
     /*
-
-    *
     *  @param joinType Type of join to perform. Default `inner`. Must be one of:
    *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
    *                 `right`, `right_outer`, `left_semi`, `left_anti`.
-   *
     * */
-
 
     SparkLOAN.withSparkSession("FD-ENCODING") {
       session => {
@@ -50,7 +45,6 @@ object EncodingDependenciesAsFeaturesPlayground {
 
         val dirtyHospDF = DataSetCreator
           .createFrame(session, config.getString(dirtyData), HospSchema.getSchema: _*)
-
 
         val zip = "zip"
         val city = "city"
@@ -79,7 +73,7 @@ object EncodingDependenciesAsFeaturesPlayground {
 
         val datasetFDs: List[FD] = List(fd1, fd2, fd3, fd4, fd5, fd6)
 
-        datasetFDs.foreach(fd => {
+        val allFDEncodings: List[DataFrame] = datasetFDs.map(fd => {
 
           val fd0 = fd.getFD
           val lhs = fd.lhs
@@ -96,7 +90,6 @@ object EncodingDependenciesAsFeaturesPlayground {
             .toDF()
 
           clustersForFD.printSchema()
-
 
           println(s"number of clusters for the FD1: ${clustersForFD.count()}")
 
@@ -146,14 +139,10 @@ object EncodingDependenciesAsFeaturesPlayground {
             // .where(fdsEncoded(FullResult.attrnr) === HospSchema.getIndexesByAttrNames(fd1).head)
             .show(37, false)
 
-
+          fdsEncoded
         })
-
-
       }
     }
-
-
   }
 
   def plgrd_performEnsambleLearningOnToolsAndMetadata(session: SparkSession): Eval = {
