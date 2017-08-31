@@ -144,6 +144,7 @@ class WranglingDatasetsToMetadata extends Serializable with ExperimentsCommonCon
     val withTop10MetadataDF = dataTypesEncodedDF
       .withColumn("isTop10", isTop10Values(dataTypesEncodedDF("value"), dataTypesEncodedDF("attrName")))
 
+    //final assember of all content-based metadata.
     val assembler = new VectorAssembler()
       .setInputCols(Array("missingValue", "attrTypeVector", "isTop10"))
       .setOutputCol("metadata")
