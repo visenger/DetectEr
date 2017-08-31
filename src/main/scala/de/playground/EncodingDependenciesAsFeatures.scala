@@ -8,7 +8,7 @@ import de.experiments.metadata.ToolsAndMetadataCombinerRunner.getDecisionTreeMod
 import de.model.util.{FormatUtil, ModelUtil}
 import de.wrangling.WranglingDatasetsToMetadata
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
-import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.feature.{OneHotEncoder, StringIndexer, VectorAssembler}
 import org.apache.spark.mllib.classification.NaiveBayes
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
@@ -64,14 +64,13 @@ object EncodingDependenciesAsFeaturesPlayground {
           * prno, mc -> stateavg
           * */
 
-        val fd1 = FD(List(zip), List(city))
-        val fd2 = FD(List(zip), List(state))
-        val fd3 = FD(List(zip, address), List(phone))
-        val fd4 = FD(List(city, address), List(phone))
-        val fd5 = FD(List(state, address), List(phone))
-        val fd6 = FD(List(prno, mc), List(stateavg))
+        val fd1 = FD(List(zip), List(city, state))
+        val fd2 = FD(List(zip, address), List(phone))
+        val fd3 = FD(List(city, address), List(phone))
+        val fd4 = FD(List(state, address), List(phone))
+        val fd5 = FD(List(prno, mc), List(stateavg))
 
-        val datasetFDs: List[FD] = List(fd1, fd2, fd3, fd4, fd5, fd6)
+        val datasetFDs: List[FD] = List(fd1, fd2, fd3, fd4, fd5)
 
         val allFDEncodings: List[DataFrame] = datasetFDs.map(fd => {
 
@@ -100,11 +99,11 @@ object EncodingDependenciesAsFeaturesPlayground {
             .na.fill(0, Seq("count"))
             .na.fill(defaultValForCells, Seq("cluster-id"))
 
-          joinedWithGroups.show()
+          // joinedWithGroups.show()
 
           val attributes: Seq[String] = HospSchema.getSchema.filterNot(_.equals(HospSchema.getRecID))
 
-          println(s" all attributes: ${attributes.mkString(", ")}")
+          // println(s" all attributes: ${attributes.mkString(", ")}")
 
           //        joinedWithGroups.where("count = 0").show()
 
@@ -129,20 +128,48 @@ object EncodingDependenciesAsFeaturesPlayground {
               .toDF()
           })
 
+          val fdIdx = generateFDName(fd)
           val fdsEncoded: DataFrame = attrDFs
             .reduce((df1, df2) => df1.union(df2))
             .repartition(1)
-            .toDF(FullResult.recid, FullResult.attrnr, "value", "fd")
+            .toDF(FullResult.recid, FullResult.attrnr, "value", s"fd-${fdIdx}")
 
           println(s"FD processed: ${fd.toString}")
-          fdsEncoded
-            // .where(fdsEncoded(FullResult.attrnr) === HospSchema.getIndexesByAttrNames(fd1).head)
-            .show(37, false)
 
-          fdsEncoded
+          val fdIndexer = new StringIndexer()
+            .setInputCol(s"fd-${fdIdx}")
+            .setOutputCol(s"fd-${fdIdx}-idx")
+          val fdIndexedDF = fdIndexer.fit(fdsEncoded).transform(fdsEncoded).drop(s"fd-${fdIdx}")
+
+          val oneHotEncoderForFD = new OneHotEncoder()
+            .setDropLast(false)
+            .setInputCol(s"fd-${fdIdx}-idx")
+            .setOutputCol(s"fd-${fdIdx}-vec")
+          val dfVectorizedDF = oneHotEncoderForFD.transform(fdIndexedDF).drop(s"fd-${fdIdx}-idx")
+
+          dfVectorizedDF
         })
+
+        val joinedFDs = allFDEncodings
+          .reduce((fd1, fd2) => fd1.join(fd2, Seq(FullResult.recid, FullResult.attrnr, "value")))
+        joinedFDs.show()
+
+        val fdArray: Array[String] = datasetFDs.map(fd => s"fd-${generateFDName(fd)}").toArray
+
+        //        val vectorAssembler = new VectorAssembler()
+        //          .setInputCols(fdArray)
+        //          .setOutputCol("fds")
+        //
+        //        val fdsDataframe = vectorAssembler.transform(joinedFDs)
+        //        fdsDataframe.show(24)
+
+
       }
     }
+  }
+
+  private def generateFDName(fd: FD) = {
+    fd.getFD.mkString("").hashCode
   }
 
   def plgrd_performEnsambleLearningOnToolsAndMetadata(session: SparkSession): Eval = {
