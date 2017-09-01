@@ -1,14 +1,16 @@
 package de.playground
 
 import com.typesafe.config.{Config, ConfigFactory}
+import de.evaluation.data.metadata.MetadataCreator
 import de.evaluation.data.schema.HospSchema
-import de.evaluation.f1.{Eval, F1, FullResult}
+import de.evaluation.f1.{Cells, Eval, F1, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
+import de.experiments.ExperimentsCommonConfig
 import de.experiments.metadata.ToolsAndMetadataCombinerRunner.getDecisionTreeModels
 import de.model.util.{FormatUtil, ModelUtil}
-import de.wrangling.WranglingDatasetsToMetadata
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 import org.apache.spark.ml.feature.{OneHotEncoder, StringIndexer, VectorAssembler}
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.mllib.classification.NaiveBayes
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
@@ -26,12 +28,22 @@ case class FD(lhs: List[String], rhs: List[String]) {
   def getFD: List[String] = lhs ::: rhs
 }
 
-object EncodingDependenciesAsFeaturesPlayground {
+object EncodingDependenciesAsFeaturesPlayground extends ExperimentsCommonConfig {
+  val datasetName = "hosp"
+  val dirtyData = allRawData.getOrElse(datasetName, "unknown")
+  val mainSchema = allSchemasByName.getOrElse(datasetName, HospSchema)
+  val schema = mainSchema.getSchema
+
+  val metadataPath = allMetadataByName.getOrElse(datasetName, "unknown")
+  val trainDataPath = allTrainData.getOrElse(datasetName, "unknown")
+  val testDataPath = allTestData.getOrElse(datasetName, "unknown")
+
+  val config: Config = ConfigFactory.load()
+
   def main(args: Array[String]): Unit = {
 
-    val config: Config = ConfigFactory.load()
 
-    val dirtyData = "data.hosp.dirty.10k"
+    //val dirtyData = "data.hosp.dirty.10k"
 
     /*
     *  @param joinType Type of join to perform. Default `inner`. Must be one of:
@@ -43,8 +55,8 @@ object EncodingDependenciesAsFeaturesPlayground {
       session => {
         import org.apache.spark.sql.functions._
 
-        val dirtyHospDF = DataSetCreator
-          .createFrame(session, config.getString(dirtyData), HospSchema.getSchema: _*)
+        val dirtyDF = DataSetCreator
+          .createFrame(session, dirtyData, schema: _*)
 
         val zip = "zip"
         val city = "city"
@@ -70,16 +82,16 @@ object EncodingDependenciesAsFeaturesPlayground {
         val fd4 = FD(List(state, address), List(phone))
         val fd5 = FD(List(prno, mc), List(stateavg))
 
-        val datasetFDs: List[FD] = List(fd1, fd2, fd3, fd4, fd5)
+        val datasetFDs: List[FD] = List(fd1, fd2, /*fd3, fd4,*/ fd5)
 
         val allFDEncodings: List[DataFrame] = datasetFDs.map(fd => {
 
           val fd0 = fd.getFD
           val lhs = fd.lhs
-          val lhsFD: List[Column] = lhs.map(dirtyHospDF(_))
+          val lhsFD: List[Column] = lhs.map(dirtyDF(_))
 
           //grouping is done by the LHS of the fd.
-          val lhsCounts: DataFrame = dirtyHospDF
+          val lhsCounts: DataFrame = dirtyDF
             .groupBy(lhsFD: _*)
             .count()
 
@@ -88,13 +100,13 @@ object EncodingDependenciesAsFeaturesPlayground {
             .withColumn("cluster-id", concat_ws("-", lit("clust"), monotonically_increasing_id() + 1))
             .toDF()
 
-          clustersForFD.printSchema()
-
-          println(s"number of clusters for the FD1: ${clustersForFD.count()}")
+          //clustersForFD.printSchema()
+          println(s"FD processed: ${fd.toString}")
+          println(s"number of clusters for the FD : ${clustersForFD.count()}")
 
           //clust-zero is a placeholder for any attributes, which do not have pairs.(but belong to some fd)
           val defaultValForCells = "clust-zero"
-          val joinedWithGroups: DataFrame = dirtyHospDF
+          val joinedWithGroups: DataFrame = dirtyDF
             .join(clustersForFD, lhs, "left_outer")
             .na.fill(0, Seq("count"))
             .na.fill(defaultValForCells, Seq("cluster-id"))
@@ -134,7 +146,6 @@ object EncodingDependenciesAsFeaturesPlayground {
             .repartition(1)
             .toDF(FullResult.recid, FullResult.attrnr, "value", s"fd-${fdIdx}")
 
-          println(s"FD processed: ${fd.toString}")
 
           val fdIndexer = new StringIndexer()
             .setInputCol(s"fd-${fdIdx}")
@@ -152,16 +163,163 @@ object EncodingDependenciesAsFeaturesPlayground {
 
         val joinedFDs = allFDEncodings
           .reduce((fd1, fd2) => fd1.join(fd2, Seq(FullResult.recid, FullResult.attrnr, "value")))
-        joinedFDs.show()
+        // joinedFDs.show()
 
-        val fdArray: Array[String] = datasetFDs.map(fd => s"fd-${generateFDName(fd)}").toArray
+        val fdArray: Array[String] = datasetFDs.map(fd => s"fd-${generateFDName(fd)}-vec").toArray
 
-        //        val vectorAssembler = new VectorAssembler()
-        //          .setInputCols(fdArray)
-        //          .setOutputCol("fds")
-        //
-        //        val fdsDataframe = vectorAssembler.transform(joinedFDs)
-        //        fdsDataframe.show(24)
+        val vectorAssembler = new VectorAssembler()
+          .setInputCols(fdArray)
+          .setOutputCol("fds") //all encodings for the functional dependencies
+
+        val fdsDataframe = vectorAssembler.transform(joinedFDs).drop(fdArray: _*)
+        /**
+          *
+          * +-----+------+--------------------+-----------------+--
+          * |RecID|attrNr|               value|fds               /
+          * +-----+------+--------------------+-----------------+--
+          *
+          **/
+        fdsDataframe.show(24)
+
+
+        // START content-based metadata
+
+        //TODO: content-based metadata
+        val getTypeByAttrName = udf {
+          attr: String => {
+            mainSchema.dataTypesDictionary.getOrElse(attr, "unknown")
+          }
+        }
+
+        val attributesDFs: Seq[DataFrame] = schema
+          .filterNot(_.equalsIgnoreCase(mainSchema.getRecID))
+          .map(attribute => {
+            val indexByAttrName = mainSchema.getIndexesByAttrNames(List(attribute)).head
+            val flattenDF = dirtyDF
+              .select(mainSchema.getRecID, attribute)
+              .withColumn("attrName", lit(attribute))
+              .withColumn("attr", lit(indexByAttrName))
+              .withColumn("attrType", getTypeByAttrName(lit(attribute)))
+              .withColumn("isNull", isnull(dirtyDF(attribute)))
+              .withColumn("value", dirtyDF(attribute))
+
+            flattenDF
+              .select(mainSchema.getRecID, "attrName", "attr", "attrType", "isNull", "value")
+          })
+
+        val unionAttributesDF: DataFrame = attributesDFs
+          .reduce((df1, df2) => df1.union(df2))
+          .repartition(1)
+          .toDF(Cells.recid, "attrName", Cells.attrnr, "attrType", "isNull", "value")
+
+        val isMissingValue = udf { value: Boolean => {
+          if (value) 1.0 else 0.0
+        }
+        }
+        val metaDF = unionAttributesDF
+          .withColumn("missingValue", isMissingValue(unionAttributesDF("isNull")))
+
+        val typeIndexer = new StringIndexer()
+          .setInputCol("attrType")
+          .setOutputCol("attrTypeIndex")
+        val indexedTypesDF = typeIndexer.fit(metaDF).transform(metaDF)
+
+        val typeEncoder = new OneHotEncoder()
+          .setDropLast(false)
+          .setInputCol("attrTypeIndex")
+          .setOutputCol("attrTypeVector")
+        val dataTypesEncodedDF = typeEncoder.transform(indexedTypesDF)
+
+        //dataTypesEncodedDF.printSchema()
+
+        val top10Values = new MetadataCreator()
+          .extractTop10Values(session, metadataPath)
+          .cache()
+          .toDF("attrNameMeta", "top10")
+
+        val top10List: List[String] = top10Values
+          .select("top10")
+          .rdd
+          .map(row => row.getAs[String](0))
+          .collect()
+          .toList
+
+        val isTop10Values = udf {
+          (value: String, attrName: String) => {
+            top10List.contains(value) match {
+              case true => 1.0
+              case false => 0.0
+            }
+          }
+        }
+
+        val withTop10MetadataDF = dataTypesEncodedDF
+          .withColumn("isTop10", isTop10Values(dataTypesEncodedDF("value"), dataTypesEncodedDF("attrName")))
+
+        //final assember of all content-based metadata.
+        val assembler = new VectorAssembler()
+          .setInputCols(Array("missingValue", "attrTypeVector", "isTop10"))
+          .setOutputCol("metadata")
+
+        val contentBasedMetadataCols: List[String] = List("attrName", "attrType", "isNull", "missingValue", "attrTypeIndex", "attrTypeVector", "isTop10")
+        val contentMetadataDF = assembler.transform(withTop10MetadataDF).drop(contentBasedMetadataCols: _*)
+        contentMetadataDF.show(false)
+
+        val fullMetadataDF = fdsDataframe.join(contentMetadataDF, Seq(Cells.recid, Cells.attrnr, "value"))
+
+        val allMetadataCols = Array("fds", "metadata")
+        val fullVecAssembler = new VectorAssembler().setInputCols(allMetadataCols).setOutputCol("full-metadata")
+        val metadataDF = fullVecAssembler.transform(fullMetadataDF).drop(allMetadataCols: _*)
+
+        val trainDF = DataSetCreator.createFrame(session, trainDataPath, FullResult.schema: _*)
+        val testDF = DataSetCreator.createFrame(session, testDataPath, FullResult.schema: _*)
+        // trainDF.show(false)
+
+        val trainToolsAndMetadataDF = trainDF.join(metadataDF, Seq(FullResult.recid, FullResult.attrnr))
+
+        val testToolsAndMetadataDF = testDF.join(metadataDF, Seq(FullResult.recid, FullResult.attrnr))
+
+
+        val transformToToolsVector = udf {
+          (tools: mutable.WrappedArray[String]) => {
+            val values = tools.map(t => t.toDouble).toArray
+            Vectors.dense(values)
+          }
+        }
+
+        val tools = FullResult.tools
+        val trainToolsCols = tools.map(t => trainDF(t)).toArray
+        val testToolsCols = tools.map(t => testDF(t)).toArray
+
+        val trainToolsVectorDF = trainToolsAndMetadataDF
+          .withColumn("tools-vector", transformToToolsVector(array(trainToolsCols: _*)))
+        val testToolsVectorDF = testToolsAndMetadataDF
+          .withColumn("tools-vector", transformToToolsVector(array(testToolsCols: _*)))
+
+        val toolsAndMetadataAssembler = new VectorAssembler()
+          .setInputCols(Array("tools-vector", "full-metadata"))
+          .setOutputCol("features")
+
+        val colNames = List("RecID", "attrNr", "value", "full-metadata", "tools-vector")
+
+        val trainFullFeaturesDF = toolsAndMetadataAssembler.transform(trainToolsVectorDF).drop(colNames: _*).drop(FullResult.tools: _*)
+        val testFullFeaturesDF = toolsAndMetadataAssembler.transform(testToolsVectorDF).drop(colNames: _*).drop(FullResult.tools: _*)
+        trainFullFeaturesDF.show(68)
+
+        val eval = plgrd_performEnsambleLearningOnToolsAndMetadata(session, trainFullFeaturesDF, testFullFeaturesDF)
+        eval.printResult(s"FULL METADATA (FDs and content-based) STACKING RESULT FOR $datasetName")
+
+        //TODO: "features" type is org.apache.spark.ml.linalg.Vector
+        //        val train = trainFullFeaturesDF.select(FullResult.label, "features")
+        //        val test = testFullFeaturesDF.select(FullResult.label, "features")
+
+        /**
+          * to return: (train: DataFrame, test: DataFrame) each DataFrame formatted as the following schema:
+          * +-----+---------------------------------------------+
+          * |label|features                                     |
+          * +-----+---------------------------------------------+
+          *
+          **/
 
 
       }
@@ -172,15 +330,15 @@ object EncodingDependenciesAsFeaturesPlayground {
     fd.getFD.mkString("").hashCode
   }
 
-  def plgrd_performEnsambleLearningOnToolsAndMetadata(session: SparkSession): Eval = {
+  def plgrd_performEnsambleLearningOnToolsAndMetadata(session: SparkSession, trainFull: DataFrame, test: DataFrame): Eval = {
     import session.implicits._
 
-    val allColumns: Seq[String] = FullResult.tools
+    //val allColumns: Seq[String] = FullResult.tools
 
-    val (trainFull, test) = new WranglingDatasetsToMetadata()
-      .onDatasetName("hosp")
-      .onTools(allColumns)
-      .createMetadataFeatures(session)
+    //    val (trainFull, test) = new WranglingDatasetsToMetadata()
+    //      .onDatasetName(datasetName)
+    //      .onTools(allColumns)
+    //      .createMetadataFeatures(session)
 
     //todo: setting training data to 1%
     val Array(train, _) = trainFull.randomSplit(Array(0.1, 0.9))

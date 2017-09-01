@@ -18,6 +18,8 @@ object SparkSessionCreator {
         conf.getString("spark.config.local.ip.value"))
       .config("spark.driver.memory", "10g")
       .config("spark.executor.memory", "8g")
+      .config("spark.driver.host", "localhost") //had to add this setting due to the error "SparkContext: Error initializing SparkContext.    java.lang.AssertionError: assertion failed: Expected hostname"
+      //solution found at https://stackoverflow.com/questions/34601554/mac-spark-shell-error-initializing-sparkcontext/34858724
       .getOrCreate()
   }
 
