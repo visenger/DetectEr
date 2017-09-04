@@ -11,6 +11,8 @@ import org.apache.spark.rdd.RDD
   */
 object ModelUtil {
 
+
+
   def getBestModel(maxPrecision: Double,
                    maxRecall: Double,
                    train: RDD[LabeledPoint],
