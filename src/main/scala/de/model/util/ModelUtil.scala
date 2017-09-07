@@ -4,6 +4,8 @@ import de.evaluation.f1.F1
 import de.model.logistic.regression.ModelData
 import org.apache.spark.mllib.classification.{LogisticRegressionModel, LogisticRegressionWithLBFGS}
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.tree.DecisionTree
+import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.rdd.RDD
 
 /**
@@ -11,6 +13,24 @@ import org.apache.spark.rdd.RDD
   */
 object ModelUtil {
 
+  def getDecisionTreeModels(trainSamples: Seq[RDD[LabeledPoint]], toolsNum: Int): Seq[DecisionTreeModel] = {
+    val numClasses = 2
+    val categoricalFeaturesInfo = (0 until toolsNum)
+      .map(attr => attr -> numClasses).toMap // Map[Int, Int](0 -> 2, 1 -> 2, 2 -> 2, 3 -> 2)
+    //        val impurity = "entropy"
+    val impurity = "gini"
+    val maxDepth = 5
+    // toolsNum
+    val maxBins = 32
+
+    val decisionTreeModels: Seq[DecisionTreeModel] = trainSamples.map(sample => {
+      val decisionTreeModel: DecisionTreeModel = DecisionTree
+        .trainClassifier(sample, numClasses, categoricalFeaturesInfo,
+          impurity, maxDepth, maxBins)
+      decisionTreeModel
+    })
+    decisionTreeModels
+  }
 
 
   def getBestModel(maxPrecision: Double,

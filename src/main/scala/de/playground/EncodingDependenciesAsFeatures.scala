@@ -6,6 +6,7 @@ import de.evaluation.data.schema.HospSchema
 import de.evaluation.f1.{Cells, Eval, F1, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
+import de.experiments.metadata.FD
 import de.experiments.metadata.ToolsAndMetadataCombinerRunner.getDecisionTreeModels
 import de.model.util.{FormatUtil, ModelUtil}
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
@@ -24,16 +25,11 @@ class EncodingDependenciesAsFeatures {
 
 }
 
-case class FD(lhs: List[String], rhs: List[String]) {
-  def getFD: List[String] = lhs ::: rhs
 
-  override def toString = {
-    s"${lhs.mkString(", ")} -> ${rhs.mkString(", ")}"
-  }
-}
 
 object EncodingDependenciesAsFeaturesPlayground extends ExperimentsCommonConfig {
   val datasetName = "hosp"
+
   val dirtyData = allRawData.getOrElse(datasetName, "unknown")
   val mainSchema = allSchemasByName.getOrElse(datasetName, HospSchema)
   val schema = mainSchema.getSchema
@@ -56,12 +52,17 @@ object EncodingDependenciesAsFeaturesPlayground extends ExperimentsCommonConfig 
         val dirtyDF = DataSetCreator
           .createFrame(session, dirtyData, schema: _*).cache()
 
-        val contentMetadataDF = plgrd_extractContentBasedMetadata(session, dirtyDF)
+        //step 2: content-based medatadata
+        val contentMetadataDF: DataFrame = plgrd_extractContentBasedMetadata(session, dirtyDF)
+        /**
+          *
+          * +-----+------+--------------------+-----------------+--
+          * |RecID|attrNr|               value|metadata         /
+          * +-----+------+--------------------+-----------------+--
+          *
+          **/
 
-        val trainDF = DataSetCreator.createFrame(session, trainDataPath, FullResult.schema: _*).cache()
-        val testDF = DataSetCreator.createFrame(session, testDataPath, FullResult.schema: _*).cache()
-
-        // INTER-COLUMN DEPENDENCIES
+        //step 3:  INTER-COLUMN DEPENDENCIES
 
         val zip = "zip"
         val city = "city"
@@ -102,92 +103,8 @@ object EncodingDependenciesAsFeaturesPlayground extends ExperimentsCommonConfig 
                |==========================================================="""
               .stripMargin)
           println(s"processing fd combinations: ${datasetFDs.mkString("[", "; ", "]")}")
-          /*
-                    val allFDEncodings: List[DataFrame] = datasetFDs.map(fd => {
 
-                      val fd0 = fd.getFD
-                      val lhs = fd.lhs
-                      val lhsFD: List[Column] = lhs.map(dirtyDF(_))
-
-                      //grouping is done by the LHS of the fd.
-                      val lhsCounts: DataFrame = dirtyDF
-                        .groupBy(lhsFD: _*)
-                        .count()
-
-                      val clustersForFD: DataFrame = lhsCounts
-                        .where(lhsCounts("count") > 1)
-                        .withColumn("cluster-id", concat_ws("-", lit("clust"), monotonically_increasing_id() + 1))
-                        .toDF()
-
-                      //clustersForFD.printSchema()
-                      println(s"FD processed: ${fd.toString}")
-                      println(s"number of clusters for the FD : ${clustersForFD.count()}")
-
-                      //clust-zero is a placeholder for any attributes, which do not have pairs.(but belong to some fd)
-                      val defaultValForCells = "clust-zero"
-                      val joinedWithGroups: DataFrame = dirtyDF
-                        .join(clustersForFD, lhs, "left_outer")
-                        .na.fill(0, Seq("count"))
-                        .na.fill(defaultValForCells, Seq("cluster-id"))
-
-                      // joinedWithGroups.show()
-
-                      val attributes: Seq[String] = HospSchema.getSchema.filterNot(_.equals(HospSchema.getRecID))
-
-                      val cluster_fd = udf {
-                        (value: String, attrName: String, fd: mutable.WrappedArray[String]) => {
-                          //all values, not members of any fd will get a default value "no-fd"
-                          val attrIsNotInFD = "no-fd"
-                          val valueForFD: String = if (fd.contains(attrName)) value else attrIsNotInFD
-
-                          valueForFD
-                        }
-                      }
-                      val attrDFs: Seq[DataFrame] = attributes.map(attr => {
-                        val attrIdx = HospSchema.getIndexesByAttrNames(List(attr)).head
-                        val attrDF = joinedWithGroups.select(HospSchema.getRecID, attr, "cluster-id")
-                          .withColumn(FullResult.attrnr, lit(attrIdx))
-                          .withColumn("clusters-fd", cluster_fd(joinedWithGroups("cluster-id"), lit(attr), array(fd0.map(lit(_)): _*)))
-                          .toDF(FullResult.recid, "value", "cluster-id", FullResult.attrnr, "clusters-fd")
-
-                        attrDF
-                          .select(FullResult.recid, FullResult.attrnr, "value", "clusters-fd")
-                          .toDF()
-                      })
-
-                      val fdIdx = generateFDName(fd)
-                      val fdsEncoded: DataFrame = attrDFs
-                        .reduce((df1, df2) => df1.union(df2))
-                        .repartition(1)
-                        .toDF(FullResult.recid, FullResult.attrnr, "value", s"fd-${fdIdx}")
-
-
-                      val fdIndexer = new StringIndexer()
-                        .setInputCol(s"fd-${fdIdx}")
-                        .setOutputCol(s"fd-${fdIdx}-idx")
-                      val fdIndexedDF = fdIndexer.fit(fdsEncoded).transform(fdsEncoded).drop(s"fd-${fdIdx}")
-
-                      val oneHotEncoderForFD = new OneHotEncoder()
-                        .setDropLast(false)
-                        .setInputCol(s"fd-${fdIdx}-idx")
-                        .setOutputCol(s"fd-${fdIdx}-vec")
-                      val dfVectorizedDF = oneHotEncoderForFD.transform(fdIndexedDF).drop(s"fd-${fdIdx}-idx")
-
-                      dfVectorizedDF
-                    })
-
-                    val joinedFDs = allFDEncodings
-                      .reduce((fd1, fd2) => fd1.join(fd2, Seq(FullResult.recid, FullResult.attrnr, "value")))
-                    // joinedFDs.show()
-
-                    val fdArray: Array[String] = datasetFDs.map(fd => s"fd-${generateFDName(fd)}-vec").toArray
-
-                    val vectorAssembler = new VectorAssembler()
-                      .setInputCols(fdArray)
-                      .setOutputCol("fds") //all encodings for the functional dependencies
-
-                   // val fdsDataframe = vectorAssembler.transform(joinedFDs).drop(fdArray: _*)*/
-          val fdsDataframe = plgrd_extractFDMetadata(session, dirtyDF, datasetFDs)
+          val fdsDataframe: DataFrame = plgrd_extractFDMetadata(session, dirtyDF, datasetFDs)
           /**
             *
             * +-----+------+--------------------+-----------------+--
@@ -195,13 +112,20 @@ object EncodingDependenciesAsFeaturesPlayground extends ExperimentsCommonConfig 
             * +-----+------+--------------------+-----------------+--
             *
             **/
-          // fdsDataframe.show(24)
 
           val fullMetadataDF = fdsDataframe.join(contentMetadataDF, Seq(Cells.recid, Cells.attrnr, "value"))
 
           val allMetadataCols = Array("fds", "metadata")
-          val fullVecAssembler = new VectorAssembler().setInputCols(allMetadataCols).setOutputCol("full-metadata")
+          val fullVecAssembler = new VectorAssembler()
+            .setInputCols(allMetadataCols)
+            .setOutputCol("full-metadata")
           val metadataDF = fullVecAssembler.transform(fullMetadataDF).drop(allMetadataCols: _*)
+
+          //step 1: system features generation
+
+          val trainDF = DataSetCreator.createFrame(session, trainDataPath, FullResult.schema: _*).cache()
+          val testDF = DataSetCreator.createFrame(session, testDataPath, FullResult.schema: _*).cache()
+
 
           val trainToolsAndMetadataDF = trainDF.join(metadataDF, Seq(FullResult.recid, FullResult.attrnr))
 
