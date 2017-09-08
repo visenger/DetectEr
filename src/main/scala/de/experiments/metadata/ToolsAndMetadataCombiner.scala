@@ -26,6 +26,7 @@ object ToolsAndMetadataCombinerRunner {
     println(s" RUNNING EXPERIMENTS ON TOOLS & METADATA COMBINATION BY USING SEVERAL STRATEGIES")
 
     val datasets = Seq("blackoak", "hosp", "salaries", "flights")
+    //val datasets = Seq("hosp")
 
 
     datasets.foreach(datasetName => {

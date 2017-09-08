@@ -156,13 +156,13 @@ class WranglingDatasetsToMetadata extends Serializable with ExperimentsCommonCon
     val testDF = DataSetCreator.createFrame(session, testDataPath, FullResult.schema: _*)
     // trainDF.show(false)
 
-    val trainToolsAndMetadataDF = trainDF.join(metadata,
-      trainDF(FullResult.recid) === metadata(FullResult.recid)
-        && trainDF(FullResult.attrnr) === metadata(FullResult.attrnr))
+    val trainToolsAndMetadataDF = trainDF.join(metadata, Seq(FullResult.recid, FullResult.attrnr))
+//      trainDF(FullResult.recid) === metadata(FullResult.recid)
+//        && trainDF(FullResult.attrnr) === metadata(FullResult.attrnr))
 
-    val testToolsAndMetadataDF = testDF.join(metadata,
-      testDF(FullResult.recid) === metadata(FullResult.recid)
-        && testDF(FullResult.attrnr) === metadata(FullResult.attrnr))
+    val testToolsAndMetadataDF = testDF.join(metadata,Seq(FullResult.recid, FullResult.attrnr))
+//      testDF(FullResult.recid) === metadata(FullResult.recid)
+//        && testDF(FullResult.attrnr) === metadata(FullResult.attrnr))
 
 
     val transformToToolsVector = udf {

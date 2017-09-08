@@ -5,7 +5,7 @@ import de.evaluation.data.schema.{HospSchema, Schema}
 import de.evaluation.f1.{Cells, Eval, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
-import de.experiments.metadata.FD
+import de.experiments.metadata.{BlackOakFDsDictionary, FD, HospFDsDictionary}
 import de.experiments.models.combinator.{Bagging, Stacking}
 import de.model.util.Features
 import org.apache.spark.ml.feature.{OneHotEncoder, StringIndexer, VectorAssembler}
@@ -55,7 +55,7 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
   }
 
   def generateContentBasedMetadata(session: SparkSession, dirtyDF: DataFrame): DataFrame = {
-    //TODO: content-based metadata
+
     import org.apache.spark.sql.functions._
     val getTypeByAttrName = udf {
       attr: String => {
@@ -131,12 +131,47 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
     //final assember of all content-based metadata.
     val assembler = new VectorAssembler()
       .setInputCols(Array("missingValue", "attrTypeVector", "isTop10"))
-      .setOutputCol("metadata")
+      .setOutputCol(Features.contentBasedVector)
 
     val contentBasedMetadataCols: List[String] = List("attrName", "attrType", "isNull", "missingValue", "attrTypeIndex", "attrTypeVector", "isTop10")
     val contentMetadataDF = assembler.transform(withTop10MetadataDF).drop(contentBasedMetadataCols: _*)
     //contentMetadataDF.show(false)
     contentMetadataDF
+  }
+
+  def generateGeneralInfoMetadata(session: SparkSession, dirtyDF: DataFrame, datasetFDs: List[FD]): DataFrame = {
+    import org.apache.spark.sql.functions._
+
+    val computeFDAwarnes = udf { attribute: String => {
+      val whereTheAttibuteIsAvailable: Int = datasetFDs.count(fd => fd.getFD.contains(attribute))
+      whereTheAttibuteIsAvailable.toString
+    }
+    }
+
+    val attributes: Seq[String] = mainSchema.getSchema.filterNot(_.equals(mainSchema.getRecID))
+    val attrs: Seq[DataFrame] = attributes.map(attr => {
+      val attrIdx = mainSchema.getIndexesByAttrNames(List(attr)).head
+      val attrDF = dirtyDF.select(mainSchema.getRecID, attr)
+        .withColumn(FullResult.attrnr, lit(attrIdx))
+        .withColumn("fdAware", computeFDAwarnes(lit(attr)))
+        .toDF(FullResult.recid, "value", FullResult.attrnr, "fdAware")
+
+      attrDF
+        .select(FullResult.recid, FullResult.attrnr, "value", "fdAware")
+        .toDF()
+    })
+
+    val combinedGeneralInfo = attrs
+      .reduce((df1, df2) => df1.union(df2))
+      .repartition(1)
+      .toDF(FullResult.recid, FullResult.attrnr, "value", "fdAware")
+
+
+    val indexer = new StringIndexer().setInputCol("fdAware").setOutputCol("general-fd")
+    val indexedDF = indexer.fit(combinedGeneralInfo).transform(combinedGeneralInfo).drop("fdAware")
+    val encoder = new OneHotEncoder().setDropLast(false).setInputCol("general-fd").setOutputCol(Features.generalVector)
+    val encodedDF = encoder.transform(indexedDF).drop("general-fd")
+    encodedDF
   }
 
   def generateFDMetadata(session: SparkSession, dirtyDF: DataFrame, datasetFDs: List[FD]): DataFrame = {
@@ -177,7 +212,7 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
 
       // joinedWithGroups.show()
 
-      val attributes: Seq[String] = HospSchema.getSchema.filterNot(_.equals(HospSchema.getRecID))
+      val attributes: Seq[String] = mainSchema.getSchema.filterNot(_.equals(mainSchema.getRecID))
 
       val cluster_fd = udf {
         (value: String, attrName: String, fd: mutable.WrappedArray[String]) => {
@@ -189,8 +224,8 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
         }
       }
       val attrDFs: Seq[DataFrame] = attributes.map(attr => {
-        val attrIdx = HospSchema.getIndexesByAttrNames(List(attr)).head
-        val attrDF = joinedWithGroups.select(HospSchema.getRecID, attr, "cluster-id")
+        val attrIdx = mainSchema.getIndexesByAttrNames(List(attr)).head
+        val attrDF = joinedWithGroups.select(mainSchema.getRecID, attr, "cluster-id")
           .withColumn(FullResult.attrnr, lit(attrIdx))
           .withColumn("clusters-fd", cluster_fd(joinedWithGroups("cluster-id"), lit(attr), array(fd0.map(lit(_)): _*)))
           .toDF(FullResult.recid, "value", "cluster-id", FullResult.attrnr, "clusters-fd")
@@ -229,7 +264,7 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
 
     val vectorAssembler = new VectorAssembler()
       .setInputCols(fdArray)
-      .setOutputCol("fds") //all encodings for the functional dependencies
+      .setOutputCol(Features.dependenciesVector) //all encodings for the functional dependencies
 
     val fdsDataframe = vectorAssembler.transform(joinedFDs).drop(fdArray: _*)
     fdsDataframe
@@ -241,12 +276,17 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
       .foldLeft(allMetaDFs.head)((acc, df) => acc.join(df, Seq(Cells.recid, Cells.attrnr, "value")))
     //val fullMetadataDF = fdsDataframe.join(contentMetadataDF, Seq(Cells.recid, Cells.attrnr, "value"))
 
+    val allMetadataCols = allMetaDFs.flatMap(df => {
+      df.columns.intersect(Features.allFeatures)
+    }).toArray
 
-    val allMetadataCols = Array("fds", "metadata")
-    //todo: Refactor to the Features object!
+    //println(s"all metadata contains the following columns: ${allMetadataCols.mkString(", ")}")
+
+    //val allMetadataCols = Array("fds", "metadata")
+
     val fullVecAssembler = new VectorAssembler()
       .setInputCols(allMetadataCols)
-      .setOutputCol("full-metadata")
+      .setOutputCol(Features.fullMetadata)
 
     val metadataDF = fullVecAssembler
       .transform(fullMetadataDF)
@@ -262,21 +302,31 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
 
 
     val toolsAndMetadataAssembler = new VectorAssembler()
-      .setInputCols(Array("tools-vector", "full-metadata"))
-      .setOutputCol("features")
+      .setInputCols(Array(Features.toolsVector, Features.fullMetadata))
+      .setOutputCol(Features.featuresCol)
 
-    val colNames = List("RecID", "attrNr", "value", "full-metadata", "tools-vector")
+    val colNames = List(FullResult.recid, FullResult.attrnr, "value", Features.toolsVector, Features.fullMetadata)
 
     val trainFullFeaturesDF = toolsAndMetadataAssembler
       .transform(trainToolsAndMetadataDF)
       .drop(colNames: _*)
       .drop(FullResult.tools: _*)
+
     val testFullFeaturesDF = toolsAndMetadataAssembler
       .transform(testToolsAndMetadataDF)
       .drop(colNames: _*)
       .drop(FullResult.tools: _*)
 
+
+    println(s"1. train feature vector ${trainFullFeaturesDF.select(Features.featuresCol).first().getAs[org.apache.spark.ml.linalg.Vector](Features.featuresCol).size}")
+    println(s"2. test feature vector ${testFullFeaturesDF.select(Features.featuresCol).first().getAs[org.apache.spark.ml.linalg.Vector](Features.featuresCol).size}")
+    /* 1. train feature vector 14706
+     2. test feature vector 14705 <- Exception in naive bayes execution for BlackOak dataset.
+    */
+
     (trainFullFeaturesDF, testFullFeaturesDF)
+
+
   }
 
   def createSystemsFeatures(session: SparkSession): (DataFrame, DataFrame) = {
@@ -294,13 +344,46 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
         Vectors.dense(values)
       }
     }
+    val countToolsUDF = udf {
+      (tools: mutable.WrappedArray[String]) => {
+        val values = tools.map(t => t.toDouble).toArray
+        s"${values.sum}"
+      }
+    }
+    //adding new feature: count tools indicated an error on the respective cell
+    val countToolsCol = "count-tools"
+    val tmpToolsCols = s"tmp-${Features.toolsVector}"
 
-    val trainToolsVectorDF = trainDF
-      .withColumn(Features.toolsVector, transformToToolsVector(array(trainToolsCols: _*)))
-    val testToolsVectorDF = testDF
-      .withColumn(Features.toolsVector, transformToToolsVector(array(testToolsCols: _*)))
+    val trainCountToolsDF = trainDF.withColumn(countToolsCol, countToolsUDF(array(trainToolsCols: _*)))
+    val testCountToolsDF = testDF.withColumn(countToolsCol, countToolsUDF(array(testToolsCols: _*)))
 
-    (trainToolsVectorDF, testToolsVectorDF)
+    val indexer = new StringIndexer().setInputCol(countToolsCol).setOutputCol(s"$countToolsCol-idx")
+    val trainCountIndxDF: DataFrame = indexer.fit(trainCountToolsDF).transform(trainCountToolsDF).drop(countToolsCol)
+    val testCountIndxDF: DataFrame = indexer.fit(testCountToolsDF).transform(testCountToolsDF).drop(countToolsCol)
+
+    val encoder = new OneHotEncoder()
+      .setDropLast(false)
+      .setInputCol(s"$countToolsCol-idx")
+      .setOutputCol(s"$countToolsCol-vec")
+    val trainCountVecDF: DataFrame = encoder.transform(trainCountIndxDF).drop(s"$countToolsCol-idx")
+    val testCountVecDF: DataFrame = encoder.transform(testCountIndxDF).drop(s"$countToolsCol-idx")
+
+
+    val trainToolsVectorDF = trainCountVecDF
+      .withColumn(tmpToolsCols, transformToToolsVector(array(trainToolsCols: _*)))
+    val testToolsVectorDF = testCountVecDF
+      .withColumn(tmpToolsCols, transformToToolsVector(array(testToolsCols: _*)))
+
+    val tmpCols = Array(s"$countToolsCol-vec", tmpToolsCols)
+    val assembler = new VectorAssembler().setInputCols(tmpCols).setOutputCol(Features.toolsVector)
+    val trainVectorDF: DataFrame = assembler.transform(trainToolsVectorDF).drop(tmpCols: _*)
+    val testVectorDF: DataFrame = assembler.transform(testToolsVectorDF).drop(tmpCols: _*)
+
+    println(s"1.tools initial train feature vector ${trainVectorDF.select(Features.toolsVector).first().getAs[org.apache.spark.ml.linalg.Vector](Features.toolsVector).size}")
+    println(s"2.tools initial test feature vector ${testVectorDF.select(Features.toolsVector).first().getAs[org.apache.spark.ml.linalg.Vector](Features.toolsVector).size}")
+
+
+    (trainVectorDF, testVectorDF)
   }
 
 
@@ -320,52 +403,41 @@ object FeaturesGenerator {
 object FeaturesGeneratorPlayground {
   def main(args: Array[String]): Unit = {
 
-    val zip = "zip"
-    val city = "city"
-    val phone = "phone"
-    val address = "address"
-    val state = "state"
-    val prno = "prno"
-    val mc = "mc"
-    val stateavg = "stateavg"
+    //val allFDs = BlackOakFDsDictionary.allFDs
 
-    /** ALL FDs for the hosp data
-      * zip -> city
-      * zip -> state
-      * zip, address -> phone
-      * city, address -> phone
-      * state, address -> phone
-      * prno, mc -> stateavg
-      * */
-
-    val fd1 = FD(List(zip), List(city, state))
-    val fd2 = FD(List(zip, address), List(phone))
-    val fd3 = FD(List(city, address), List(phone))
-    val fd4 = FD(List(state, address), List(phone))
-    val fd5 = FD(List(prno, mc), List(stateavg))
-
-    val allFDs: List[FD] = List(fd1, fd2, fd3, fd4, fd5)
-
+    val allFDs = HospFDsDictionary.allFDs
     val generator = FeaturesGenerator.init
 
     SparkLOAN.withSparkSession("TESTING-FEATURES-GENERATION") {
       session => {
-        val dirtyDF: DataFrame = generator.onDatasetName("hosp").getDirtyData(session)
+        //val dataset = "blackoak" //todo: vector assembler is cutting one dimensions of the features vector: see de.experiments.features.generation.FeaturesGenerator.accumulateDataAndMetadata
+        val dataset = "hosp"
+        val dirtyDF: DataFrame = generator.onDatasetName(dataset).getDirtyData(session)
+
+        //Set of content-based metadata, such as "attrName", "attrType", "isNull", "missingValue", "attrTypeIndex", "attrTypeVector", "isTop10"
         val contentBasedFeaturesDF: DataFrame = generator.generateContentBasedMetadata(session, dirtyDF)
+
+        //FD-partiotion - based features
         val fdMetadataDF: DataFrame = generator.generateFDMetadata(session, dirtyDF, allFDs)
 
-        val allMetadataDF = generator.accumulateAllFeatures(session, Seq(contentBasedFeaturesDF, fdMetadataDF))
+        //general info about fd-awarnes of each cell
+        val generalInfoDF = generator.generateGeneralInfoMetadata(session, dirtyDF, allFDs)
 
+        val allMetadataDF = generator.accumulateAllFeatures(session, Seq(contentBasedFeaturesDF, fdMetadataDF, generalInfoDF))
+
+        //Systems features contains the encoding of each system result and the total numer of systems identified the particular cell as an error.
         val (testDF: DataFrame, trainDF: DataFrame) = generator.createSystemsFeatures(session)
+
         val (fullTrainDF: DataFrame, fullTestDF: DataFrame) = generator.accumulateDataAndMetadata(session, trainDF, testDF, allMetadataDF)
 
+        //Run combinations.
         val stacking = new Stacking()
         val evalStacking: Eval = stacking.performStackingOnToolsAndMetadata(session, fullTrainDF, fullTestDF)
-        evalStacking.printResult("STACKING TESTING")
+        evalStacking.printResult("STACKING")
 
         val bagging = new Bagging()
         val evalBagging: Eval = bagging.performBaggingOnToolsAndMetadata(session, fullTrainDF, fullTestDF)
-        evalBagging.printResult("BAGGING TESTING")
+        evalBagging.printResult("BAGGING")
 
 
       }

@@ -4,7 +4,7 @@ import de.evaluation.f1.F1
 import de.model.logistic.regression.ModelData
 import org.apache.spark.mllib.classification.{LogisticRegressionModel, LogisticRegressionWithLBFGS}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.DecisionTree
+import org.apache.spark.mllib.tree.{DecisionTree, RandomForest}
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.rdd.RDD
 

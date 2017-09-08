@@ -6,5 +6,10 @@ object Features {
   val contentBasedVector: String = "metadata"
   val dependenciesVector: String = "fds"
   val generalVector: String = "general"
+  val fullMetadata: String = "full-metadata"
+
+  val featuresCol: String = "features"
+
+  val allFeatures = Seq(toolsVector, contentBasedVector, dependenciesVector, generalVector)
 
 }

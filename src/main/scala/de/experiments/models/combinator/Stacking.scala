@@ -65,6 +65,8 @@ class Stacking extends ExperimentsCommonConfig {
     val trainLabPointRDD: RDD[LabeledPoint] = FormatUtil
       .prepareDFToLabeledPointRDD(session, train)
 
+    println(s"initial features vector size= ${trainLabPointRDD.first().features.size}")
+
 
     val testLabAndFeatures: DataFrame = FormatUtil
       .prepareDFToLabeledPointRDD(session, test)
@@ -110,27 +112,39 @@ class Stacking extends ExperimentsCommonConfig {
     val trainConvertedVecDF = FormatUtil.convertVectors(session, trainLabPointDF, featuresCol)
     val testConvertedVecDF = FormatUtil.convertVectors(session, testLabAndFeatures, featuresCol)
 
+    //println(s"1. test feature vector ${testConvertedVecDF.select(featuresCol).first().getAs[org.apache.spark.ml.linalg.Vector](featuresCol).size}")
 
-    val dtPrediction = trainConvertedVecDF.withColumn("dt-prediction", predictByDT(trainConvertedVecDF(featuresCol)))
-    val dtTrainPrediction = testConvertedVecDF.withColumn("dt-prediction", predictByDT(testConvertedVecDF(featuresCol)))
 
-    val dtPredictionAndLabel = FormatUtil.getPredictionAndLabel(dtTrainPrediction, "dt-prediction")
+    val dtPrediction = trainConvertedVecDF
+      .withColumn("dt-prediction", predictByDT(trainConvertedVecDF(featuresCol)))
+    val dtTestPrediction = testConvertedVecDF
+      .withColumn("dt-prediction", predictByDT(testConvertedVecDF(featuresCol)))
+
+    //eval dt
+    val dtPredictionAndLabel = FormatUtil.getPredictionAndLabel(dtTestPrediction, "dt-prediction")
     val dtEval = F1.evalPredictionAndLabels(dtPredictionAndLabel)
     dtEval.printResult(s"decision tree on $dataset with metadata and FDs")
     //end: decision tree
 
     //start: bayes
+    //val bayesModel = NaiveBayes.train(trainLabPointRDD, lambda = 1.0, modelType = "bernoulli") //initial version
     val bayesModel = NaiveBayes.train(trainLabPointRDD, lambda = 1.0, modelType = "bernoulli")
     val predictByBayes = udf { features: org.apache.spark.ml.linalg.Vector => {
       val transformedFeatures = org.apache.spark.mllib.linalg.Vectors.dense(features.toArray)
+
       bayesModel.predict(transformedFeatures)
     }
     }
 
-    val nbPrediction = dtPrediction.withColumn("nb-prediction", predictByBayes(dtPrediction(featuresCol)))
-    val nbTrainPrediction = dtTrainPrediction.withColumn("nb-prediction", predictByBayes(dtTrainPrediction(featuresCol)))
 
-    val nbPredictionAndLabel = FormatUtil.getPredictionAndLabel(nbTrainPrediction, "nb-prediction")
+   // println(s"2. train feature vector size after dt ${dtPrediction.select(featuresCol).first().getAs[org.apache.spark.ml.linalg.Vector](featuresCol).size}")
+    val nbPrediction = dtPrediction.withColumn("nb-prediction", predictByBayes(dtPrediction(featuresCol)))
+
+   // println(s"3. test feature vector size after dt ${dtTestPrediction.select(featuresCol).first().getAs[org.apache.spark.ml.linalg.Vector](featuresCol).size}")
+    val nbTestPrediction = dtTestPrediction.withColumn("nb-prediction", predictByBayes(dtTestPrediction(featuresCol)))
+
+    //eval nb
+    val nbPredictionAndLabel = FormatUtil.getPredictionAndLabel(nbTestPrediction, "nb-prediction")
     val nbEval = F1.evalPredictionAndLabels(nbPredictionAndLabel)
     nbEval.printResult(s"naive bayes on $dataset with metadata and FDs")
 
@@ -141,7 +155,7 @@ class Stacking extends ExperimentsCommonConfig {
       .setOutputCol("all-predictions")
 
     //Meta train
-    val allTrainPrediction = assembler.transform(nbTrainPrediction).select(FullResult.label, "all-predictions")
+    val allTrainPrediction = assembler.transform(nbPrediction).select(FullResult.label, "all-predictions")
     val allTrainClassifiers = allTrainPrediction.withColumnRenamed("all-predictions", featuresCol)
 
     //Train LogModel
@@ -163,7 +177,7 @@ class Stacking extends ExperimentsCommonConfig {
     }
 
     //Meta test
-    val allPredictions = assembler.transform(nbPrediction).select(FullResult.label, "all-predictions")
+    val allPredictions = assembler.transform(nbTestPrediction).select(FullResult.label, "all-predictions")
     val allClassifiers = allPredictions.withColumnRenamed("all-predictions", featuresCol)
     val firstClassifiersDF = allClassifiers
       .select(FullResult.label, featuresCol)
@@ -382,7 +396,7 @@ class Stacking extends ExperimentsCommonConfig {
       .setOutputCol("all-predictions")
 
     //Meta train
-    val allTrainPrediction = assembler.transform(nbTrainPrediction).select(FullResult.label, "all-predictions")
+    val allTrainPrediction = assembler.transform(nbPrediction).select(FullResult.label, "all-predictions")
     val allTrainClassifiers = allTrainPrediction.withColumnRenamed("all-predictions", featuresCol)
 
     //Train LogModel
@@ -397,7 +411,7 @@ class Stacking extends ExperimentsCommonConfig {
     }
 
     //Meta test
-    val allPredictions = assembler.transform(nbPrediction).select(FullResult.label, "all-predictions")
+    val allPredictions = assembler.transform(nbTrainPrediction).select(FullResult.label, "all-predictions")
     val allClassifiers = allPredictions.withColumnRenamed("all-predictions", featuresCol)
     val firstClassifiersDF = allClassifiers
       .select(FullResult.label, featuresCol)

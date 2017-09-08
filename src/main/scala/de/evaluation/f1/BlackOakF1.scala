@@ -11,9 +11,11 @@ object FullResult {
   val attrnr = "attrNr"
   val label: String = "label"
 
+  val value: String = "value"
+
   //todo: extract howManyTools we have
   //val toolsNumber = 5
-   val toolsCount = ConfigFactory.load().getInt("tools.available")
+  val toolsCount = ConfigFactory.load().getInt("tools.available")
   val tools: Seq[String] = (1 to toolsCount).map(i => s"${GoldStandard.exists}-$i")
   val schema = Seq(recid) ++ Seq(attrnr) ++ Seq(label) ++ tools
 }
