@@ -1,11 +1,12 @@
 package de.experiments.features.generation
 
+import com.typesafe.config.ConfigFactory
 import de.evaluation.data.metadata.MetadataCreator
 import de.evaluation.data.schema.{HospSchema, Schema}
 import de.evaluation.f1.{Cells, Eval, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
-import de.experiments.metadata.{BlackOakFDsDictionary, FD, HospFDsDictionary}
+import de.experiments.metadata.{FD, HospFDsDictionary}
 import de.experiments.models.combinator.{Bagging, Stacking}
 import de.model.util.Features
 import org.apache.spark.ml.feature.{OneHotEncoder, StringIndexer, VectorAssembler}
@@ -24,7 +25,8 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
   private var trainDataPath = ""
   private var testDataPath = ""
 
-  private var allFDs: List[FD] = null
+
+  var allFDs: List[FD] = null
 
   private var allTools = FullResult.tools
 
@@ -44,6 +46,8 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
     metadataPath = allMetadataByName.getOrElse(datasetName, "unknown")
     trainDataPath = allTrainData.getOrElse(datasetName, "unknown")
     testDataPath = allTestData.getOrElse(datasetName, "unknown")
+
+    allFDs = allFDsDictionariesByName.getOrElse(datasetName, HospFDsDictionary).allFDs
 
     this
   }
@@ -335,8 +339,12 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
     val trainDF = DataSetCreator.createFrame(session, trainDataPath, FullResult.schema: _*).cache()
     val testDF = DataSetCreator.createFrame(session, testDataPath, FullResult.schema: _*).cache()
 
-    val trainToolsCols = allTools.map(t => trainDF(t)).toArray
-    val testToolsCols = allTools.map(t => testDF(t)).toArray
+
+    val trainToolsCols: Array[Column] = allTools.map(t => trainDF(t)).toArray
+    val testToolsCols: Array[Column] = allTools.map(t => testDF(t)).toArray
+
+    //todo: Select tools for the further processing. -> needed for clustering in the BestK-Systems experiments.
+
 
     val transformToToolsVector = udf {
       (tools: mutable.WrappedArray[String]) => {
@@ -401,28 +409,47 @@ object FeaturesGenerator {
 }
 
 object FeaturesGeneratorPlayground {
+
   def main(args: Array[String]): Unit = {
+    val experimentsConf = ConfigFactory.load("experiments.conf")
+    val datasets = Seq("blackoak" /*, "hosp", "salaries", "flights"*/)
 
-    //val allFDs = BlackOakFDsDictionary.allFDs
+    datasets.foreach(dataset => {
+      (2 to 4).foreach(i => {
+        // val systems: Seq[String] = experimentsConf.getStringList(s"$dataset.k.$i").asScala.toSeq
 
-    val allFDs = HospFDsDictionary.allFDs
-    val generator = FeaturesGenerator.init
+        // println(s"running on ${dataset.toUpperCase()} | clusters number k=$i | on systems: ${systems.mkString(", ")}")
+        println(s"running on ${dataset.toUpperCase()} ")
+        singleRun(dataset, Seq("exists-4", "exists-5", "exists-1", "exists-2", "exists-3"))
+      })
+    })
 
-    SparkLOAN.withSparkSession("TESTING-FEATURES-GENERATION") {
+  }
+
+  def singleRun(dataset: String, tools: Seq[String] = FullResult.tools): Unit = {
+
+    SparkLOAN.withSparkSession("METADATA-COMBI") {
       session => {
-        //val dataset = "blackoak" //todo: vector assembler is cutting one dimensions of the features vector: see de.experiments.features.generation.FeaturesGenerator.accumulateDataAndMetadata
-        val dataset = "hosp"
-        val dirtyDF: DataFrame = generator.onDatasetName(dataset).getDirtyData(session)
+        // val allFDs = fdsDictionary.allFDs
+        val generator = FeaturesGenerator.init
+
+
+        val dirtyDF: DataFrame = generator
+          .onDatasetName(dataset)
+          .onTools(tools)
+          .getDirtyData(session)
+          .cache()
 
         //Set of content-based metadata, such as "attrName", "attrType", "isNull", "missingValue", "attrTypeIndex", "attrTypeVector", "isTop10"
         val contentBasedFeaturesDF: DataFrame = generator.generateContentBasedMetadata(session, dirtyDF)
 
         //FD-partiotion - based features
-        val fdMetadataDF: DataFrame = generator.generateFDMetadata(session, dirtyDF, allFDs)
+        val fdMetadataDF: DataFrame = generator.generateFDMetadata(session, dirtyDF, generator.allFDs)
 
         //general info about fd-awarnes of each cell
-        val generalInfoDF = generator.generateGeneralInfoMetadata(session, dirtyDF, allFDs)
+        val generalInfoDF = generator.generateGeneralInfoMetadata(session, dirtyDF, generator.allFDs)
 
+        //all features data frames should contain Seq(Cells.recid, Cells.attrnr, "value") attributes in order to join with other DFs
         val allMetadataDF = generator.accumulateAllFeatures(session, Seq(contentBasedFeaturesDF, fdMetadataDF, generalInfoDF))
 
         //Systems features contains the encoding of each system result and the total numer of systems identified the particular cell as an error.
@@ -431,14 +458,13 @@ object FeaturesGeneratorPlayground {
         val (fullTrainDF: DataFrame, fullTestDF: DataFrame) = generator.accumulateDataAndMetadata(session, trainDF, testDF, allMetadataDF)
 
         //Run combinations.
-        val stacking = new Stacking()
-        val evalStacking: Eval = stacking.performStackingOnToolsAndMetadata(session, fullTrainDF, fullTestDF)
-        evalStacking.printResult("STACKING")
+//        val stacking = new Stacking()
+//        val evalStacking: Eval = stacking.performStackingOnToolsAndMetadata(session, fullTrainDF, fullTestDF)
+//        evalStacking.printResult(s"STACKING on $dataset")
 
         val bagging = new Bagging()
         val evalBagging: Eval = bagging.performBaggingOnToolsAndMetadata(session, fullTrainDF, fullTestDF)
-        evalBagging.printResult("BAGGING")
-
+        evalBagging.printResult(s"BAGGING on $dataset")
 
       }
     }

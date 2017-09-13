@@ -1,6 +1,6 @@
 package de.experiments.metadata
 
-trait FDsDictionary {
+trait FDsDictionary extends Serializable{
   val allFDs: List[FD]
 }
 

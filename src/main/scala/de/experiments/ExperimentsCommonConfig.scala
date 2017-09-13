@@ -2,11 +2,12 @@ package de.experiments
 
 import com.typesafe.config.ConfigFactory
 import de.evaluation.data.schema._
+import de.experiments.metadata._
 
 /**
   * Common config variables for experiments.
   */
-trait ExperimentsCommonConfig {
+trait ExperimentsCommonConfig extends Serializable {
 
   val splitter = ","
 
@@ -29,6 +30,13 @@ trait ExperimentsCommonConfig {
     hospTestFile,
     salariesTestFile,
     flightsTestFile)
+
+  val allFDsDictionariesByName: Map[String, FDsDictionary] = Map(
+    "blackoak" -> BlackOakFDsDictionary,
+    "hosp" -> HospFDsDictionary,
+    "salaries" -> SalariesFDsDictionary,
+    "flights" -> FlightsFDsDictionary
+  )
 
   val allSchemasByName: Map[String, Schema] = Map(
     "blackoak" -> BlackOakSchema,
@@ -70,6 +78,10 @@ trait ExperimentsCommonConfig {
     "salaries" -> (salariesTrainFile, salariesTestFile),
     "flights" -> (flightsTrainFile, flightsTestFile)
   )
+
+  def process_fds(f: Tuple2[String, FDsDictionary] => Unit): Unit = {
+    allFDsDictionariesByName.foreach(data => f(data))
+  }
 
 
   def process_test_data(f: Tuple2[String, String] => Unit): Unit = {
