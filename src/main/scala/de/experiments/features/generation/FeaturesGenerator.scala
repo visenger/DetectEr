@@ -7,7 +7,7 @@ import de.evaluation.f1.{Cells, Eval, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
 import de.experiments.metadata.{FD, HospFDsDictionary}
-import de.experiments.models.combinator.{Bagging, Stacking}
+import de.experiments.models.combinator.Bagging
 import de.model.util.Features
 import org.apache.spark.ml.feature.{OneHotEncoder, StringIndexer, VectorAssembler}
 import org.apache.spark.ml.linalg.Vectors
@@ -140,6 +140,7 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
     val contentBasedMetadataCols: List[String] = List("attrName", "attrType", "isNull", "missingValue", "attrTypeIndex", "attrTypeVector", "isTop10")
     val contentMetadataDF = assembler.transform(withTop10MetadataDF).drop(contentBasedMetadataCols: _*)
     //contentMetadataDF.show(false)
+
     contentMetadataDF
   }
 
@@ -458,9 +459,9 @@ object FeaturesGeneratorPlayground {
         val (fullTrainDF: DataFrame, fullTestDF: DataFrame) = generator.accumulateDataAndMetadata(session, trainDF, testDF, allMetadataDF)
 
         //Run combinations.
-//        val stacking = new Stacking()
-//        val evalStacking: Eval = stacking.performStackingOnToolsAndMetadata(session, fullTrainDF, fullTestDF)
-//        evalStacking.printResult(s"STACKING on $dataset")
+        //        val stacking = new Stacking()
+        //        val evalStacking: Eval = stacking.performStackingOnToolsAndMetadata(session, fullTrainDF, fullTestDF)
+        //        evalStacking.printResult(s"STACKING on $dataset")
 
         val bagging = new Bagging()
         val evalBagging: Eval = bagging.performBaggingOnToolsAndMetadata(session, fullTrainDF, fullTestDF)
@@ -472,3 +473,6 @@ object FeaturesGeneratorPlayground {
 
   }
 }
+
+
+
