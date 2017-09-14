@@ -144,6 +144,124 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
     contentMetadataDF
   }
 
+  def plgrd_generateGeneralInfoMetadata(session: SparkSession, dirtyDF: DataFrame, datasetFDs: List[FD]): DataFrame = {
+    import org.apache.spark.sql.functions._
+
+
+    val attributes: Seq[String] = mainSchema.getSchema.filterNot(_.equals(mainSchema.getRecID))
+    val attrs: Seq[DataFrame] = attributes.map(attr => {
+      val attrIdx = mainSchema.getIndexesByAttrNames(List(attr)).head
+      val attrDF = dirtyDF.select(mainSchema.getRecID, attr)
+        .withColumn(FullResult.attrnr, lit(attrIdx))
+        .withColumn("attrName", lit(attr))
+        .toDF(FullResult.recid, "value", FullResult.attrnr, "attrName")
+
+      attrDF
+        .select(FullResult.recid, FullResult.attrnr, "attrName", "value")
+        .toDF()
+    })
+
+    var flattenedDF: DataFrame = attrs
+      .reduce((df1, df2) => df1.union(df2))
+      .repartition(1)
+      .toDF(FullResult.recid, FullResult.attrnr, "attrName", "value")
+
+    val compute_presence_in_fd = udf {
+      (attr: String, fd: mutable.WrappedArray[String]) => {
+        fd.contains(attr) match {
+          case true => 1.0
+          case false => 0.0
+        }
+      }
+    }
+
+    (1 to datasetFDs.size).foreach(i => {
+      val fd = datasetFDs(i - 1).getFD
+      flattenedDF = flattenedDF
+        .withColumn(s"${datasetFDs(i - 1).toString}",
+          compute_presence_in_fd(flattenedDF("attrName"), array(fd.map(lit(_)): _*)))
+    })
+
+    flattenedDF
+  }
+
+
+  def plgrd_generateContentBasedMetadata(session: SparkSession, dirtyDF: DataFrame): DataFrame = {
+    import org.apache.spark.sql.functions._
+    val getTypeByAttrName = udf {
+      attr: String => {
+        mainSchema.dataTypesDictionary.getOrElse(attr, "unknown")
+      }
+    }
+
+    val attributesDFs: Seq[DataFrame] = schema
+      .filterNot(_.equalsIgnoreCase(mainSchema.getRecID))
+      .map(attribute => {
+        val indexByAttrName = mainSchema.getIndexesByAttrNames(List(attribute)).head
+        val flattenDF = dirtyDF
+          .select(mainSchema.getRecID, attribute)
+          .withColumn("attrName", lit(attribute))
+          .withColumn("attr", lit(indexByAttrName))
+          .withColumn("attrType", getTypeByAttrName(lit(attribute)))
+          .withColumn("isNull", isnull(dirtyDF(attribute)))
+          .withColumn("value", dirtyDF(attribute))
+
+        flattenDF
+          .select(mainSchema.getRecID, "attrName", "attr", "attrType", "isNull", "value")
+      })
+
+    val unionAttributesDF: DataFrame = attributesDFs
+      .reduce((df1, df2) => df1.union(df2))
+      .repartition(1)
+      .toDF(Cells.recid, "attrName", Cells.attrnr, "attrType", "isNull", "value")
+
+    val isMissingValue = udf { value: Boolean => {
+      if (value) 1.0 else 0.0
+    }
+    }
+    val metaDF = unionAttributesDF
+      .withColumn("missingValue", isMissingValue(unionAttributesDF("isNull")))
+
+    val typeIndexer = new StringIndexer()
+      .setInputCol("attrType")
+      .setOutputCol("attrTypeIndex")
+    val indexedTypesDF = typeIndexer.fit(metaDF).transform(metaDF)
+
+    val typeEncoder = new OneHotEncoder()
+      .setDropLast(false)
+      .setInputCol("attrTypeIndex")
+      .setOutputCol("attrTypeVector")
+    val dataTypesEncodedDF = typeEncoder.transform(indexedTypesDF)
+
+    //dataTypesEncodedDF.printSchema()
+
+    val top10Values = new MetadataCreator()
+      .extractTop10Values(session, metadataPath)
+      .cache()
+      .toDF("attrNameMeta", "top10")
+
+    val top10List: List[String] = top10Values
+      .select("top10")
+      .rdd
+      .map(row => row.getAs[String](0))
+      .collect()
+      .toList
+
+    val isTop10Values = udf {
+      (value: String, attrName: String) => {
+        top10List.contains(value) match {
+          case true => 1.0
+          case false => 0.0
+        }
+      }
+    }
+
+    val withTop10MetadataDF: DataFrame = dataTypesEncodedDF
+      .withColumn("isTop10", isTop10Values(dataTypesEncodedDF("value"), dataTypesEncodedDF("attrName")))
+
+    withTop10MetadataDF
+  }
+
   def generateGeneralInfoMetadata(session: SparkSession, dirtyDF: DataFrame, datasetFDs: List[FD]): DataFrame = {
     import org.apache.spark.sql.functions._
 

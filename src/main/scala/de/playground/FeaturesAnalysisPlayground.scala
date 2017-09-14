@@ -2,13 +2,16 @@ package de.playground
 
 import com.typesafe.config.ConfigFactory
 import de.evaluation.f1.{Eval, FullResult}
-import de.evaluation.util.SparkLOAN
+import de.evaluation.util.{DataSetCreator, SparkLOAN}
+import de.experiments.ExperimentsCommonConfig
 import de.experiments.features.generation.FeaturesGenerator
-import de.experiments.models.combinator.Bagging
+import de.experiments.models.combinator.{Bagging, Stacking}
 import de.model.util.Features
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.feature.ChiSqSelector
 import org.apache.spark.ml.linalg
+import org.apache.spark.mllib.stat.Statistics
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 
@@ -16,7 +19,7 @@ class FeaturesAnalysisPlayground {
 
 }
 
-object FeaturesAnalyzerPlayground {
+object FeaturesAnalyzerPlayground extends ExperimentsCommonConfig {
 
   def _main(args: Array[String]): Unit = {
     SparkLOAN.withSparkSession("TEST-STAT") {
@@ -95,11 +98,12 @@ object FeaturesAnalyzerPlayground {
 
   def main(args: Array[String]): Unit = {
     val experimentsConf = ConfigFactory.load("experiments.conf")
-    val datasets = Seq(/*"blackoak" ,*/ "hosp" /*, "salaries", "flights"*/)
+    val datasets = Seq("blackoak", "hosp", "salaries", "flights")
+    //val datasets = Seq("hosp")
     datasets.foreach(dataset => {
-      // println(s"running on ${dataset.toUpperCase()} | clusters number k=$i | on systems: ${systems.mkString(", ")}")
+
       println(s"running on ${dataset.toUpperCase()} ")
-      singleRun(dataset)
+      computePredictivityOfFeatures(dataset)
     })
 
 
@@ -155,7 +159,7 @@ object FeaturesAnalyzerPlayground {
 
 
         val selector = new ChiSqSelector()
-          .setNumTopFeatures(100)
+          .setNumTopFeatures(1000)
           .setFeaturesCol(Features.featuresCol)
           // .setLabelCol("label")
           .setOutputCol("selected-features")
@@ -182,9 +186,9 @@ object FeaturesAnalyzerPlayground {
           .withColumnRenamed("selected-features", Features.featuresCol)
 
         //Run combinations.
-        //        val stacking = new Stacking()
-        //        val evalStacking: Eval = stacking.performStackingOnToolsAndMetadata(session, fullTrainDF, fullTestDF)
-        //        evalStacking.printResult(s"STACKING on $dataset")
+        val stacking = new Stacking()
+        val evalStacking: Eval = stacking.performStackingOnToolsAndMetadata(session, trainChiSq, testChiSq)
+        evalStacking.printResult(s"STACKING on $dataset")
 
         val bagging = new Bagging()
         val evalBagging: Eval = bagging.performBaggingOnToolsAndMetadata(session, trainChiSq, testChiSq)
@@ -195,4 +199,87 @@ object FeaturesAnalyzerPlayground {
 
 
   }
+
+  def computePredictivityOfFeatures(dataset: String, tools: Seq[String] = FullResult.tools): Unit = {
+
+    SparkLOAN.withSparkSession("METADATA-ANALYSER") {
+      session => {
+        // val allFDs = fdsDictionary.allFDs
+        val generator = FeaturesGenerator.init
+
+
+        val dirtyDF: DataFrame = generator
+          .onDatasetName(dataset)
+          .onTools(tools)
+          .getDirtyData(session)
+          .cache()
+
+        //Set of content-based metadata, such as "attrName", "attrType", "isNull", "missingValue", "attrTypeIndex", "attrTypeVector", "isTop10"
+        val contentBasedFeaturesDF: DataFrame = generator.plgrd_generateContentBasedMetadata(session, dirtyDF)
+
+
+        //general info about fd-awarnes of each cell
+        val generalInfoDF = generator.plgrd_generateGeneralInfoMetadata(session, dirtyDF, generator.allFDs)
+
+        val allMetadata: DataFrame = contentBasedFeaturesDF
+          .join(generalInfoDF, Seq(FullResult.recid, FullResult.attrnr, "value", "attrName"))
+
+        allMetadata.printSchema()
+
+        val trainDataPath = allTrainData.getOrElse(dataset, "unknown")
+        val testDataPath = allTestData.getOrElse(dataset, "unknown")
+
+        val trainSystemsAndLabel: DataFrame = DataSetCreator.createFrame(session, trainDataPath, FullResult.schema: _*)
+        trainSystemsAndLabel.printSchema()
+
+        var systemsAndMetaDF = trainSystemsAndLabel.join(allMetadata, Seq(FullResult.recid, FullResult.attrnr))
+        systemsAndMetaDF.printSchema()
+
+        val labels: RDD[Double] = systemsAndMetaDF.select("label").rdd.map(row => row.getString(0).toDouble)
+
+        generator.allFDs.foreach(fd => {
+          val fdPresence: RDD[Double] = systemsAndMetaDF.select(s"${fd.toString}").rdd.map(row => row.getDouble(0))
+          val correlation: Double = Statistics.corr(labels, fdPresence, "pearson")
+          println(s"Correlation between label and the fd: ${fd.toString} is: $correlation")
+        })
+
+
+        Seq("missingValue", "isTop10").foreach(metadata => {
+          val metaInfo: RDD[Double] = systemsAndMetaDF.select(metadata).rdd.map(row => row.getDouble(0))
+          val correlation: Double = Statistics.corr(labels, metaInfo, "pearson")
+          println(s"Correlation between label and the column: $metadata is: $correlation")
+        })
+
+        //todo: we have to convert systems columns from string to double
+        import org.apache.spark.sql.functions._
+
+        val convert_str_to_double = udf {
+          value: String => value.toDouble
+        }
+
+        FullResult.tools.foreach(tool => {
+
+          val metaInfo: RDD[Double] = systemsAndMetaDF.select(tool).rdd.map(row => row.getString(0).toDouble)
+          val correlation: Double = Statistics.corr(labels, metaInfo, "pearson")
+          println(s"Correlation between label and the system column: ${getName(tool)} is: $correlation")
+
+        })
+
+
+        //Run combinations.
+        //        val stacking = new Stacking()
+        //        val evalStacking: Eval = stacking.performStackingOnToolsAndMetadata(session, trainChiSq, testChiSq)
+        //        evalStacking.printResult(s"STACKING on $dataset")
+        //
+        //        val bagging = new Bagging()
+        //        val evalBagging: Eval = bagging.performBaggingOnToolsAndMetadata(session, trainChiSq, testChiSq)
+        //        evalBagging.printResult(s"BAGGING on $dataset")
+
+      }
+    }
+
+
+  }
+
+
 }
