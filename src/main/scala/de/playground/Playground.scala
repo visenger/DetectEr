@@ -1,6 +1,7 @@
 package de.playground
 
 import com.typesafe.config.{Config, ConfigFactory}
+import de.experiments.features.prediction.CountsTableRow
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
@@ -35,6 +36,31 @@ object Playground extends App {
 
 object StatPlayground {
   def main(args: Array[String]): Unit = {
+
+    val rows = Seq(CountsTableRow(1.0, 1.0, 103845.0, 38326.0, 38326.0, 38326.0),
+      CountsTableRow(1.0, 0.0, 103845.0, 0.0, 38326.0, 65519.0),
+      CountsTableRow(0.0, 1.0, 103845.0, 0.0, 65519.0, 38326.0),
+      CountsTableRow(0.0, 0.0, 103845.0, 65519.0, 65519.0, 65519.0))
+
+    println((1 to 3).foldLeft(0.0)((acc, item) => acc + item))
+    //Todo:  NaN is destroying your result
+    val mutualInformation0: Double = rows.foldLeft(0.0)((acc, row) => {
+      val item = ((row.xyCount / row.total) * Math.log((row.total * row.xyCount) / (row.xCount * row.yCount)))
+      acc + item
+    })
+
+    val mutualInformation1 = rows
+      .map(row => ((row.xyCount / row.total) * Math.log((row.total * row.xyCount) / (row.xCount * row.yCount))))
+      .filterNot(member => member.isNaN)
+      .foldLeft(0.0)((acc, item) => acc + item)
+
+
+    val mutualInformation: Double =
+      ((rows(0).xyCount / rows(0).total) * Math.log((rows(0).total * rows(0).xyCount) / (rows(0).xCount * rows(0).yCount))
+        + (rows(1).xyCount / rows(1).total) * Math.log((rows(1).total * rows(1).xyCount) / (rows(1).xCount * rows(1).yCount))
+        + (rows(2).xyCount / rows(2).total) * Math.log((rows(2).total * rows(2).xyCount) / (rows(2).xCount * rows(2).yCount))
+        + (rows(3).xyCount / rows(3).total) * Math.log((rows(3).total * rows(3).xyCount) / (rows(3).xCount * rows(3).yCount)))
+    println(s"MI: $mutualInformation vs $mutualInformation0 vs $mutualInformation1")
 
   }
 }

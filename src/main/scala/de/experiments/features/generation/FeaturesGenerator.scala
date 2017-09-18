@@ -1,13 +1,11 @@
 package de.experiments.features.generation
 
-import com.typesafe.config.ConfigFactory
 import de.evaluation.data.metadata.MetadataCreator
 import de.evaluation.data.schema.{HospSchema, Schema}
-import de.evaluation.f1.{Cells, Eval, FullResult}
-import de.evaluation.util.{DataSetCreator, SparkLOAN}
+import de.evaluation.f1.{Cells, FullResult}
+import de.evaluation.util.DataSetCreator
 import de.experiments.ExperimentsCommonConfig
 import de.experiments.metadata.{FD, HospFDsDictionary}
-import de.experiments.models.combinator.Bagging
 import de.model.util.Features
 import org.apache.spark.ml.feature.{OneHotEncoder, StringIndexer, VectorAssembler}
 import org.apache.spark.ml.linalg.Vectors
@@ -29,6 +27,8 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
   var allFDs: List[FD] = null
 
   private var allTools = FullResult.tools
+
+  def getSchema = mainSchema
 
 
   def onTools(tools: Seq[String]): this.type = {
@@ -188,6 +188,7 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
 
   def plgrd_generateContentBasedMetadata(session: SparkSession, dirtyDF: DataFrame): DataFrame = {
     import org.apache.spark.sql.functions._
+
     val getTypeByAttrName = udf {
       attr: String => {
         mainSchema.dataTypesDictionary.getOrElse(attr, "unknown")
@@ -219,8 +220,21 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
       if (value) 1.0 else 0.0
     }
     }
-    val metaDF = unionAttributesDF
+
+    val isAttrType = udf {
+      (expectedType: String, actualType: String) => if (actualType.equals(expectedType)) 1.0 else 0.0
+    }
+
+    var metaDF = unionAttributesDF
       .withColumn("missingValue", isMissingValue(unionAttributesDF("isNull")))
+
+    val allAttrTypes: Set[String] = getAllDataTypes
+
+    println(s" all attributes types: ${allAttrTypes.mkString(", ")}")
+
+    allAttrTypes.foreach(attrType => {
+      metaDF = metaDF.withColumn(s"$attrType-type", isAttrType(lit(attrType), metaDF("attrType")))
+    })
 
     val typeIndexer = new StringIndexer()
       .setInputCol("attrType")
@@ -260,6 +274,10 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
       .withColumn("isTop10", isTop10Values(dataTypesEncodedDF("value"), dataTypesEncodedDF("attrName")))
 
     withTop10MetadataDF
+  }
+
+  def getAllDataTypes: Set[String] = {
+    mainSchema.dataTypesDictionary.values.toSet
   }
 
   def generateGeneralInfoMetadata(session: SparkSession, dirtyDF: DataFrame, datasetFDs: List[FD]): DataFrame = {
@@ -396,7 +414,8 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
   def accumulateAllFeatures(session: SparkSession, allMetaDFs: Seq[DataFrame]): DataFrame = {
 
     val fullMetadataDF = allMetaDFs.tail
-      .foldLeft(allMetaDFs.head)((acc, df) => acc.join(df, Seq(Cells.recid, Cells.attrnr, "value")))
+      .foldLeft(allMetaDFs.head)((acc, df) => acc.join(df, Seq(Cells.recid, Cells.attrnr)))
+    // .foldLeft(allMetaDFs.head)((acc, df) => acc.join(df, Seq(Cells.recid, Cells.attrnr, "value")))<- todo: previous version
     //val fullMetadataDF = fdsDataframe.join(contentMetadataDF, Seq(Cells.recid, Cells.attrnr, "value"))
 
     val allMetadataCols = allMetaDFs.flatMap(df => {
@@ -527,70 +546,7 @@ object FeaturesGenerator {
   }
 }
 
-object FeaturesGeneratorPlayground {
 
-  def main(args: Array[String]): Unit = {
-    val experimentsConf = ConfigFactory.load("experiments.conf")
-    val datasets = Seq("blackoak" /*, "hosp", "salaries", "flights"*/)
-
-    datasets.foreach(dataset => {
-      (2 to 4).foreach(i => {
-        // val systems: Seq[String] = experimentsConf.getStringList(s"$dataset.k.$i").asScala.toSeq
-
-        // println(s"running on ${dataset.toUpperCase()} | clusters number k=$i | on systems: ${systems.mkString(", ")}")
-        println(s"running on ${dataset.toUpperCase()} ")
-        singleRun(dataset, Seq("exists-4", "exists-5", "exists-1", "exists-2", "exists-3"))
-      })
-    })
-
-  }
-
-  def singleRun(dataset: String, tools: Seq[String] = FullResult.tools): Unit = {
-
-    SparkLOAN.withSparkSession("METADATA-COMBI") {
-      session => {
-        // val allFDs = fdsDictionary.allFDs
-        val generator = FeaturesGenerator.init
-
-
-        val dirtyDF: DataFrame = generator
-          .onDatasetName(dataset)
-          .onTools(tools)
-          .getDirtyData(session)
-          .cache()
-
-        //Set of content-based metadata, such as "attrName", "attrType", "isNull", "missingValue", "attrTypeIndex", "attrTypeVector", "isTop10"
-        val contentBasedFeaturesDF: DataFrame = generator.generateContentBasedMetadata(session, dirtyDF)
-
-        //FD-partiotion - based features
-        val fdMetadataDF: DataFrame = generator.generateFDMetadata(session, dirtyDF, generator.allFDs)
-
-        //general info about fd-awarnes of each cell
-        val generalInfoDF = generator.generateGeneralInfoMetadata(session, dirtyDF, generator.allFDs)
-
-        //all features data frames should contain Seq(Cells.recid, Cells.attrnr, "value") attributes in order to join with other DFs
-        val allMetadataDF = generator.accumulateAllFeatures(session, Seq(contentBasedFeaturesDF, fdMetadataDF, generalInfoDF))
-
-        //Systems features contains the encoding of each system result and the total numer of systems identified the particular cell as an error.
-        val (testDF: DataFrame, trainDF: DataFrame) = generator.createSystemsFeatures(session)
-
-        val (fullTrainDF: DataFrame, fullTestDF: DataFrame) = generator.accumulateDataAndMetadata(session, trainDF, testDF, allMetadataDF)
-
-        //Run combinations.
-        //        val stacking = new Stacking()
-        //        val evalStacking: Eval = stacking.performStackingOnToolsAndMetadata(session, fullTrainDF, fullTestDF)
-        //        evalStacking.printResult(s"STACKING on $dataset")
-
-        val bagging = new Bagging()
-        val evalBagging: Eval = bagging.performBaggingOnToolsAndMetadata(session, fullTrainDF, fullTestDF)
-        evalBagging.printResult(s"BAGGING on $dataset")
-
-      }
-    }
-
-
-  }
-}
 
 
 

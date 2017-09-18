@@ -65,7 +65,7 @@ class Stacking extends ExperimentsCommonConfig {
     val trainLabPointRDD: RDD[LabeledPoint] = FormatUtil
       .prepareDFToLabeledPointRDD(session, train)
 
-    println(s"initial features vector size= ${trainLabPointRDD.first().features.size}")
+    //println(s"initial features vector size= ${trainLabPointRDD.first().features.size}")
 
 
     val testLabAndFeatures: DataFrame = FormatUtil
