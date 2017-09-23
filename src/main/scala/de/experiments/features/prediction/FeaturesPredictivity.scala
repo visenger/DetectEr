@@ -31,4 +31,18 @@ case class Correlation(column1: String, column2: String, value: Double) {
   override def toString = s"Correlation between $column1 and $column2 is: ${NumbersUtil.round(value, 4)}"
 }
 
+case class InformationGain(column1: String, column2: String, value: Double) {
+  override def toString = s"Information Gain between $column1 and $column2 is: ${NumbersUtil.round(value, 4)}"
+
+  def info: String = {
+    s"""
+       |Information gain (IG) measures how much
+       |“information” a feature gives us about the class.
+       |– Features that perfectly partition should give maximal
+       |information.
+       |– Unrelated features should give no information.
+    """.stripMargin
+  }
+}
+
 

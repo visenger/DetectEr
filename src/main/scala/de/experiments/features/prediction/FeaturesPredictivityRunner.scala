@@ -28,7 +28,8 @@ object FeaturesPredictivityRunner extends ExperimentsCommonConfig {
            |
            |running on ${dataset.toUpperCase()}
            |""".stripMargin)
-      computePredictivityOfFeatures(dataset)
+      //computePredictivityOfFeatures(dataset)
+      computeInformationGainOfFeatures(dataset)
     })
 
 
@@ -209,6 +210,161 @@ object FeaturesPredictivityRunner extends ExperimentsCommonConfig {
         val bagging = new Bagging()
         val evalBagging: Eval = bagging.performBaggingOnToolsAndMetadata(session, trainSystemsAndMetaDF, testSystemsAndMetaDF)
         evalBagging.printResult(s"BAGGING on $dataset")
+      }
+    }
+
+
+  }
+
+  def getInformationGain(trainSystemsAndMetaDF: DataFrame, column: String): InformationGain = {
+    val labelsAndFeature: RDD[(Double, Double)] = trainSystemsAndMetaDF
+      .select(FullResult.label, column)
+      .rdd
+      .map(row => {
+        val label: Double = row.getDouble(0)
+        val feature: Double = row.getDouble(1)
+        (label, feature)
+      })
+    val countByCombinations = labelsAndFeature.countByValue()
+
+    var tp = 0.0
+    var fp = 0.0
+    var fn = 0.0
+    var tn = 0.0
+
+    countByCombinations.foreach(entry => {
+      entry._1 match {
+        case (1.0, 1.0) => tp = entry._2
+        case (0.0, 1.0) => fp = entry._2
+        case (1.0, 0.0) => fn = entry._2
+        case (0.0, 0.0) => tn = entry._2
+      }
+    })
+
+    val pos = tp + fn
+    val neg = fp + tn
+
+    val total = pos + neg
+
+    val entropyPosNeg: Double = computeEntropy(pos, neg)
+
+    val prob_of_1 = (tp + fp) / total
+    val prob_of_0 = 1 - prob_of_1
+
+    val ig: Double = entropyPosNeg - (prob_of_1 * computeEntropy(tp, fp) + prob_of_0 * computeEntropy(fn, tn))
+
+
+    InformationGain(FullResult.label, column, ig)
+
+
+  }
+
+  private def computeEntropy(pos: Double, neg: Double) = {
+    val entropy: Double = Seq(pos, neg)
+      .map(e => {
+        val p_e = e / (pos + neg)
+        p_e * Math.log(p_e) * (-1.0)
+      })
+      .filterNot(_.isNaN)
+      .foldLeft(0.0)((acc, element) => acc + element)
+    entropy
+  }
+
+  def computeInformationGainOfFeatures(dataset: String, tools: Seq[String] = FullResult.tools): Unit = {
+
+    SparkLOAN.withSparkSession("METADATA-ANALYSER") {
+      session => {
+        // val allFDs = fdsDictionary.allFDs
+        val generator = FeaturesGenerator.init
+
+
+        val dirtyDF: DataFrame = generator
+          .onDatasetName(dataset)
+          .onTools(tools)
+          .getDirtyData(session)
+          .cache()
+
+        //Set of content-based metadata, such as "attrName", "attrType", "isNull", "missingValue", "attrTypeIndex", "attrTypeVector", "isTop10"
+        val contentBasedFeaturesDF: DataFrame = generator.plgrd_generateContentBasedMetadata(session, dirtyDF)
+
+        //general info about fd-awarnes of each cell
+        val generalInfoDF = generator.plgrd_generateGeneralInfoMetadata(session, dirtyDF, generator.allFDs)
+
+        val allMetadata: DataFrame = contentBasedFeaturesDF
+          .join(generalInfoDF, Seq(FullResult.recid, FullResult.attrnr)) //todo: joining columns influence several other columns like isMissing
+
+        val trainDataPath = allTrainData.getOrElse(dataset, "unknown")
+        val testDataPath = allTestData.getOrElse(dataset, "unknown")
+
+        var trainSystemsAndLabel: DataFrame = DataSetCreator.createFrame(session, trainDataPath, FullResult.schema: _*).cache()
+        var testSystemsAndLabel: DataFrame = DataSetCreator.createFrame(session, testDataPath, FullResult.schema: _*).cache()
+
+        //todo: convert all str columns into double
+
+        import org.apache.spark.sql.functions._
+        val convert_to_double = udf {
+          value: String => value.toDouble
+        }
+
+        trainSystemsAndLabel = trainSystemsAndLabel
+          .withColumn(s"${FullResult.label}-tmp", convert_to_double(trainSystemsAndLabel(FullResult.label)))
+          .drop(FullResult.label)
+          .withColumnRenamed(s"${FullResult.label}-tmp", FullResult.label)
+
+        testSystemsAndLabel = testSystemsAndLabel
+          .withColumn(s"${FullResult.label}-tmp", convert_to_double(testSystemsAndLabel(FullResult.label)))
+          .drop(FullResult.label)
+          .withColumnRenamed(s"${FullResult.label}-tmp", FullResult.label)
+
+        FullResult.tools.foreach(tool => {
+
+          trainSystemsAndLabel = trainSystemsAndLabel
+            .withColumn(s"$tool-tmp", convert_to_double(trainSystemsAndLabel(tool)))
+            .drop(tool)
+            .withColumnRenamed(s"$tool-tmp", tool)
+
+          testSystemsAndLabel = testSystemsAndLabel
+            .withColumn(s"$tool-tmp", convert_to_double(testSystemsAndLabel(tool)))
+            .drop(tool)
+            .withColumnRenamed(s"$tool-tmp", tool)
+        })
+
+
+        var trainSystemsAndMetaDF = trainSystemsAndLabel.join(allMetadata, Seq(FullResult.recid, FullResult.attrnr))
+
+
+        //todo: these are control-columns. Should have zero-MI with other columns.
+        trainSystemsAndMetaDF = trainSystemsAndMetaDF
+          .withColumn("allZeros", lit(0.0))
+          .withColumn("allOnes", lit(1.0))
+
+
+        //todo: create notTop10
+
+        //systemsAndMetaDF.printSchema()
+
+        //        val labelAndMIssing: RDD[(Double, Double)] = trainSystemsAndMetaDF
+        //          .select(FullResult.label, "missingValue")
+        //          .rdd.map(row => {
+        //          (row.getDouble(0), row.getDouble(1))
+        //        })
+        //        labelAndMIssing.countByValue().foreach(item => println(s" (${item._1}) count ${item._2}"))
+
+
+        val allAttrTypes: Seq[String] = generator.getAllDataTypes.map(t => s"$t-type").toSeq
+        val metadataColumns = Seq("missingValue", "isTop10", "allZeros", "allOnes") ++ allAttrTypes
+        val fds: List[String] = generator.allFDs.map(_.toString)
+        val allTools = FullResult.tools
+        val labelItself: Seq[String] = Seq(FullResult.label)
+
+        val metadataCols = metadataColumns ++ fds
+
+        val informationGains: Seq[InformationGain] = metadataCols
+          .map(column => getInformationGain(trainSystemsAndMetaDF, column))
+
+        informationGains.foreach(println)
+
+
       }
     }
 
