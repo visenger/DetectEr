@@ -37,6 +37,7 @@ object FeaturesPredictivityRunner extends ExperimentsCommonConfig {
 
   val threshold = 0.0
 
+
   def computePredictivityOfFeatures(dataset: String, tools: Seq[String] = FullResult.tools): Unit = {
 
     SparkLOAN.withSparkSession("METADATA-ANALYSER") {
@@ -55,7 +56,7 @@ object FeaturesPredictivityRunner extends ExperimentsCommonConfig {
         val contentBasedFeaturesDF: DataFrame = generator.plgrd_generateContentBasedMetadata(session, dirtyDF)
 
         //general info about fd-awarnes of each cell
-        val generalInfoDF = generator.plgrd_generateGeneralInfoMetadata(session, dirtyDF, generator.allFDs)
+        val generalInfoDF = generator.oneFDOneFeature_generateFDsMetadata(session, dirtyDF, generator.allFDs)
 
         val allMetadata: DataFrame = contentBasedFeaturesDF
           .join(generalInfoDF, Seq(FullResult.recid, FullResult.attrnr)) //todo: joining columns influence several other columns like isMissing
@@ -216,59 +217,59 @@ object FeaturesPredictivityRunner extends ExperimentsCommonConfig {
 
   }
 
-  def getInformationGain(trainSystemsAndMetaDF: DataFrame, column: String): InformationGain = {
-    val labelsAndFeature: RDD[(Double, Double)] = trainSystemsAndMetaDF
-      .select(FullResult.label, column)
-      .rdd
-      .map(row => {
-        val label: Double = row.getDouble(0)
-        val feature: Double = row.getDouble(1)
-        (label, feature)
-      })
-    val countByCombinations = labelsAndFeature.countByValue()
-
-    var tp = 0.0
-    var fp = 0.0
-    var fn = 0.0
-    var tn = 0.0
-
-    countByCombinations.foreach(entry => {
-      entry._1 match {
-        case (1.0, 1.0) => tp = entry._2
-        case (0.0, 1.0) => fp = entry._2
-        case (1.0, 0.0) => fn = entry._2
-        case (0.0, 0.0) => tn = entry._2
-      }
-    })
-
-    val pos = tp + fn
-    val neg = fp + tn
-
-    val total = pos + neg
-
-    val entropyPosNeg: Double = computeEntropy(pos, neg)
-
-    val prob_of_1 = (tp + fp) / total
-    val prob_of_0 = 1 - prob_of_1
-
-    val ig: Double = entropyPosNeg - (prob_of_1 * computeEntropy(tp, fp) + prob_of_0 * computeEntropy(fn, tn))
-
-
-    InformationGain(FullResult.label, column, ig)
-
-
-  }
-
-  private def computeEntropy(pos: Double, neg: Double) = {
-    val entropy: Double = Seq(pos, neg)
-      .map(e => {
-        val p_e = e / (pos + neg)
-        p_e * Math.log(p_e) * (-1.0)
-      })
-      .filterNot(_.isNaN)
-      .foldLeft(0.0)((acc, element) => acc + element)
-    entropy
-  }
+  //  def getInformationGain(trainSystemsAndMetaDF: DataFrame, column: String): InformationGain = {
+  //    val labelsAndFeature: RDD[(Double, Double)] = trainSystemsAndMetaDF
+  //      .select(FullResult.label, column)
+  //      .rdd
+  //      .map(row => {
+  //        val label: Double = row.getDouble(0)
+  //        val feature: Double = row.getDouble(1)
+  //        (label, feature)
+  //      })
+  //    val countByCombinations = labelsAndFeature.countByValue()
+  //
+  //    var tp = 0.0
+  //    var fp = 0.0
+  //    var fn = 0.0
+  //    var tn = 0.0
+  //
+  //    countByCombinations.foreach(entry => {
+  //      entry._1 match {
+  //        case (1.0, 1.0) => tp = entry._2
+  //        case (0.0, 1.0) => fp = entry._2
+  //        case (1.0, 0.0) => fn = entry._2
+  //        case (0.0, 0.0) => tn = entry._2
+  //      }
+  //    })
+  //
+  //    val pos = tp + fn
+  //    val neg = fp + tn
+  //
+  //    val total = pos + neg
+  //
+  //    val entropyPosNeg: Double = computeEntropy(pos, neg)
+  //
+  //    val prob_of_1 = (tp + fp) / total
+  //    val prob_of_0 = 1 - prob_of_1
+  //
+  //    val ig: Double = entropyPosNeg - (prob_of_1 * computeEntropy(tp, fp) + prob_of_0 * computeEntropy(fn, tn))
+  //
+  //
+  //    InformationGain(FullResult.label, column, ig)
+  //
+  //
+  //  }
+  //
+  //  private def computeEntropy(pos: Double, neg: Double) = {
+  //    val entropy: Double = Seq(pos, neg)
+  //      .map(e => {
+  //        val p_e = e / (pos + neg)
+  //        p_e * Math.log(p_e) * (-1.0)
+  //      })
+  //      .filterNot(_.isNaN)
+  //      .foldLeft(0.0)((acc, element) => acc + element)
+  //    entropy
+  //  }
 
   def computeInformationGainOfFeatures(dataset: String, tools: Seq[String] = FullResult.tools): Unit = {
 
@@ -288,10 +289,20 @@ object FeaturesPredictivityRunner extends ExperimentsCommonConfig {
         val contentBasedFeaturesDF: DataFrame = generator.plgrd_generateContentBasedMetadata(session, dirtyDF)
 
         //general info about fd-awarnes of each cell
-        val generalInfoDF = generator.plgrd_generateGeneralInfoMetadata(session, dirtyDF, generator.allFDs)
+        val generalInfoDF = generator.oneFDOneFeature_generateFDsMetadata(session, dirtyDF, generator.allFDs)
+
+        var oneFDTwoVecsDF = generator.oneFDTwoFeatureVectors_generateFDsMetadata(session, dirtyDF, generator.allFDs)
+
+        val lhs = generator.allFDs.map(fd => s"LHS-${fd.toString}")
+        val rhs = generator.allFDs.map(fd => s"RHS-${fd.toString}")
+        val fdsCols: Seq[String] = lhs ++ rhs
+
+        val columns = Seq(FullResult.attrnr) ++ fdsCols
+        oneFDTwoVecsDF = oneFDTwoVecsDF.select(FullResult.recid, columns: _*)
 
         val allMetadata: DataFrame = contentBasedFeaturesDF
           .join(generalInfoDF, Seq(FullResult.recid, FullResult.attrnr)) //todo: joining columns influence several other columns like isMissing
+          .join(oneFDTwoVecsDF, Seq(FullResult.recid, FullResult.attrnr)) //todo: joining columns influence several other columns like isMissing
 
         val trainDataPath = allTrainData.getOrElse(dataset, "unknown")
         val testDataPath = allTestData.getOrElse(dataset, "unknown")
@@ -339,28 +350,30 @@ object FeaturesPredictivityRunner extends ExperimentsCommonConfig {
           .withColumn("allOnes", lit(1.0))
 
 
-        //todo: create notTop10
+        //todo: create notTop10 -> meaning the value is placed in the tail of the data histogram -> might be an oulier?!
 
-        //systemsAndMetaDF.printSchema()
+        val is_value_in_tail = udf {
+          isTop10Value: Double =>
+            isTop10Value match {
+              case 1.0 => 0.0
+              case 0.0 => 1.0
+            }
+        }
 
-        //        val labelAndMIssing: RDD[(Double, Double)] = trainSystemsAndMetaDF
-        //          .select(FullResult.label, "missingValue")
-        //          .rdd.map(row => {
-        //          (row.getDouble(0), row.getDouble(1))
-        //        })
-        //        labelAndMIssing.countByValue().foreach(item => println(s" (${item._1}) count ${item._2}"))
+        trainSystemsAndMetaDF = trainSystemsAndMetaDF
+          .withColumn("inTail", is_value_in_tail(trainSystemsAndMetaDF("isTop10")))
 
 
         val allAttrTypes: Seq[String] = generator.getAllDataTypes.map(t => s"$t-type").toSeq
-        val metadataColumns = Seq("missingValue", "isTop10", "allZeros", "allOnes") ++ allAttrTypes
+        val metadataColumns = Seq("missingValue", "isTop10", "inTail", "allZeros", "allOnes") ++ allAttrTypes
         val fds: List[String] = generator.allFDs.map(_.toString)
         val allTools = FullResult.tools
         val labelItself: Seq[String] = Seq(FullResult.label)
 
-        val metadataCols = metadataColumns ++ fds
+        val metadataCols = metadataColumns ++ fds ++ fdsCols ++ allTools
 
         val informationGains: Seq[InformationGain] = metadataCols
-          .map(column => getInformationGain(trainSystemsAndMetaDF, column))
+          .map(column => InformationGainUtil.getInformationGain(trainSystemsAndMetaDF, column))
 
         informationGains.foreach(println)
 

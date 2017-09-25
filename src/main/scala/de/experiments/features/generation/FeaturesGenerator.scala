@@ -144,7 +144,7 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
     contentMetadataDF
   }
 
-  def plgrd_generateGeneralInfoMetadata(session: SparkSession, dirtyDF: DataFrame, datasetFDs: List[FD]): DataFrame = {
+  def oneFDOneFeature_generateFDsMetadata(session: SparkSession, dirtyDF: DataFrame, datasetFDs: List[FD]): DataFrame = {
     import org.apache.spark.sql.functions._
 
 
@@ -180,6 +180,52 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
       flattenedDF = flattenedDF
         .withColumn(s"${datasetFDs(i - 1).toString}",
           compute_presence_in_fd(flattenedDF("attrName"), array(fd.map(lit(_)): _*)))
+    })
+
+    flattenedDF
+  }
+
+  def oneFDTwoFeatureVectors_generateFDsMetadata(session: SparkSession, dirtyDF: DataFrame, datasetFDs: List[FD]): DataFrame = {
+    import org.apache.spark.sql.functions._
+
+
+    val attributes: Seq[String] = mainSchema.getSchema.filterNot(_.equals(mainSchema.getRecID))
+    val attrs: Seq[DataFrame] = attributes.map(attr => {
+      val attrIdx = mainSchema.getIndexesByAttrNames(List(attr)).head
+      val attrDF = dirtyDF.select(mainSchema.getRecID, attr)
+        .withColumn(FullResult.attrnr, lit(attrIdx))
+        .withColumn("attrName", lit(attr))
+        .toDF(FullResult.recid, "value", FullResult.attrnr, "attrName")
+
+      attrDF
+        .select(FullResult.recid, FullResult.attrnr, "attrName", "value")
+        .toDF()
+    })
+
+    var flattenedDF: DataFrame = attrs
+      .reduce((df1, df2) => df1.union(df2))
+      .repartition(1)
+      .toDF(FullResult.recid, FullResult.attrnr, "attrName", "value")
+
+    //todo: create two columns fd-lhs and fd-rhs and populate according presence
+
+    val compute_presence_in_fd = udf {
+      (attr: String, fd: mutable.WrappedArray[String]) => {
+        fd.contains(attr) match {
+          case true => 1.0
+          case false => 0.0
+        }
+      }
+    }
+
+    (1 to datasetFDs.size).foreach(i => {
+      val dsFD = datasetFDs(i - 1)
+      val lhs: List[String] = dsFD.lhs
+      val rhs: List[String] = dsFD.rhs
+
+      flattenedDF = flattenedDF
+        .withColumn(s"LHS-${dsFD.toString}", compute_presence_in_fd(flattenedDF("attrName"), array(lhs.map(lit(_)): _*)))
+        .withColumn(s"RHS-${dsFD.toString}", compute_presence_in_fd(flattenedDF("attrName"), array(rhs.map(lit(_)): _*)))
     })
 
     flattenedDF
@@ -229,8 +275,6 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
       .withColumn("missingValue", isMissingValue(unionAttributesDF("isNull")))
 
     val allAttrTypes: Set[String] = getAllDataTypes
-
-    println(s" all attributes types: ${allAttrTypes.mkString(", ")}")
 
     allAttrTypes.foreach(attrType => {
       metaDF = metaDF.withColumn(s"$attrType-type", isAttrType(lit(attrType), metaDF("attrType")))
@@ -315,7 +359,7 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
     encodedDF
   }
 
-  def generateFDMetadata(session: SparkSession, dirtyDF: DataFrame, datasetFDs: List[FD]): DataFrame = {
+  def generatePartitionsBased_FDMetadata(session: SparkSession, dirtyDF: DataFrame, datasetFDs: List[FD]): DataFrame = {
     import org.apache.spark.sql.functions._
 
     val allFDEncodings: List[DataFrame] = datasetFDs.map(fd => {
@@ -380,12 +424,12 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
       val fdsEncoded: DataFrame = attrDFs
         .reduce((df1, df2) => df1.union(df2))
         .repartition(1)
-        .toDF(FullResult.recid, FullResult.attrnr, "value", s"fd-${fdIdx}")
+        .toDF(FullResult.recid, FullResult.attrnr, "value", s"fd-$fdIdx")
 
 
       val fdIndexer = new StringIndexer()
-        .setInputCol(s"fd-${fdIdx}")
-        .setOutputCol(s"fd-${fdIdx}-idx")
+        .setInputCol(s"fd-$fdIdx")
+        .setOutputCol(s"fd-$fdIdx-idx")
       val fdIndexedDF = fdIndexer.fit(fdsEncoded).transform(fdsEncoded).drop(s"fd-${fdIdx}")
 
       val oneHotEncoderForFD = new OneHotEncoder()

@@ -1,6 +1,9 @@
 package de.experiments.features.prediction
 
+import de.evaluation.f1.FullResult
 import de.model.util.NumbersUtil
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.DataFrame
 
 
 class FeaturesPredictivity {
@@ -42,6 +45,63 @@ case class InformationGain(column1: String, column2: String, value: Double) {
        |information.
        |– Unrelated features should give no information.
     """.stripMargin
+  }
+}
+
+object InformationGainUtil {
+
+  def getInformationGain(trainSystemsAndMetaDF: DataFrame, column: String): InformationGain = {
+    val labelsAndFeature: RDD[(Double, Double)] = trainSystemsAndMetaDF
+      .select(FullResult.label, column)
+      .rdd
+      .map(row => {
+        val label: Double = row.getDouble(0)
+        val feature: Double = row.getDouble(1)
+        (label, feature)
+      })
+    val countByCombinations = labelsAndFeature.countByValue()
+
+    var tp = 0.0
+    var fp = 0.0
+    var fn = 0.0
+    var tn = 0.0
+
+    countByCombinations.foreach(entry => {
+      entry._1 match {
+        case (1.0, 1.0) => tp = entry._2
+        case (0.0, 1.0) => fp = entry._2
+        case (1.0, 0.0) => fn = entry._2
+        case (0.0, 0.0) => tn = entry._2
+      }
+    })
+
+    val pos = tp + fn
+    val neg = fp + tn
+
+    val total = pos + neg
+
+    val entropyPosNeg: Double = computeEntropy(pos, neg)
+
+    val prob_of_1 = (tp + fp) / total
+    val prob_of_0 = 1 - prob_of_1
+
+    val ig: Double = entropyPosNeg - (prob_of_1 * computeEntropy(tp, fp) + prob_of_0 * computeEntropy(fn, tn))
+
+
+    InformationGain(FullResult.label, column, ig)
+
+
+  }
+
+  private def computeEntropy(pos: Double, neg: Double) = {
+    val entropy: Double = Seq(pos, neg)
+      .map(e => {
+        val p_e = e / (pos + neg)
+        p_e * Math.log(p_e) * (-1.0)
+      })
+      .filterNot(_.isNaN)
+      .foldLeft(0.0)((acc, element) => acc + element)
+    entropy
   }
 }
 
