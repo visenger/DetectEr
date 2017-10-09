@@ -42,7 +42,7 @@ object DatasetsBasicStatistic {
 object SystemsPerformanceStatistic {
   def main(args: Array[String]): Unit = {
 
-    val datasets = Seq(/*"output.full.result.file" /*blackoak*/ , "result.hosp.10k.full.result.file",*/ "result.salaries.full.result.file" /*, "result.flights.full.result.file"*/)
+    val datasets = Seq("output.full.result.file" /*blackoak*/ , "result.hosp.10k.full.result.file", "result.salaries.full.result.file", "result.flights.full.result.file")
     val config = ConfigFactory.load()
 
     SparkLOAN.withSparkSession("TOOLS-STAT") {
@@ -74,6 +74,13 @@ object SystemsPerformanceStatistic {
             println(s"${e._1._1}, ${attrNr}: ${e._2} / ${NumbersUtil.round(errorPercentage)}%")
           })
 
+          val sum = systemsCombiCount.map(e => {
+            val errorPercentage = (e._2.toDouble / totalErrors.toDouble) * 100
+            errorPercentage
+          }).sum
+
+          println(s"total sum: $sum")
+
 
         })
       }
@@ -86,7 +93,7 @@ object SystemsPerformanceList extends ExperimentsCommonConfig {
   def main(args: Array[String]): Unit = {
 
     val mapDatasets = Map(
-      "blackoak"->"output.full.result.file",
+      "blackoak" -> "output.full.result.file",
       "hosp" -> "result.hosp.10k.full.result.file",
       "salaries" -> "result.salaries.full.result.file",
       "flights" -> "result.flights.full.result.file")
