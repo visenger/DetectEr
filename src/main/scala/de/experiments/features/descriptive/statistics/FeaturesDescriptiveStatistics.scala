@@ -2,27 +2,49 @@ package de.experiments.features.descriptive.statistics
 
 import de.evaluation.f1.FullResult
 import de.evaluation.util.DataSetCreator
+import de.experiments.ExperimentsCommonConfig
 import de.experiments.features.generation.FeaturesGenerator
-import de.experiments.features.prediction.FeaturesPredictivityRunner.allTrainData
+import de.experiments.metadata.Metadata
+import de.experiments.metadata.Metadata._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
   * We want to know everything about our data. Metadata features for error detection.
+  * Why the metadata helps? Which metadata helps?
   **/
-class FeaturesDescriptiveStatistics {
-
-  def createAllMetadata(session: SparkSession, dataset: String, tools: Seq[String] = FullResult.tools): DataFrame = {
-
-    // val allFDs = fdsDictionary.allFDs
-    val generator = FeaturesGenerator.init
+class FeaturesDescriptiveStatistics() extends ExperimentsCommonConfig {
 
 
-    val dirtyDF: DataFrame = generator
+  private var dataset = ""
+  private var tools = FullResult.tools
+
+  private var generator = FeaturesGenerator.init
+
+  private var trainDataPath = ""
+
+  def get(): this.type = {
+    generator = generator
       .onDatasetName(dataset)
       .onTools(tools)
-      .getDirtyData(session)
-      .cache()
+    this
+  }
 
+  def onDatasetName(ds: String): this.type = {
+    dataset = ds
+    trainDataPath = allTrainData.getOrElse(dataset, "unknown")
+    this
+  }
+
+  def onTools(ts: Seq[String]): this.type = {
+    tools = ts
+    this
+  }
+
+  def createAllMetadataForTrain(session: SparkSession): DataFrame = {
+
+    // val allFDs = fdsDictionary.allFDs
+
+    val dirtyDF: DataFrame = generator.getDirtyData(session).cache()
     //Set of content-based metadata, such as "attrName", "attrType", "isNull", "missingValue", "attrTypeIndex", "attrTypeVector", "isTop10"
     val contentBasedFeaturesDF: DataFrame = generator.plgrd_generateContentBasedMetadata(session, dirtyDF)
 
@@ -31,9 +53,7 @@ class FeaturesDescriptiveStatistics {
 
     var oneFDTwoVecsDF = generator.oneFDTwoFeatureVectors_generateFDsMetadata(session, dirtyDF, generator.allFDs)
 
-    val lhs = generator.allFDs.map(fd => s"LHS-${fd.toString}")
-    val rhs = generator.allFDs.map(fd => s"RHS-${fd.toString}")
-    val fdsCols: Seq[String] = lhs ++ rhs
+    val fdsCols: Seq[String] = createTwoSidedFDFeatures()
 
     val columns = Seq(FullResult.attrnr) ++ fdsCols
     oneFDTwoVecsDF = oneFDTwoVecsDF.select(FullResult.recid, columns: _*)
@@ -42,7 +62,7 @@ class FeaturesDescriptiveStatistics {
       .join(generalInfoDF, Seq(FullResult.recid, FullResult.attrnr)) //todo: joining columns influence several other columns like isMissing
       .join(oneFDTwoVecsDF, Seq(FullResult.recid, FullResult.attrnr)) //todo: joining columns influence several other columns like isMissing
 
-    val trainDataPath = allTrainData.getOrElse(dataset, "unknown")
+
     //    val testDataPath = allTestData.getOrElse(dataset, "unknown")
 
     var trainSystemsAndLabel: DataFrame = DataSetCreator.createFrame(session, trainDataPath, FullResult.schema: _*).cache()
@@ -83,9 +103,6 @@ class FeaturesDescriptiveStatistics {
 
 
     //todo: these are control-columns. Should have zero-MI with other columns.
-    trainSystemsAndMetaDF = trainSystemsAndMetaDF
-      .withColumn("allZeros", lit(0.0))
-      .withColumn("allOnes", lit(1.0))
 
 
     //todo: create notTop10 -> meaning the value is placed in the tail of the data histogram -> might be an oulier?!
@@ -99,21 +116,26 @@ class FeaturesDescriptiveStatistics {
     }
 
     trainSystemsAndMetaDF = trainSystemsAndMetaDF
-      .withColumn("inTail", is_value_in_tail(trainSystemsAndMetaDF("isTop10")))
-
-
-    val allAttrTypes: Seq[String] = generator.getAllDataTypes.map(t => s"$t-type").toSeq
-    val metadataColumns = Seq("missingValue", "isTop10", "inTail", "allZeros", "allOnes") ++ allAttrTypes
-    val fds: List[String] = generator.allFDs.map(_.toString)
-    val allTools = FullResult.tools
-    val labelItself: Seq[String] = Seq(FullResult.label)
-
-    val metadataCols = metadataColumns ++ fds ++ fdsCols ++ allTools
-
+      .withColumn("inTail", is_value_in_tail(trainSystemsAndMetaDF(topTen)))
 
     trainSystemsAndMetaDF
   }
 
+  def getAllMetadataFeatures(): Seq[String] = {
+    val fdsCols: Seq[String] = createTwoSidedFDFeatures()
+    val allAttrTypes: Seq[String] = generator.getAllDataTypes.map(t => s"$t-type").toSeq
+    val metadataColumns = Metadata.allMetadata ++ allAttrTypes
+    val fds: List[String] = generator.allFDs.map(_.toString)
+    val metadataCols: Seq[String] = metadataColumns ++ fds ++ fdsCols
+    metadataCols
+  }
+
+  def createTwoSidedFDFeatures() = {
+    val lhs = generator.allFDs.map(fd => s"LHS-${fd.toString}")
+    val rhs = generator.allFDs.map(fd => s"RHS-${fd.toString}")
+    val fdsCols: Seq[String] = lhs ++ rhs
+    fdsCols
+  }
 }
 
 object FeaturesDescriptiveStatistics {
