@@ -247,20 +247,20 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
         val indexByAttrName = mainSchema.getIndexesByAttrNames(List(attribute)).head
         val flattenDF = dirtyDF
           .select(mainSchema.getRecID, attribute)
-          .withColumn("attrName", lit(attribute))
+          .withColumn("attributeName", lit(attribute))
           .withColumn("attr", lit(indexByAttrName))
           .withColumn("attrType", getTypeByAttrName(lit(attribute)))
           .withColumn("isNull", isnull(dirtyDF(attribute)))
           .withColumn("value", dirtyDF(attribute))
 
         flattenDF
-          .select(mainSchema.getRecID, "attrName", "attr", "attrType", "isNull", "value")
+          .select(mainSchema.getRecID, "attributeName", "attr", "attrType", "isNull", "value")
       })
 
     val unionAttributesDF: DataFrame = attributesDFs
       .reduce((df1, df2) => df1.union(df2))
       .repartition(1)
-      .toDF(Cells.recid, "attrName", Cells.attrnr, "attrType", "isNull", "value")
+      .toDF(Cells.recid, "attributeName", Cells.attrnr, "attrType", "isNull", "value")
 
     val isMissingValue = udf { value: Boolean => {
       if (value) 1.0 else 0.0
@@ -315,7 +315,7 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
     }
 
     val withTop10MetadataDF: DataFrame = dataTypesEncodedDF
-      .withColumn("isTop10", isTop10Values(dataTypesEncodedDF("value"), dataTypesEncodedDF("attrName")))
+      .withColumn("isTop10", isTop10Values(dataTypesEncodedDF("value"), dataTypesEncodedDF("attributeName")))
 
     withTop10MetadataDF
   }

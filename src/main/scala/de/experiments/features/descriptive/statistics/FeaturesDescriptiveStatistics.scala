@@ -1,5 +1,6 @@
 package de.experiments.features.descriptive.statistics
 
+import de.evaluation.data.schema.{HospSchema, Schema}
 import de.evaluation.f1.FullResult
 import de.evaluation.util.DataSetCreator
 import de.experiments.ExperimentsCommonConfig
@@ -12,13 +13,14 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
   * We want to know everything about our data. Metadata features for error detection.
   * Why the metadata helps? Which metadata helps?
   **/
-class FeaturesDescriptiveStatistics() extends ExperimentsCommonConfig {
+class FeaturesDescriptiveStatistics() extends Serializable with ExperimentsCommonConfig {
 
 
   private var dataset = ""
   private var tools = FullResult.tools
 
   private var generator = FeaturesGenerator.init
+  private var mainSchema: Schema = null
 
   private var trainDataPath = ""
 
@@ -32,6 +34,7 @@ class FeaturesDescriptiveStatistics() extends ExperimentsCommonConfig {
   def onDatasetName(ds: String): this.type = {
     dataset = ds
     trainDataPath = allTrainData.getOrElse(dataset, "unknown")
+    mainSchema = allSchemasByName.getOrElse(ds, HospSchema)
     this
   }
 
@@ -39,6 +42,8 @@ class FeaturesDescriptiveStatistics() extends ExperimentsCommonConfig {
     tools = ts
     this
   }
+
+  def getSchema = mainSchema
 
   def createAllMetadataForTrain(session: SparkSession): DataFrame = {
 
@@ -130,12 +135,22 @@ class FeaturesDescriptiveStatistics() extends ExperimentsCommonConfig {
     metadataCols
   }
 
-  def createTwoSidedFDFeatures() = {
+  def createTwoSidedFDFeatures(): Seq[String] = {
     val lhs = generator.allFDs.map(fd => s"LHS-${fd.toString}")
     val rhs = generator.allFDs.map(fd => s"RHS-${fd.toString}")
     val fdsCols: Seq[String] = lhs ++ rhs
     fdsCols
   }
+
+  def createElementsListForAttribute(metaDF: DataFrame, attr: String): DataFrame = {
+
+    val attributeSpecificDF = metaDF
+      .filter(metaDF("attributeName") === attr && metaDF(FullResult.label) === 1.0)
+      .toDF()
+    attributeSpecificDF
+  }
+
+
 }
 
 object FeaturesDescriptiveStatistics {
