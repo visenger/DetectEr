@@ -1,6 +1,7 @@
 package de.model.util
 
 import de.evaluation.f1.FullResult
+import org.apache.spark.ml.linalg
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
@@ -111,14 +112,40 @@ object FormatUtil {
   }
 
   def prepareDFToLabeledPointRDD(session: SparkSession, labelAndTools: DataFrame): RDD[LabeledPoint] = {
+
     import session.implicits._
     val data: RDD[LabeledPoint] = labelAndTools.map(row => {
       val label: Double = row.get(0).toString.toDouble
-      val initVector = row.getAs[org.apache.spark.ml.linalg.Vector](1)
+      val initVector: linalg.Vector = row.getAs[org.apache.spark.ml.linalg.Vector](1)
       val features = org.apache.spark.mllib.linalg.Vectors.dense(initVector.toArray)
       LabeledPoint(label, features)
     }).rdd
     data
+  }
+
+  def prepareTestDFToLabeledPointRDD(session: SparkSession, idsLabelAndTools: DataFrame): DataFrame = {
+
+    import org.apache.spark.sql.functions._
+
+    val convert_to_dense_vec = udf {
+      (initVec: org.apache.spark.ml.linalg.Vector) => org.apache.spark.mllib.linalg.Vectors.dense(initVec.toArray)
+    }
+
+    val convert_to_double = udf {
+      value: String => value.toDouble
+    }
+
+    val curatedLabelsFeaturesIdsDF: DataFrame = idsLabelAndTools
+      .withColumn(s"${Features.featuresCol}-tmp", convert_to_dense_vec(idsLabelAndTools(Features.featuresCol)))
+      .drop(Features.featuresCol)
+      .withColumnRenamed(s"${Features.featuresCol}-tmp", Features.featuresCol)
+      .withColumn(s"${FullResult.label}-tmp", convert_to_double(idsLabelAndTools(FullResult.label)))
+      .drop(FullResult.label)
+      .withColumnRenamed(s"${FullResult.label}-tmp", FullResult.label)
+      .select(FullResult.label, Features.featuresCol, FullResult.recid, FullResult.attrnr)
+      .toDF()
+    curatedLabelsFeaturesIdsDF
+
   }
 
   def prepareDataToLabeledPoints(session: SparkSession, dataDF: DataFrame, tools: Seq[String]): RDD[LabeledPoint] = {

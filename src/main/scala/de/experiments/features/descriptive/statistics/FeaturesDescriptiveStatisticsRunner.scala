@@ -1,7 +1,5 @@
 package de.experiments.features.descriptive.statistics
 
-import java.io.{BufferedWriter, File, FileWriter}
-
 import de.evaluation.f1.FullResult
 import de.evaluation.util.SparkLOAN
 import org.apache.spark.sql.DataFrame
@@ -14,16 +12,16 @@ object FeaturesDescriptiveStatisticsRunner {
 
     val datasets = Seq("blackoak", "hosp", "salaries", "flights")
 
-    val path = "/Users/visenger/research/datasets/EXPERIMENTS/strategies/18-09-2017"
-    val fileName = "dirty-attr-by-metadata.txt"
-    val file = new File(s"$path/$fileName")
-    val writer = new BufferedWriter(new FileWriter(file))
+    //    val path = "/Users/visenger/research/datasets/EXPERIMENTS/strategies/18-09-2017"
+    //    val fileName = "dirty-attr-by-metadata.txt"
+    //    val file = new File(s"$path/$fileName")
+    //    val writer = new BufferedWriter(new FileWriter(file))
     datasets.foreach(dataset => {
       val allMetadata: Seq[String] = createDescriptiveStatisticsFor(dataset)
-      writer.write(s"RUNNING ON $dataset \n")
-      allMetadata.foreach(metadata => writer.write(s"$metadata \n"))
+      //      writer.write(s"RUNNING ON $dataset \n")
+      //      allMetadata.foreach(metadata => writer.write(s"$metadata \n"))
     })
-    writer.close()
+    //    writer.close()
 
   }
 

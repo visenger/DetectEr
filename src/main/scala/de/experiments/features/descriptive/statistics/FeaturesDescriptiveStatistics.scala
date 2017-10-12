@@ -108,8 +108,6 @@ class FeaturesDescriptiveStatistics() extends Serializable with ExperimentsCommo
 
 
     //todo: these are control-columns. Should have zero-MI with other columns.
-
-
     //todo: create notTop10 -> meaning the value is placed in the tail of the data histogram -> might be an oulier?!
 
     val is_value_in_tail = udf {

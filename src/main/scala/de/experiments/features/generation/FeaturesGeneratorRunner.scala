@@ -1,6 +1,5 @@
 package de.experiments.features.generation
 
-import com.typesafe.config.ConfigFactory
 import de.evaluation.f1.{Eval, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.features.prediction.FeaturesPredictivityRunner.{allTestData, allTrainData, computeMutualInformation}
@@ -14,12 +13,11 @@ import org.apache.spark.sql.functions.udf
 object FeaturesGeneratorRunner {
 
   def main(args: Array[String]): Unit = {
-    val experimentsConf = ConfigFactory.load("experiments.conf")
     val datasets = Seq("blackoak", "hosp", "salaries", "flights")
 
     datasets.foreach(dataset => {
       //      singleRun(dataset)
-      //runOnOneFD_OneFeature(dataset)
+      //runOnOneFD_OneFeature(dataset) //todo: need to incorporate   val allFeaturesAndIds: Seq[String] = features ++ Seq(FullResult.recid, FullResult.attrnr) like in runOnOneFD_TwoFeatures(dataset)
       runOnOneFD_TwoFeatures(dataset)
     })
 
@@ -97,9 +95,8 @@ object FeaturesGeneratorRunner {
             .withColumnRenamed(s"$tool-tmp", tool)
         })
 
-
-        var trainSystemsAndMetaDF = trainSystemsAndLabel.join(allMetadata, Seq(FullResult.recid, FullResult.attrnr))
-
+        var trainSystemsAndMetaDF = trainSystemsAndLabel
+          .join(allMetadata, Seq(FullResult.recid, FullResult.attrnr))
 
         val allAttrTypes: Seq[String] = generator.getAllDataTypes.map(t => s"$t-type").toSeq
         val metadataColumns = Seq("missingValue", "isTop10", "inTail") ++ allAttrTypes
@@ -113,6 +110,8 @@ object FeaturesGeneratorRunner {
 
         val features: Seq[String] = metadataColumns ++ fds ++ allTools
 
+        val allFeaturesAndIds: Seq[String] = features ++ Seq(FullResult.recid, FullResult.attrnr)
+
         val featuresAssembler = new VectorAssembler()
           .setInputCols(features.toArray)
           .setOutputCol(Features.featuresCol)
@@ -124,19 +123,25 @@ object FeaturesGeneratorRunner {
           .transform(trainSystemsAndMetaDF)
           .drop(features: _*)
 
-        var testSystemsAndMetaDF = testSystemsAndLabel
+        val testSysAndLabsDF = testSystemsAndLabel
           .join(allMetadata, Seq(FullResult.recid, FullResult.attrnr))
-          .select(FullResult.label, features: _*)
+
+
+        var testSystemsAndMetaDF = testSysAndLabsDF
+          //          .select(FullResult.label, features: _*)
+          .select(FullResult.label, allFeaturesAndIds: _*)
 
         testSystemsAndMetaDF = featuresAssembler
           .transform(testSystemsAndMetaDF)
           .drop(features: _*)
+
 
         //Run combinations.
         val stacking = new Stacking()
         val evalStacking: Eval = stacking.performStackingOnToolsAndMetadata(session, trainSystemsAndMetaDF, testSystemsAndMetaDF)
         evalStacking.printResult(s"one-fd-two-feature-vectors: STACKING on $dataset")
 
+        //        todo: proof of concept
         val bagging = new Bagging()
         val evalBagging: Eval = bagging.performBaggingOnToolsAndMetadata(session, trainSystemsAndMetaDF, testSystemsAndMetaDF)
         evalBagging.printResult(s"one-fd-two-feature-vectors: BAGGING on $dataset")
@@ -146,6 +151,7 @@ object FeaturesGeneratorRunner {
 
   }
 
+  @deprecated(" test data need to incorporate this columns val allFeaturesAndIds: Seq[String] = features ++ Seq(FullResult.recid, FullResult.attrnr)")
   def runOnOneFD_OneFeature(dataset: String, tools: Seq[String] = FullResult.tools): Unit = {
 
     SparkLOAN.withSparkSession("METADATA-ONE-FD-ONE-FEATURE") {
