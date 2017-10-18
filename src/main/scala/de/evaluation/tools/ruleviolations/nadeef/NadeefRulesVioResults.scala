@@ -6,13 +6,14 @@ import com.typesafe.config.ConfigFactory
 import de.evaluation.data.schema._
 import de.evaluation.f1.Cells
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
+import de.experiments.ExperimentsCommonConfig
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 
 /**
   * Created by visenger on 23/11/16.
   */
-class NadeefRulesVioResults extends Serializable {
+class NadeefRulesVioResults extends Serializable with ExperimentsCommonConfig {
 
   //subject of change:
   private var dirtyInput = ""
@@ -20,6 +21,7 @@ class NadeefRulesVioResults extends Serializable {
   private var recId = ""
   private var schema: Schema = null
   private var output = ""
+  private var datasetName = ""
 
   //generalized:
   private val conf = ConfigFactory.load()
@@ -34,10 +36,33 @@ class NadeefRulesVioResults extends Serializable {
   //Schema:
   //VIOLATION (vid,rid,tablename,tupleid,attribute,value)
   private val violationTable = "violation"
+
+  /*audit  (
+    id ,
+    vid       INTEGER,
+    tupleid   INTEGER,
+    tablename VARCHAR(63),
+    attribute VARCHAR(63),
+    oldvalue  TEXT,
+    newvalue  TEXT,
+    time      TIMESTAMP
+  );*/
+
+  private val auditTable = "audit"
   private val attribute = "attribute"
   private val tupleid = "tupleid"
   private val value = "value"
   private val dirtyTupleId = "tid"
+  private val newValue = "newvalue"
+
+
+  def onData(d: String): this.type = {
+    datasetName = d
+    schema = allSchemasByName.getOrElse(datasetName, HospSchema)
+    recId = schema.getRecID
+    dirtyInput = allDBNames.getOrElse(datasetName, "hosp")
+    this
+  }
 
   def onSchema(s: Schema): this.type = {
     schema = s
@@ -47,12 +72,39 @@ class NadeefRulesVioResults extends Serializable {
 
   def addDirtyTableName(table: String): this.type = {
     dirtyInput = table
+
     this
   }
 
   def specifyOutput(out: String): this.type = {
     output = out
     this
+  }
+
+  def createRepairLog(): DataFrame = {
+    var result: DataFrame = null
+    SparkLOAN.withSparkSession("AUDIT-TAB") {
+      session => {
+
+        val audit = session.read.jdbc(url, auditTable, props)
+        val dirtyTable = session.read.jdbc(url, dirtyInput, props)
+
+        /**
+          * SELECT
+          *f.rowid,
+          *a.attribute,
+          *a.newvalue
+          * FROM tb_flights_dirty AS f
+          * JOIN audit AS a ON f.tid = a.tupleid*/
+
+        val newValuesDF: DataFrame = dirtyTable
+          .join(audit, dirtyTable(dirtyTupleId) === audit(tupleid))
+          .select(dirtyTable(recId), audit(attribute), audit(newValue))
+
+        result = newValuesDF
+      }
+    }
+    result
   }
 
 
@@ -260,6 +312,21 @@ object NadeefRulesVioResults {
     new NadeefRulesVioResults().getRulesVioResults(sparkSession)
   }
 
+}
+
+object NadeefRulesRepairResultsRunner {
+
+  def main(args: Array[String]): Unit = {
+    val datasets = Seq(/*"blackoak", "hosp", "salaries",*/ "flights")
+
+    datasets.foreach(dataset => {
+      val rulesVioResults = new NadeefRulesVioResults()
+      rulesVioResults.onData(dataset)
+      rulesVioResults.createRepairLog()
+    })
+
+
+  }
 }
 
 

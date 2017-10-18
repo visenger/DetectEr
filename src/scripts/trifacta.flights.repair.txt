@@ -1,0 +1,11 @@
+splitrows col: column1 on: '\n'
+split col: column1 on: ',' limit: 8 quote: '\"'
+header
+derive value: listif(DepartureGate, 1000, len(DepartureGate) > 0) group: Flight as: 'init_rep_gate'
+derive value: arrayunique([init_rep_gate]) as: 'tmp_rep_gate'
+set col: tmp_rep_gate value: if(ismissing([DepartureGate]), tmp_rep_gate, DepartureGate)
+set col: tmp_rep_gate value: if(ismismatched(tmp_rep_gate, ['Array']), [tmp_rep_gate], tmp_rep_gate)
+unnest col: tmp_rep_gate keys: '[0]'
+rename col: column_0 to: 'repaired_DepartureGate'
+drop col: init_rep_gate
+drop col: tmp_rep_gate

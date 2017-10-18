@@ -25,6 +25,13 @@ trait ExperimentsCommonConfig extends Serializable {
   val salariesTestFile = experimentsConf.getString("salaries.experiments.test.file")
   val flightsTestFile = experimentsConf.getString("flights.experiments.test.file")
 
+  val allDBNames: Map[String, String] = Map(
+    "blackoak" -> experimentsConf.getString("blackoak.db.name"),
+    "hosp" -> experimentsConf.getString("hosp.db.name"),
+    "salaries" -> experimentsConf.getString("salaries.db.name"),
+    "flights" -> experimentsConf.getString("flights.db.name")
+  )
+
 
   val allTestDataSets: Seq[String] = Seq(blackoakTestFile,
     hospTestFile,
