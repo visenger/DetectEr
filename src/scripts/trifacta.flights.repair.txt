@@ -3,48 +3,42 @@ split col: column1 on: ',' limit: 8 quote: '\"'
 header
 derive value: listif(DepartureGate, 1000, len(DepartureGate) > 0) group: Flight as: 'init_rep_gate'
 derive value: arrayunique([init_rep_gate]) as: 'tmp_rep_gate'
-set col: tmp_rep_gate value: if(ismissing([DepartureGate]), tmp_rep_gate, DepartureGate)
-set col: tmp_rep_gate value: if(ismismatched(tmp_rep_gate, ['Array']), [tmp_rep_gate], tmp_rep_gate)
+set col: tmp_rep_gate value: if(ismissing([DepartureGate]), tmp_rep_gate, ['#NO-REPAIR#'])
 unnest col: tmp_rep_gate keys: '[0]'
 rename col: column_0 to: 'repaired_DepartureGate'
 drop col: init_rep_gate
 drop col: tmp_rep_gate
 derive value: listif(ScheduledDeparture, 1000, len(ScheduledDeparture) > 0) group: Flight as: 'init_rep_sch_dep'
 derive value: arrayunique([init_rep_sch_dep]) as: 'tmp_rep_sch_dep'
-set col: tmp_rep_sch_dep value: if(ismissing([ScheduledDeparture]), tmp_rep_sch_dep, ScheduledDeparture)
-set col: tmp_rep_sch_dep value: if(ismismatched(tmp_rep_sch_dep, ['Array']), [tmp_rep_sch_dep], tmp_rep_sch_dep)
+set col: tmp_rep_sch_dep value: if(ismissing([ScheduledDeparture]), tmp_rep_sch_dep, ['#NO-REPAIR#'])
 unnest col: tmp_rep_sch_dep keys: '[0]'
 rename col: column_0 to: 'repaired_ScheduledDeparture'
 drop col: init_rep_sch_dep
 drop col: tmp_rep_sch_dep
 derive value: listif(ActualDeparture, 1000, len(ActualDeparture) > 0) group: Flight as: 'init_rep_act_dep'
 derive value: arrayunique([init_rep_act_dep]) as: 'tmp_rep_act_dep'
-set col: tmp_rep_act_dep value: if(ismissing([ActualDeparture]), tmp_rep_act_dep, ActualDeparture)
-set col: tmp_rep_act_dep value: if(ismismatched(tmp_rep_act_dep, ['Array']), [tmp_rep_act_dep], tmp_rep_act_dep)
+set col: tmp_rep_act_dep value: if(ismissing([ActualDeparture]), tmp_rep_act_dep, ['#NO-REPAIR#'])
 unnest col: tmp_rep_act_dep keys: '[0]'
 rename col: column_0 to: 'repaired_ActualDeparture'
 drop col: init_rep_act_dep
 drop col: tmp_rep_act_dep
 derive value: listif(ScheduledArrival, 1000, len(ScheduledArrival) > 0) group: Flight as: 'init_rep_sch_arr'
 derive value: arrayunique([init_rep_sch_arr]) as: 'tmp_rep_sch_arr'
-set col: tmp_rep_sch_arr value: if(ismissing([ScheduledArrival]), tmp_rep_sch_arr, ScheduledArrival)
-set col: tmp_rep_sch_arr value: if(ismismatched(tmp_rep_sch_arr, ['Array']), [tmp_rep_sch_arr], tmp_rep_sch_arr)
+set col: tmp_rep_sch_arr value: if(ismissing([ScheduledArrival]), tmp_rep_sch_arr, ['#NO-REPAIR#'])
 unnest col: tmp_rep_sch_arr keys: '[0]'
 rename col: column_0 to: 'repaired_ScheduledArrival'
 drop col: init_rep_sch_arr
 drop col: tmp_rep_sch_arr
 derive value: listif(ActualArrival, 1000, len(ActualArrival) > 0) group: Flight as: 'init_rep_act_arr'
 derive value: arrayunique([init_rep_act_arr]) as: 'tmp_rep_act_arr'
-set col: tmp_rep_act_arr value: if(ismissing([ActualArrival]), tmp_rep_act_arr, ActualArrival)
-set col: tmp_rep_act_arr value: if(ismismatched(tmp_rep_act_arr, ['Array']), [tmp_rep_act_arr], tmp_rep_act_arr)
+set col: tmp_rep_act_arr value: if(ismissing([ActualArrival]), tmp_rep_act_arr, ['#NO-REPAIR#'])
 unnest col: tmp_rep_act_arr keys: '[0]'
 rename col: column_0 to: 'repaired_ActualArrival'
 drop col: init_rep_act_arr
 drop col: tmp_rep_act_arr
 derive value: listif(ArrivalGate, 1000, len(ArrivalGate) > 0) group: Flight as: 'init_rep_arr_gate'
 derive value: arrayunique([init_rep_arr_gate]) as: 'tmp_rep_arr_gate'
-set col: tmp_rep_arr_gate value: if(ismissing([ArrivalGate]), tmp_rep_arr_gate, ArrivalGate)
-set col: tmp_rep_arr_gate value: if(ismismatched(tmp_rep_arr_gate, ['Array']), [tmp_rep_arr_gate], tmp_rep_arr_gate)
+set col: tmp_rep_arr_gate value: if(ismissing([ArrivalGate]), tmp_rep_arr_gate, ['#NO-REPAIR#'])
 unnest col: tmp_rep_arr_gate keys: '[0]'
 rename col: column_0 to: 'repaired_ArrivalGate'
 drop col: tmp_rep_arr_gate
@@ -61,3 +55,5 @@ drop col: ActualArrival
 rename col: repaired_ActualArrival to: 'ActualArrival'
 drop col: ArrivalGate
 rename col: repaired_ArrivalGate to: 'ArrivalGate'
+replace col: Source with: '#NO-REPAIR#' on: /.*/
+replace col: Flight with: '#NO-REPAIR#' on: /.*/

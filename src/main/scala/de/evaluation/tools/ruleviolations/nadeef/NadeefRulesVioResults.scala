@@ -4,7 +4,7 @@ import java.util.Properties
 
 import com.typesafe.config.ConfigFactory
 import de.evaluation.data.schema._
-import de.evaluation.f1.Cells
+import de.evaluation.f1.{Cells, FullResult}
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
 import org.apache.spark.rdd.RDD
@@ -97,13 +97,21 @@ class NadeefRulesVioResults extends Serializable with ExperimentsCommonConfig {
           * FROM tb_flights_dirty AS f
           * JOIN audit AS a ON f.tid = a.tupleid*/
 
+        import org.apache.spark.sql.functions._
+
+        val convert_to_att_nr = udf { value: String => schema.getIndexesByAttrNames(List(value)).head }
+
         val newValuesDF: DataFrame = dirtyTable
           .join(audit, dirtyTable(dirtyTupleId) === audit(tupleid))
-          .select(dirtyTable(recId), audit(attribute), audit(newValue))
+          .withColumn(FullResult.attrnr, convert_to_att_nr(audit(attribute)))
+          .select(dirtyTable(recId), col(FullResult.attrnr), audit(attribute), audit(newValue))
+
+        newValuesDF.show()
 
         result = newValuesDF
       }
     }
+
     result
   }
 
