@@ -163,33 +163,26 @@ class TrifactaResults extends ExperimentsCommonConfig {
     this
   }
 
-  def createRepairLog(): DataFrame = {
-    var result: DataFrame = null
+  def createRepairLog(session: SparkSession): DataFrame = {
 
-    SparkLOAN.withSparkSession("REPAIRED") {
-      session => {
-        import org.apache.spark.sql.functions._
-        val datasetSchema = dsSchema.getSchema
-        val repairedData: DataFrame = DataSetCreator.createFrame(session, repairedDataFile, datasetSchema: _*)
-        val recID = dsSchema.getRecID
-        val attributes: Seq[String] = datasetSchema.filterNot(_.equalsIgnoreCase(recID))
-        val convert_to_att_nr = udf { value: String => dsSchema.getIndexesByAttrNames(List(value)).head }
-        val attributeDF: Seq[DataFrame] = attributes.map(attr => {
-          repairedData
-            .select(repairedData(recID), repairedData(attr))
-            .withColumn(FullResult.attrnr, convert_to_att_nr(lit(attr)))
-            .withColumnRenamed(attr, "newvalue")
-            .select(recID, FullResult.attrnr, "newvalue")
-            .toDF()
-        })
-        val allAttrDF: DataFrame = attributeDF.reduce((df1, df2) => df1.union(df2))
-        allAttrDF.where(col(FullResult.attrnr) =!= 2 && col("newvalue")=!="#NO-REPAIR#").show()
-
-        result = allAttrDF
-      }
-    }
-
-    result
+    import org.apache.spark.sql.functions._
+    val datasetSchema = dsSchema.getSchema
+    val repairedData: DataFrame = DataSetCreator.createFrame(session, repairedDataFile, datasetSchema: _*)
+    val recID = dsSchema.getRecID
+    val attributes: Seq[String] = datasetSchema.filterNot(_.equalsIgnoreCase(recID))
+    val convert_to_att_nr = udf { value: String => dsSchema.getIndexesByAttrNames(List(value)).head }
+    val attributeDF: Seq[DataFrame] = attributes.map(attr => {
+      repairedData
+        .select(repairedData(recID), repairedData(attr))
+        .withColumn(FullResult.attrnr, convert_to_att_nr(lit(attr)))
+        .withColumnRenamed(attr, "newvalue")
+        .withColumnRenamed(recID, FullResult.recid) //todo: always normalize schema for the future processing.
+        .select(FullResult.recid, FullResult.attrnr, "newvalue")
+        .filter(col("newvalue") =!= "#NO-REPAIR#")
+        .toDF()
+    })
+    val allAttrDF: DataFrame = attributeDF.reduce((df1, df2) => df1.union(df2))
+    allAttrDF
   }
 
 
@@ -344,13 +337,13 @@ object TrifactaResults {
 
 
 object TrifactaResultsRunner {
-  def main(args: Array[String]): Unit = {
-    val datasets = Seq(/*"blackoak", "hosp", "salaries",*/ "flights")
-
-    datasets.foreach(dataset => {
-      val trifactaResults = new TrifactaResults()
-      trifactaResults.onDataset(dataset)
-      trifactaResults.createRepairLog()
-    })
-  }
+  //  def main(args: Array[String]): Unit = {
+  //    val datasets = Seq(/*"blackoak", "hosp", "salaries",*/ "flights")
+  //
+  //    datasets.foreach(dataset => {
+  //      val trifactaResults = new TrifactaResults()
+  //      trifactaResults.onDataset(dataset)
+  //      val trifactaResDF: DataFrame = trifactaResults.createRepairLog()
+  //    })
+  //  }
 }

@@ -81,38 +81,29 @@ class NadeefRulesVioResults extends Serializable with ExperimentsCommonConfig {
     this
   }
 
-  def createRepairLog(): DataFrame = {
-    var result: DataFrame = null
-    SparkLOAN.withSparkSession("AUDIT-TAB") {
-      session => {
+  def createRepairLog(session: SparkSession): DataFrame = {
+    val audit = session.read.jdbc(url, auditTable, props)
+    val dirtyTable = session.read.jdbc(url, dirtyInput, props)
 
-        val audit = session.read.jdbc(url, auditTable, props)
-        val dirtyTable = session.read.jdbc(url, dirtyInput, props)
+    /**
+      * SELECT
+      *f.rowid,
+      *a.attribute,
+      *a.newvalue
+      * FROM tb_flights_dirty AS f
+      * JOIN audit AS a ON f.tid = a.tupleid*/
 
-        /**
-          * SELECT
-          *f.rowid,
-          *a.attribute,
-          *a.newvalue
-          * FROM tb_flights_dirty AS f
-          * JOIN audit AS a ON f.tid = a.tupleid*/
+    import org.apache.spark.sql.functions._
 
-        import org.apache.spark.sql.functions._
+    val convert_to_att_nr = udf { value: String => schema.getIndexesByAttrNames(List(value)).head }
 
-        val convert_to_att_nr = udf { value: String => schema.getIndexesByAttrNames(List(value)).head }
+    val newValuesDF: DataFrame = dirtyTable
+      .join(audit, dirtyTable(dirtyTupleId) === audit(tupleid))
+      .withColumn(FullResult.attrnr, convert_to_att_nr(audit(attribute)))
+      .withColumnRenamed(recId, FullResult.recid) //todo: always normalize schema for the future processing.
+      .select(col(FullResult.recid), col(FullResult.attrnr), audit(attribute), audit(newValue))
 
-        val newValuesDF: DataFrame = dirtyTable
-          .join(audit, dirtyTable(dirtyTupleId) === audit(tupleid))
-          .withColumn(FullResult.attrnr, convert_to_att_nr(audit(attribute)))
-          .select(dirtyTable(recId), col(FullResult.attrnr), audit(attribute), audit(newValue))
-
-        newValuesDF.show()
-
-        result = newValuesDF
-      }
-    }
-
-    result
+    newValuesDF
   }
 
 
@@ -324,17 +315,17 @@ object NadeefRulesVioResults {
 
 object NadeefRulesRepairResultsRunner {
 
-  def main(args: Array[String]): Unit = {
-    val datasets = Seq(/*"blackoak", "hosp", "salaries",*/ "flights")
-
-    datasets.foreach(dataset => {
-      val rulesVioResults = new NadeefRulesVioResults()
-      rulesVioResults.onData(dataset)
-      rulesVioResults.createRepairLog()
-    })
-
-
-  }
+  //  def main(args: Array[String]): Unit = {
+  //    val datasets = Seq(/*"blackoak", "hosp", "salaries",*/ "flights")
+  //
+  //    datasets.foreach(dataset => {
+  //      val rulesVioResults = new NadeefRulesVioResults()
+  //      rulesVioResults.onData(dataset)
+  //      rulesVioResults.createRepairLog()
+  //    })
+  //
+  //
+  //  }
 }
 
 
