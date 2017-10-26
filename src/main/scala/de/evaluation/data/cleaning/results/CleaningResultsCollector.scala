@@ -1,9 +1,11 @@
 package de.evaluation.data.cleaning.results
 
 import de.evaluation.data.util.SchemaUtil
+import de.evaluation.f1.FullResult
 import de.evaluation.tools.pattern.violation.TrifactaResults
 import de.evaluation.tools.ruleviolations.nadeef.NadeefRulesVioResults
 import de.evaluation.util.SparkLOAN
+import de.experiments.features.error.prediction.ErrorsPredictor
 import org.apache.spark.sql.DataFrame
 
 object CleaningResultsCollector {
@@ -15,7 +17,6 @@ object CleaningResultsCollector {
 
         // val datasets = Seq(/*"blackoak", "hosp", "salaries",*/ "flights")
         val dataset = "flights"
-
 
         val rulesVioResults = new NadeefRulesVioResults()
         rulesVioResults.onData(dataset)
@@ -37,7 +38,24 @@ object CleaningResultsCollector {
         val fullRepairResultsFilledDF = fullRepairResultsDF
           .na
           .fill("#NO-REPAIR#", Seq(repairColFromRulesVio, repairColFromPattenVio))
-        fullRepairResultsFilledDF.show(200, false)
+
+        fullRepairResultsFilledDF
+          //.where(fullRepairResultsDF(repairColFromPattenVio) =!= "#NO-REPAIR#")
+          .show(200, false)
+
+        val predictedErrorsDF: DataFrame = ErrorsPredictor()
+          .onDataset(dataset)
+          .runPredictionWithStacking(session)
+
+        predictedErrorsDF.printSchema()
+
+        //todo: we will need value field to create a sub-sets of values: dirty and clean.
+
+        predictedErrorsDF
+          .select(FullResult.recid, FullResult.attrnr, "final-predictor")
+          .join(fullRepairResultsFilledDF, SchemaUtil.joinCols)
+          .show(45, false)
+
 
 
 

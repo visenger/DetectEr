@@ -584,6 +584,8 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
 }
 
 object FeaturesGenerator {
+  def apply(): FeaturesGenerator = new FeaturesGenerator()
+
   def init: FeaturesGenerator = {
     val generator = new FeaturesGenerator()
     generator

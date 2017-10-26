@@ -13,7 +13,7 @@ import org.apache.spark.sql.functions.udf
 object FeaturesGeneratorRunner {
 
   def main(args: Array[String]): Unit = {
-    val datasets = Seq("blackoak", "hosp", "salaries", "flights")
+    val datasets = Seq(/*"blackoak", "hosp", "salaries",*/ "flights")
 
     datasets.foreach(dataset => {
       //      singleRun(dataset)
@@ -31,7 +31,7 @@ object FeaturesGeneratorRunner {
     SparkLOAN.withSparkSession("METADATA-ONE-FD-ONE-FEATURE") {
       session => {
         // val allFDs = fdsDictionary.allFDs
-        val generator = FeaturesGenerator.init
+        val generator = FeaturesGenerator()
 
 
         val dirtyDF: DataFrame = generator
@@ -157,8 +157,7 @@ object FeaturesGeneratorRunner {
     SparkLOAN.withSparkSession("METADATA-ONE-FD-ONE-FEATURE") {
       session => {
         // val allFDs = fdsDictionary.allFDs
-        val generator = FeaturesGenerator.init
-
+        val generator = FeaturesGenerator()
 
         val dirtyDF: DataFrame = generator
           .onDatasetName(dataset)
@@ -338,7 +337,7 @@ object FeaturesGeneratorRunner {
     SparkLOAN.withSparkSession("METADATA-COMBI") {
       session => {
         // val allFDs = fdsDictionary.allFDs
-        val generator = FeaturesGenerator.init
+        val generator = FeaturesGenerator()
 
 
         val dirtyDF: DataFrame = generator

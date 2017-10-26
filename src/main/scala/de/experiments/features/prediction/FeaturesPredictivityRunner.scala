@@ -43,7 +43,7 @@ object FeaturesPredictivityRunner extends ExperimentsCommonConfig {
     SparkLOAN.withSparkSession("METADATA-ANALYSER") {
       session => {
         // val allFDs = fdsDictionary.allFDs
-        val generator = FeaturesGenerator.init
+        val generator = FeaturesGenerator()
 
 
         val dirtyDF: DataFrame = generator
@@ -276,8 +276,7 @@ object FeaturesPredictivityRunner extends ExperimentsCommonConfig {
     SparkLOAN.withSparkSession("METADATA-ANALYSER") {
       session => {
         // val allFDs = fdsDictionary.allFDs
-        val generator = FeaturesGenerator.init
-
+        val generator = FeaturesGenerator()
 
         val dirtyDF: DataFrame = generator
           .onDatasetName(dataset)

@@ -19,7 +19,7 @@ class FeaturesDescriptiveStatistics() extends Serializable with ExperimentsCommo
   private var dataset = ""
   private var tools = FullResult.tools
 
-  private var generator = FeaturesGenerator.init
+  private var generator = FeaturesGenerator()
   private var mainSchema: Schema = null
 
   private var trainDataPath = ""
