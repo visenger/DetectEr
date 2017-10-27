@@ -4,7 +4,7 @@ import de.evaluation.f1.FullResult
 import de.evaluation.util.DataSetCreator
 import de.experiments.ExperimentsCommonConfig
 import de.experiments.features.generation.FeaturesGenerator
-import de.experiments.models.combinator.Stacking
+import de.experiments.models.combinator.{Bagging, Stacking}
 import de.model.util.Features
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.sql.functions.udf
@@ -25,7 +25,7 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
     this
   }
 
-  def runPredictionWithStacking(session: SparkSession): DataFrame = {
+  def createTrainAndTestData(session: SparkSession): (DataFrame, DataFrame) = {
     val trainDataPath = allTrainData.getOrElse(dataset, "unknown")
     val testDataPath = allTestData.getOrElse(dataset, "unknown")
     // val allFDs = fdsDictionary.allFDs
@@ -49,6 +49,9 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
     }
     contentBasedFeaturesDF = contentBasedFeaturesDF
       .withColumn("inTail", is_value_in_tail(contentBasedFeaturesDF("isTop10")))
+      .drop(FullResult.value) //to remove double columns -> we avoid future confusion;
+
+    contentBasedFeaturesDF.printSchema()
 
     //general info about fd-awarnes of each cell
     val generalInfoDF = generator.oneFDTwoFeatureVectors_generateFDsMetadata(session, dirtyDF, generator.allFDs)
@@ -56,10 +59,11 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
     val allMetadata: DataFrame = contentBasedFeaturesDF
       .join(generalInfoDF, Seq(FullResult.recid, FullResult.attrnr)) //todo: joining columns influence several other columns like isMissing
 
+    println("allMetadata:")
+    allMetadata.printSchema()
 
     var trainSystemsAndLabel: DataFrame = DataSetCreator.createFrame(session, trainDataPath, FullResult.schema: _*).cache()
     var testSystemsAndLabel: DataFrame = DataSetCreator.createFrame(session, testDataPath, FullResult.schema: _*).cache()
-
 
     import org.apache.spark.sql.functions._
     val convert_to_double = udf {
@@ -99,12 +103,11 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
     val rhs = generator.allFDs.map(fd => s"RHS-${fd.toString}")
     val fds: List[String] = lhs ++ rhs
 
-
     val allTools = FullResult.tools
 
     val features: Seq[String] = metadataColumns ++ fds ++ allTools
 
-    val allFeaturesAndIds: Seq[String] = features ++ Seq(FullResult.recid, FullResult.attrnr)
+    val allFeaturesAndIds: Seq[String] = features ++ Seq(FullResult.recid, FullResult.attrnr, FullResult.value)
 
     val featuresAssembler = new VectorAssembler()
       .setInputCols(features.toArray)
@@ -120,7 +123,6 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
     val testSysAndLabsDF = testSystemsAndLabel
       .join(allMetadata, Seq(FullResult.recid, FullResult.attrnr))
 
-
     var testSystemsAndMetaDF = testSysAndLabsDF
       //          .select(FullResult.label, features: _*)
       .select(FullResult.label, allFeaturesAndIds: _*)
@@ -129,12 +131,31 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
       .transform(testSystemsAndMetaDF)
       .drop(features: _*)
 
+    (trainSystemsAndMetaDF, testSystemsAndMetaDF)
+  }
+
+  def runPredictionWithStacking(session: SparkSession): DataFrame = {
+
+    val testAndTrain = createTrainAndTestData(session)
+    val trainSystemsAndMetaDF = testAndTrain._1
+    val testSystemsAndMetaDF = testAndTrain._2
 
     //Run aggregation.
     val stacking = new Stacking()
     val errorsDF = stacking.runStackingOnToolsAndMetadata(session, trainSystemsAndMetaDF, testSystemsAndMetaDF)
     errorsDF
 
+  }
+
+  def runPredictionWithBagging(session: SparkSession): DataFrame = {
+    val testAndTrain = createTrainAndTestData(session)
+    val trainSystemsAndMetaDF = testAndTrain._1
+    val testSystemsAndMetaDF = testAndTrain._2
+
+    val bagging = new Bagging()
+    val errorsWithBagging: DataFrame = bagging
+      .runBaggingOnToolsAndMetadata(session, trainSystemsAndMetaDF, testSystemsAndMetaDF)
+    errorsWithBagging
   }
 
 }

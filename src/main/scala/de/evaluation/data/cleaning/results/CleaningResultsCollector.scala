@@ -23,44 +23,40 @@ object CleaningResultsCollector {
         val tmp_rulesVioResultDF: DataFrame = rulesVioResults.createRepairLog(session)
         val repairColFromRulesVio = "newvalue-1"
         val rulesVioResultDF = tmp_rulesVioResultDF.withColumnRenamed("newvalue", repairColFromRulesVio)
-        rulesVioResultDF.printSchema()
 
         val patternVioResults = new TrifactaResults()
         patternVioResults.onDataset(dataset)
         val tmp_patternVioResultDF: DataFrame = patternVioResults.createRepairLog(session)
         val repairColFromPattenVio = "newvalue-2"
         val patternVioResultDF = tmp_patternVioResultDF.withColumnRenamed("newvalue", repairColFromPattenVio)
-        patternVioResultDF.printSchema()
 
         val allResults = Seq(rulesVioResultDF, patternVioResultDF)
         val fullRepairResultsDF: DataFrame = allResults.tail
           .foldLeft(allResults.head)((acc, tool) => acc.join(tool, SchemaUtil.joinCols, "full_outer"))
+
+        /*we first get all repairs together*/
         val fullRepairResultsFilledDF = fullRepairResultsDF
           .na
           .fill("#NO-REPAIR#", Seq(repairColFromRulesVio, repairColFromPattenVio))
 
-        fullRepairResultsFilledDF
-          //.where(fullRepairResultsDF(repairColFromPattenVio) =!= "#NO-REPAIR#")
-          .show(200, false)
-
+        /*second, we aggregate errors (by stacking or bagging), delivered by several error recognition frameworks
+        The value "final-predictor" is the result of the aggregation
+        The attribute "VALUE" is the original value taken from the dirty dataset.*/
         val predictedErrorsDF: DataFrame = ErrorsPredictor()
           .onDataset(dataset)
           .runPredictionWithStacking(session)
 
-        predictedErrorsDF.printSchema()
-
-        //todo: we will need value field to create a sub-sets of values: dirty and clean.
-
-        predictedErrorsDF
-          .select(FullResult.recid, FullResult.attrnr, "final-predictor")
+        val errorsAndReparsDF: DataFrame = predictedErrorsDF
+          .select(FullResult.recid, FullResult.attrnr, FullResult.value, "final-predictor")
           .join(fullRepairResultsFilledDF, SchemaUtil.joinCols)
-          .show(45, false)
+
+        errorsAndReparsDF.show(45, false)
+
+
+        //todo: finish - 1) separate errors and clean values; 2) group clean values and connect them to errors as possible solutions;
 
 
 
-
-        //todo: create results from nadeef
-        //todo: create results from trifacta
         //todo: nadeef deduplication. extend every class with method: public Collection<Fix> repair(Violation violation) {
         //todo: run nadeef deduplication repair.
 

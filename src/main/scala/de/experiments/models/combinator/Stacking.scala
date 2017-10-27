@@ -246,7 +246,7 @@ class Stacking extends ExperimentsCommonConfig {
 
     val testConvertedVecDF: DataFrame = FormatUtil
       .prepareTestDFToLabeledPointRDD(session, test)
-      .toDF(FullResult.label, Features.featuresCol, FullResult.recid, FullResult.attrnr)
+      .toDF(FullResult.label, Features.featuresCol, FullResult.recid, FullResult.attrnr, FullResult.value)
 
     val dtPrediction = trainConvertedVecDF
       .withColumn("dt-prediction", predictByDT(trainConvertedVecDF(featuresCol)))
@@ -254,9 +254,9 @@ class Stacking extends ExperimentsCommonConfig {
       .withColumn("dt-prediction", predictTestByDT(testConvertedVecDF(featuresCol)))
 
     //eval dt
-    val dtPredictionAndLabel = FormatUtil.getPredictionAndLabel(dtTestPrediction, "dt-prediction")
-    val dtEval = F1.evalPredictionAndLabels(dtPredictionAndLabel)
-    dtEval.printResult(s"decision tree on $dataset with metadata and FDs")
+//    val dtPredictionAndLabel = FormatUtil.getPredictionAndLabel(dtTestPrediction, "dt-prediction")
+//    val dtEval = F1.evalPredictionAndLabels(dtPredictionAndLabel)
+//    dtEval.printResult(s"decision tree on $dataset with metadata and FDs")
     //end: decision tree
 
     //start: bayes
@@ -279,9 +279,9 @@ class Stacking extends ExperimentsCommonConfig {
     val nbTestPrediction = dtTestPrediction.withColumn("nb-prediction", predictTestByBayes(dtTestPrediction(featuresCol)))
 
     //eval nb
-    val nbPredictionAndLabel = FormatUtil.getPredictionAndLabel(nbTestPrediction, "nb-prediction")
-    val nbEval = F1.evalPredictionAndLabels(nbPredictionAndLabel)
-    nbEval.printResult(s"naive bayes on $dataset with metadata and FDs")
+//    val nbPredictionAndLabel = FormatUtil.getPredictionAndLabel(nbTestPrediction, "nb-prediction")
+//    val nbEval = F1.evalPredictionAndLabels(nbPredictionAndLabel)
+//    nbEval.printResult(s"naive bayes on $dataset with metadata and FDs")
 
     // meta classifier: logreg
 

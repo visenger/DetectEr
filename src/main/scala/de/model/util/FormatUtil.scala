@@ -142,7 +142,7 @@ object FormatUtil {
       .withColumn(s"${FullResult.label}-tmp", convert_to_double(idsLabelAndTools(FullResult.label)))
       .drop(FullResult.label)
       .withColumnRenamed(s"${FullResult.label}-tmp", FullResult.label)
-      .select(FullResult.label, Features.featuresCol, FullResult.recid, FullResult.attrnr)
+      .select(FullResult.label, Features.featuresCol, FullResult.recid, FullResult.attrnr, FullResult.value)
       .toDF()
     curatedLabelsFeaturesIdsDF
 

@@ -25,6 +25,7 @@ class Bagging {
   private var allColumns: Seq[String] = FullResult.tools
 
   private val featuresCol = "features"
+  private val majorityCol = "majority-vote"
 
   def onDataSetName(name: String): this.type = {
     dataset = name
@@ -46,7 +47,7 @@ class Bagging {
     this
   }
 
-  def old_performBaggingOnToolsAndMetadata(session: SparkSession, trainFull: DataFrame, test: DataFrame): Eval = {
+  /*def old_performBaggingOnToolsAndMetadata(session: SparkSession, trainFull: DataFrame, test: DataFrame): Eval = {
     import session.implicits._
 
     //todo: setting training data to 1%
@@ -119,11 +120,10 @@ class Bagging {
     //evalMajority.printResult(s"majority vote on $dataset for all tools with metadata")
 
     evalMajority
-  }
+  }*/
 
-  def performBaggingOnToolsAndMetadata(session: SparkSession, trainFull: DataFrame, test: DataFrame): Eval = {
+  def runBaggingOnToolsAndMetadata(session: SparkSession, trainFull: DataFrame, test: DataFrame): DataFrame = {
 
-    //todo: setting training data to 1%
     val Array(train, _) = trainFull.randomSplit(Array(0.1, 0.9))
 
     val trainLabPointRDD: RDD[LabeledPoint] = FormatUtil
@@ -131,7 +131,7 @@ class Bagging {
 
     val testLabAndFeatures: DataFrame = FormatUtil
       .prepareTestDFToLabeledPointRDD(session, test)
-      .toDF(FullResult.label, featuresCol, FullResult.recid, FullResult.attrnr)
+      .toDF(FullResult.label, featuresCol, FullResult.recid, FullResult.attrnr, FullResult.value)
 
     //APPLY CLASSIFICATION
     //start: decision tree
@@ -179,9 +179,16 @@ class Bagging {
     //todo: make decision rule more sophisticated -> weight classifiers
     val allModelsColumns = (1 to trainSamples.size).map(id => baggingDF(s"model-$id"))
 
-    val majorityCol = "majority-vote"
+
     val majorityVotingDF = baggingDF
       .withColumn(majorityCol, majorityVoter(array(allModelsColumns: _*)))
+    majorityVotingDF
+
+  }
+
+  def performBaggingOnToolsAndMetadata(session: SparkSession, trainFull: DataFrame, test: DataFrame): Eval = {
+
+    val majorityVotingDF = runBaggingOnToolsAndMetadata(session, trainFull, test)
 
     val predictAndLabelMajority = FormatUtil.getPredictionAndLabel(majorityVotingDF, majorityCol)
     val evalMajority = F1.evalPredictionAndLabels(predictAndLabelMajority)
