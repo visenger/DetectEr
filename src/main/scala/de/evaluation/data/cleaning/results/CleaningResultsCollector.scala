@@ -14,6 +14,7 @@ object CleaningResultsCollector {
 
     SparkLOAN.withSparkSession("CLEAN-MODEL") {
       session => {
+        import org.apache.spark.sql.functions._
 
         // val datasets = Seq(/*"blackoak", "hosp", "salaries",*/ "flights")
         val dataset = "flights"
@@ -50,11 +51,28 @@ object CleaningResultsCollector {
           .select(FullResult.recid, FullResult.attrnr, FullResult.value, "final-predictor")
           .join(fullRepairResultsFilledDF, SchemaUtil.joinCols)
 
-        errorsAndReparsDF.show(45, false)
+        errorsAndReparsDF.show(300, false)
 
 
-        //todo: finish - 1) separate errors and clean values; 2) group clean values and connect them to errors as possible solutions;
 
+        //todo: finish -
+        // 1) separate errors and clean values;
+        // 2) group clean values and connect them to errors as possible solutions;
+
+        val cleanValSetColumn = "clean-values-set"
+        val aggregatedCleanValuesPerAttr: DataFrame = errorsAndReparsDF
+          .filter(col("final-predictor") === 0.0)
+          .groupBy(FullResult.attrnr)
+          .agg(collect_set(FullResult.value) as cleanValSetColumn)
+
+        aggregatedCleanValuesPerAttr.show(false)
+
+        val errorsAndProposedSolutions = errorsAndReparsDF
+          .join(aggregatedCleanValuesPerAttr, Seq(FullResult.attrnr), "full_outer")
+          .na
+          .fill("#NO-CLEAN-SET#", Seq(cleanValSetColumn))
+
+        errorsAndProposedSolutions.show(300,false)
 
 
         //todo: nadeef deduplication. extend every class with method: public Collection<Fix> repair(Violation violation) {
