@@ -2,7 +2,7 @@ package de.experiments.models.combinator
 
 import de.evaluation.f1.{Eval, F1, FullResult}
 import de.experiments.ExperimentsCommonConfig
-import de.model.util.{Features, FormatUtil, ModelUtil}
+import de.model.util.{FormatUtil, ModelUtil}
 import de.wrangling.WranglingDatasetsToMetadata
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 import org.apache.spark.ml.feature.VectorAssembler
@@ -246,7 +246,7 @@ class Stacking extends ExperimentsCommonConfig {
 
     val testConvertedVecDF: DataFrame = FormatUtil
       .prepareTestDFToLabeledPointRDD(session, test)
-      .toDF(FullResult.label, Features.featuresCol, FullResult.recid, FullResult.attrnr, FullResult.value)
+    // .toDF()//(FullResult.label, Features.featuresCol, FullResult.recid, FullResult.attrnr, FullResult.value)
 
     val dtPrediction = trainConvertedVecDF
       .withColumn("dt-prediction", predictByDT(trainConvertedVecDF(featuresCol)))
@@ -254,9 +254,9 @@ class Stacking extends ExperimentsCommonConfig {
       .withColumn("dt-prediction", predictTestByDT(testConvertedVecDF(featuresCol)))
 
     //eval dt
-//    val dtPredictionAndLabel = FormatUtil.getPredictionAndLabel(dtTestPrediction, "dt-prediction")
-//    val dtEval = F1.evalPredictionAndLabels(dtPredictionAndLabel)
-//    dtEval.printResult(s"decision tree on $dataset with metadata and FDs")
+    //    val dtPredictionAndLabel = FormatUtil.getPredictionAndLabel(dtTestPrediction, "dt-prediction")
+    //    val dtEval = F1.evalPredictionAndLabels(dtPredictionAndLabel)
+    //    dtEval.printResult(s"decision tree on $dataset with metadata and FDs")
     //end: decision tree
 
     //start: bayes
@@ -279,14 +279,15 @@ class Stacking extends ExperimentsCommonConfig {
     val nbTestPrediction = dtTestPrediction.withColumn("nb-prediction", predictTestByBayes(dtTestPrediction(featuresCol)))
 
     //eval nb
-//    val nbPredictionAndLabel = FormatUtil.getPredictionAndLabel(nbTestPrediction, "nb-prediction")
-//    val nbEval = F1.evalPredictionAndLabels(nbPredictionAndLabel)
-//    nbEval.printResult(s"naive bayes on $dataset with metadata and FDs")
+    //    val nbPredictionAndLabel = FormatUtil.getPredictionAndLabel(nbTestPrediction, "nb-prediction")
+    //    val nbEval = F1.evalPredictionAndLabels(nbPredictionAndLabel)
+    //    nbEval.printResult(s"naive bayes on $dataset with metadata and FDs")
 
     // meta classifier: logreg
 
+    val individualPredictors = Array(/*"nn-prediction",*/ "dt-prediction", "nb-prediction")
     val assembler = new VectorAssembler()
-      .setInputCols(Array(/*"nn-prediction",*/ "dt-prediction", "nb-prediction"))
+      .setInputCols(individualPredictors)
       .setOutputCol(allPredictionsCol)
 
     //Meta train
@@ -305,7 +306,8 @@ class Stacking extends ExperimentsCommonConfig {
     //Meta test
     var allPredictions = assembler
       .transform(nbTestPrediction)
-      .withColumnRenamed(featuresCol, s"$featuresCol-initial") //we remove the old features, which are not relevant anymore for the meta-classifier
+      .drop(featuresCol)
+    //.withColumnRenamed(featuresCol, s"$featuresCol-initial") //we remove the old features, which are not relevant anymore for the meta-classifier
 
     val convert_vectors = udf {
       (initVec: org.apache.spark.ml.linalg.Vector) => org.apache.spark.mllib.linalg.Vectors.dense(initVec.toArray)
@@ -321,6 +323,8 @@ class Stacking extends ExperimentsCommonConfig {
     }
     val lrPredictorDF = allPredictions
       .withColumn("final-predictor", logRegPredictor(allPredictions(featuresCol)))
+      .drop(individualPredictors: _*)
+      .drop(allPredictionsCol)
     lrPredictorDF
   }
 

@@ -51,8 +51,6 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
       .withColumn("inTail", is_value_in_tail(contentBasedFeaturesDF("isTop10")))
       .drop(FullResult.value) //to remove double columns -> we avoid future confusion;
 
-    contentBasedFeaturesDF.printSchema()
-
     //general info about fd-awarnes of each cell
     val generalInfoDF = generator.oneFDTwoFeatureVectors_generateFDsMetadata(session, dirtyDF, generator.allFDs)
 
@@ -118,10 +116,13 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
 
     trainSystemsAndMetaDF = featuresAssembler
       .transform(trainSystemsAndMetaDF)
-      .drop(features: _*)
+      .drop(features: _*) //we can drop unnecessary columns.
 
     val testSysAndLabsDF = testSystemsAndLabel
       .join(allMetadata, Seq(FullResult.recid, FullResult.attrnr))
+
+    println("testSysAndLabsDF")
+    testSysAndLabsDF.printSchema()
 
     var testSystemsAndMetaDF = testSysAndLabsDF
       //          .select(FullResult.label, features: _*)
@@ -129,7 +130,8 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
 
     testSystemsAndMetaDF = featuresAssembler
       .transform(testSystemsAndMetaDF)
-      .drop(features: _*)
+    // .select(FullResult.label, Seq(Features.featuresCol, FullResult.recid, FullResult.attrnr, FullResult.value) ++ features: _*)
+    //.drop(features: _*)
 
     (trainSystemsAndMetaDF, testSystemsAndMetaDF)
   }
@@ -142,7 +144,9 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
 
     //Run aggregation.
     val stacking = new Stacking()
-    val errorsDF = stacking.runStackingOnToolsAndMetadata(session, trainSystemsAndMetaDF, testSystemsAndMetaDF)
+    val errorsDF = stacking
+      .runStackingOnToolsAndMetadata(session, trainSystemsAndMetaDF, testSystemsAndMetaDF)
+      .drop(Features.featuresCol)
     errorsDF
 
   }
@@ -155,6 +159,7 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
     val bagging = new Bagging()
     val errorsWithBagging: DataFrame = bagging
       .runBaggingOnToolsAndMetadata(session, trainSystemsAndMetaDF, testSystemsAndMetaDF)
+      .drop(Features.featuresCol)
     errorsWithBagging
   }
 

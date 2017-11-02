@@ -2,7 +2,7 @@ package de.playground
 
 import com.typesafe.config.{Config, ConfigFactory}
 import de.experiments.features.prediction.CountsTableRow
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.SparkSession
 
 /**
   * Created by visenger on 16/11/16.
@@ -76,17 +76,20 @@ object SparkPlayground {
       .master("local[4]")
       .getOrCreate()
 
-    // import session.implicits._
+    import session.implicits._
+    import org.apache.spark.sql.functions._
 
-    val df: DataFrame = session.createDataFrame((1 to 100).map(i => Record(i, s"val_$i")))
-    df.createOrReplaceTempView("records")
+    val df = Seq(("stuff2", "stuff2", null),
+      ("stuff2", "stuff2", Array("value1", "value2")),
+      ("stuff3", "stuff3", Array("value3")))
+      .toDF("field", "field2", "values")
+    df.show()
 
-    println("result of the sql query:")
 
-    session.sql("select * from records where key > 88").collect().foreach(println)
+    val array_ = udf(() => Array.empty[String])
 
-    //session.read.csv()
-
+    val df2 = df.withColumn("values", coalesce(df("values"), array_()))
+    df2.show()
     session.stop();
 
   }

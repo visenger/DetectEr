@@ -25,7 +25,7 @@ class Bagging {
   private var allColumns: Seq[String] = FullResult.tools
 
   private val featuresCol = "features"
-  private val majorityCol = "majority-vote"
+  private val majorityCol = "final-predictor"
 
   def onDataSetName(name: String): this.type = {
     dataset = name
@@ -131,7 +131,7 @@ class Bagging {
 
     val testLabAndFeatures: DataFrame = FormatUtil
       .prepareTestDFToLabeledPointRDD(session, test)
-      .toDF(FullResult.label, featuresCol, FullResult.recid, FullResult.attrnr, FullResult.value)
+    //.toDF(FullResult.label, featuresCol, FullResult.recid, FullResult.attrnr, FullResult.value)
 
     //APPLY CLASSIFICATION
     //start: decision tree
@@ -178,10 +178,12 @@ class Bagging {
 
     //todo: make decision rule more sophisticated -> weight classifiers
     val allModelsColumns = (1 to trainSamples.size).map(id => baggingDF(s"model-$id"))
+    val allModelsColumnsNames = (1 to trainSamples.size).map(id => s"model-$id")
 
 
     val majorityVotingDF = baggingDF
       .withColumn(majorityCol, majorityVoter(array(allModelsColumns: _*)))
+      .drop(allModelsColumnsNames: _*)
     majorityVotingDF
 
   }
@@ -243,7 +245,7 @@ class Bagging {
 
     val allModelsColumns = (1 to trainSamples.size).map(id => baggingDF(s"model-$id"))
 
-    val majorityCol = "majority-vote"
+    //val majorityCol = "majority-vote"
     val majorityDF = baggingDF
       .withColumn(majorityCol, majorityVoter(array(allModelsColumns: _*)))
       .select(FullResult.label, majorityCol)
@@ -321,7 +323,7 @@ class Bagging {
 
     val allModelsColumns = (1 to trainSamples.size).map(id => baggingDF(s"model-$id"))
 
-    val majorityCol = "majority-vote"
+    // val majorityCol = "majority-vote"
     val majorityVotingDF = baggingDF
       .withColumn(majorityCol, majorityVoter(array(allModelsColumns: _*)))
     majorityVotingDF.show(45, false)
