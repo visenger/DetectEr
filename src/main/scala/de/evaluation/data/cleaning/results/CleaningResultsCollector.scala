@@ -9,7 +9,11 @@ import de.evaluation.tools.ruleviolations.nadeef.NadeefRulesVioResults
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
 import de.experiments.features.error.prediction.ErrorsPredictor
+import de.experiments.features.generation.FeaturesGenerator
+import de.experiments.metadata.FD
 import org.apache.spark.sql.DataFrame
+
+import scala.collection.mutable
 
 object CleaningResultsCollector extends ExperimentsCommonConfig {
 
@@ -69,11 +73,15 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
           * +------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
           **/
 
+        val array_to_string = udf { array: mutable.WrappedArray[_] => array.mkString("|") }
         val cleanValSetColumn = "clean-values-set"
         val aggregatedCleanValuesPerAttr: DataFrame = errorsAndReparsDF
           .where(col("final-predictor") === 0.0)
           .groupBy(FullResult.attrnr)
           .agg(collect_set(FullResult.value) as cleanValSetColumn)
+          .withColumn(s"$cleanValSetColumn-tmp", array_to_string(col(cleanValSetColumn)))
+          .drop(cleanValSetColumn)
+          .withColumnRenamed(s"$cleanValSetColumn-tmp", cleanValSetColumn)
 
         aggregatedCleanValuesPerAttr.show(false)
 
@@ -82,10 +90,11 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
 
         def empty_str_array = udf { () => Array.empty[String] }
 
-        //  val noCleanSetPlaceholder = "#NO-CLEAN-SET#"
+        val noCleanSetPlaceholder = "#NO-CLEAN-SET#"
         errorsAndProposedSolutions = errorsAndProposedSolutions
           .withColumn(s"$cleanValSetColumn-tmp",
-            coalesce(col(cleanValSetColumn), empty_str_array()))
+            //coalesce(col(cleanValSetColumn), empty_str_array()))
+            coalesce(col(cleanValSetColumn), lit(noCleanSetPlaceholder)))
         errorsAndProposedSolutions = errorsAndProposedSolutions
           .drop(cleanValSetColumn)
           .withColumnRenamed(s"$cleanValSetColumn-tmp", cleanValSetColumn)
@@ -125,6 +134,49 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
 
         errorsAndProposedSolutions.printSchema()
         errorsAndProposedSolutions.show(30, false)
+
+        //        val appConf = ConfigFactory.load("experiments.conf")
+        //        errorsAndProposedSolutions
+        //          .coalesce(1)
+        //          .write
+        //          .option("header", "True")
+        //          .csv(appConf.getString(s"$dataset.repair.folder"))
+
+
+        //todo: use FDs to create refined data repair set:
+
+        val generator = FeaturesGenerator()
+          .onDatasetName(dataset)
+
+        val dsFDs: Seq[FD] = generator.allFDs
+
+
+        val allErrorneousValues: Seq[String] = errorsAndReparsDF
+          .where(col("final-predictor") === 1.0)
+          .select(FullResult.attrnr)
+          .distinct()
+          .map(row => row.getString(0))
+          .collect()
+          .toSeq
+
+
+        //todo: rules violation:
+        //todo: get all fds
+        //todo: get all rhs attributes and determine their attribute numbers
+        //todo: get all lhs attributes and determine their attribute numbers
+        //todo: create (lhs-idx, rhs-idx)
+        //todo: for each rhs-idx where final-predictor is 1.0 get the RowID and get the set of lhs-values for this FD
+        //todo: get the group of RowIDs where lhs equals the lhs of the previous step
+        //todo: select all rhs values corresponding to the selected RowIDs
+
+        //todo: Missing values:
+        //todo:Missing values -> should be investigated in more detail, because not all missing value should be imputed;
+        //todo: How to decide what column is repairable.
+
+        //todo: Outliers:
+        //todo: if the value is marked as an outlier. (eg.Selected by dBoost)
+        //todo: use their values distribution method - histograms to determine the mean value (most probable repair)
+        //todo: distinguish between discrete and continuous values
 
 
         //todo: nadeef deduplication. extend every class with method: public Collection<Fix> repair(Violation violation) {

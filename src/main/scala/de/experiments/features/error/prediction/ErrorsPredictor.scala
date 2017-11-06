@@ -15,6 +15,8 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
   private var tools: Seq[String] = FullResult.tools
   private var dataset: String = ""
 
+  private var finalSchema: Seq[String] = null
+
   def onTools(t: Seq[String]): this.type = {
     tools = t
     this
@@ -56,9 +58,6 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
 
     val allMetadata: DataFrame = contentBasedFeaturesDF
       .join(generalInfoDF, Seq(FullResult.recid, FullResult.attrnr)) //todo: joining columns influence several other columns like isMissing
-
-    println("allMetadata:")
-    allMetadata.printSchema()
 
     var trainSystemsAndLabel: DataFrame = DataSetCreator.createFrame(session, trainDataPath, FullResult.schema: _*).cache()
     var testSystemsAndLabel: DataFrame = DataSetCreator.createFrame(session, testDataPath, FullResult.schema: _*).cache()
@@ -147,6 +146,7 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
     val errorsDF = stacking
       .runStackingOnToolsAndMetadata(session, trainSystemsAndMetaDF, testSystemsAndMetaDF)
       .drop(Features.featuresCol)
+    //finalSchema = errorsDF.columns.toSeq
     errorsDF
 
   }
