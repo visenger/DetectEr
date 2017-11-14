@@ -13,8 +13,6 @@ import de.experiments.features.generation.FeaturesGenerator
 import de.experiments.metadata.FD
 import org.apache.spark.sql.DataFrame
 
-import scala.collection.mutable
-
 object CleaningResultsCollector extends ExperimentsCommonConfig {
 
   def main(args: Array[String]): Unit = {
@@ -48,6 +46,7 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
           .na
           .fill(noRepairPlaceholder, Seq(repairColFromRulesVio, repairColFromPattenVio))
 
+
         /*second, we aggregate errors (by stacking or bagging), delivered by several error recognition frameworks
         The value "final-predictor" is the result of the aggregation
         The attribute "VALUE" is the original value taken from the dirty dataset.*/
@@ -56,12 +55,10 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
           .runPredictionWithStacking(session)
         //.runPredictionWithBagging(session)
 
-
         val errorsAndReparsDF: DataFrame = predictedErrorsDF
           //.select(FullResult.recid, FullResult.attrnr, FullResult.value, "final-predictor")
-          .join(fullRepairResultsFilledDF, SchemaUtil.joinCols)
+          .join(fullRepairResultsFilledDF, SchemaUtil.joinCols, "full_outer")
 
-        errorsAndReparsDF.show(9, false)
 
         //todo: persist errorsAndReparsDF for the POC-development, so we don't need the
 
@@ -73,17 +70,16 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
           * +------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
           **/
 
-        val array_to_string = udf { array: mutable.WrappedArray[_] => array.mkString("|") }
+        //val array_to_string = udf { array: mutable.WrappedArray[_] => array.mkString("|") }
         val cleanValSetColumn = "clean-values-set"
         val aggregatedCleanValuesPerAttr: DataFrame = errorsAndReparsDF
           .where(col("final-predictor") === 0.0)
           .groupBy(FullResult.attrnr)
           .agg(collect_set(FullResult.value) as cleanValSetColumn)
-          .withColumn(s"$cleanValSetColumn-tmp", array_to_string(col(cleanValSetColumn)))
-          .drop(cleanValSetColumn)
-          .withColumnRenamed(s"$cleanValSetColumn-tmp", cleanValSetColumn)
+        //          .withColumn(s"$cleanValSetColumn-tmp", array_to_string(col(cleanValSetColumn)))
+        //          .drop(cleanValSetColumn)
+        //          .withColumnRenamed(s"$cleanValSetColumn-tmp", cleanValSetColumn)
 
-        aggregatedCleanValuesPerAttr.show(false)
 
         var errorsAndProposedSolutions = errorsAndReparsDF
           .join(aggregatedCleanValuesPerAttr, Seq(FullResult.attrnr), "full_outer")
@@ -93,13 +89,11 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
         val noCleanSetPlaceholder = "#NO-CLEAN-SET#"
         errorsAndProposedSolutions = errorsAndProposedSolutions
           .withColumn(s"$cleanValSetColumn-tmp",
-            //coalesce(col(cleanValSetColumn), empty_str_array()))
-            coalesce(col(cleanValSetColumn), lit(noCleanSetPlaceholder)))
+            coalesce(col(cleanValSetColumn), empty_str_array()))
+        // coalesce(col(cleanValSetColumn), lit(noCleanSetPlaceholder)))
         errorsAndProposedSolutions = errorsAndProposedSolutions
           .drop(cleanValSetColumn)
           .withColumnRenamed(s"$cleanValSetColumn-tmp", cleanValSetColumn)
-
-
 
         //todo: add true values to control the repair values
 
@@ -130,6 +124,7 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
           .toDF(FullResult.recid, FullResult.attrnr, truthValue)
 
         errorsAndProposedSolutions = errorsAndProposedSolutions
+          .filter(col(FullResult.label).isNotNull)
           .join(cleanDF, SchemaUtil.joinCols)
 
         errorsAndProposedSolutions.printSchema()
@@ -144,22 +139,6 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
 
 
         //todo: use FDs to create refined data repair set:
-
-        val generator = FeaturesGenerator()
-          .onDatasetName(dataset)
-
-        val dsFDs: Seq[FD] = generator.allFDs
-
-
-        val allErrorneousValues: Seq[String] = errorsAndReparsDF
-          .where(col("final-predictor") === 1.0)
-          .select(FullResult.attrnr)
-          .distinct()
-          .map(row => row.getString(0))
-          .collect()
-          .toSeq
-
-
         //todo: rules violation:
         //todo: get all fds
         //todo: get all rhs attributes and determine their attribute numbers
@@ -169,14 +148,63 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
         //todo: get the group of RowIDs where lhs equals the lhs of the previous step
         //todo: select all rhs values corresponding to the selected RowIDs
 
+
+        val generator = FeaturesGenerator()
+          .onDatasetName(dataset)
+
+        val dsFDs: Seq[FD] = generator.allFDs
+
+        dsFDs.foreach(fd => {
+          val lhs: List[String] = fd.lhs
+          val rhs: List[String] = fd.rhs
+
+          val lhsIndx: List[Int] = datasetSchema.getIndexesByAttrNames(lhs)
+          val rhsIndx: List[Int] = datasetSchema.getIndexesByAttrNames(rhs)
+
+          var dfAttributesOnly: DataFrame = errorsAndProposedSolutions
+            .where(col(FullResult.attrnr).isin(lhsIndx: _*) || col(FullResult.attrnr).isin(rhsIndx: _*))
+            .toDF()
+
+          var lhsAttributesRows = dfAttributesOnly
+            .where(col(FullResult.attrnr).isin(lhsIndx: _*))
+            .where(col("final-predictor") === 0.0)
+            .withColumnRenamed(FullResult.value, s"lhs-${FullResult.value}")
+
+          val rhsAttributesRows = dfAttributesOnly
+            .where(col(FullResult.attrnr).isin(rhsIndx: _*))
+            .where(col("final-predictor") === 0.0)
+            .withColumnRenamed(FullResult.value, s"rhs-${FullResult.value}")
+
+          val rhsRepair = lhsAttributesRows
+            .join(rhsAttributesRows, FullResult.recid)
+            .select(FullResult.recid, s"lhs-${FullResult.value}", s"rhs-${FullResult.value}")
+            .groupBy(s"lhs-${FullResult.value}")
+            .agg(collect_set(col(s"rhs-${FullResult.value}")) as s"fd-${fd.toString}-repair")
+
+          // rhsRepair.show(false)
+
+          dfAttributesOnly
+            //.where(col(FullResult.attrnr).isin(lhsIndx: _*) || col(FullResult.attrnr).isin(rhsIndx: _*))
+            //.where(col("final-predictor") === 1.0)
+            .join(rhsRepair, dfAttributesOnly(FullResult.value) === rhsRepair(s"lhs-${FullResult.value}"), "full_outer")
+
+            .show(false)
+
+
+        })
+
+
+
         //todo: Missing values:
-        //todo:Missing values -> should be investigated in more detail, because not all missing value should be imputed;
+        //todo: Missing values -> should be investigated in more detail, because not all missing value should be imputed;
         //todo: How to decide what column is repairable.
 
         //todo: Outliers:
         //todo: if the value is marked as an outlier. (eg.Selected by dBoost)
         //todo: use their values distribution method - histograms to determine the mean value (most probable repair)
         //todo: distinguish between discrete and continuous values
+
+        //todo: Conbinatorial Multiarmed Bandits;
 
 
         //todo: nadeef deduplication. extend every class with method: public Collection<Fix> repair(Violation violation) {
