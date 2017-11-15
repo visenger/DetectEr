@@ -154,7 +154,7 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
 
         val dsFDs: Seq[FD] = generator.allFDs
 
-        dsFDs.foreach(fd => {
+        val repairsDF: Seq[DataFrame] = dsFDs.map(fd => {
           val lhs: List[String] = fd.lhs
           val rhs: List[String] = fd.rhs
 
@@ -181,17 +181,42 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
             .groupBy(s"lhs-${FullResult.value}")
             .agg(collect_set(col(s"rhs-${FullResult.value}")) as s"fd-${fd.toString}-repair")
 
-          // rhsRepair.show(false)
-
-          dfAttributesOnly
-            //.where(col(FullResult.attrnr).isin(lhsIndx: _*) || col(FullResult.attrnr).isin(rhsIndx: _*))
-            //.where(col("final-predictor") === 1.0)
+          val extendRhsRepairDF = dfAttributesOnly
+            .where(col(FullResult.attrnr).isin(lhsIndx: _*))
             .join(rhsRepair, dfAttributesOnly(FullResult.value) === rhsRepair(s"lhs-${FullResult.value}"), "full_outer")
 
-            .show(false)
+          val tmpRepairSetsDF = extendRhsRepairDF
+            .filter(col(s"fd-${fd.toString}-repair").isNotNull)
+            .select(col(FullResult.recid), col(s"fd-${fd.toString}-repair"))
 
+          val rhsWithRepairSetDF = dfAttributesOnly
+            .where(col(FullResult.attrnr).isin(rhsIndx: _*))
+            .select(FullResult.recid, FullResult.attrnr)
+            .join(tmpRepairSetsDF, Seq(FullResult.recid))
+            .withColumnRenamed(s"fd-${fd.toString}-repair", s"fd-repair")
+            .withColumn("fd-applied", lit(s"${fd.toString}"))
 
+          rhsWithRepairSetDF
         })
+
+        val fdRepairSetDF = repairsDF
+          .reduce((df1, df2) => df1.union(df2))
+          .repartition(1)
+          .toDF(FullResult.recid, FullResult.attrnr, "fd-repair", "fd-applied")
+
+        errorsAndProposedSolutions = errorsAndProposedSolutions
+          .join(fdRepairSetDF, Seq(FullResult.recid, FullResult.attrnr), "full_outer")
+
+        //todo: replace nulls
+
+        errorsAndProposedSolutions.printSchema()
+        errorsAndProposedSolutions.show(31, false)
+
+
+        //todo: Outliers:
+        //todo: if the value is marked as an outlier. (eg.Selected by dBoost)
+        //todo: use their values distribution method - histograms to determine the mean value (most probable repair)
+        //todo: distinguish between discrete and continuous values
 
 
 
@@ -199,10 +224,6 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
         //todo: Missing values -> should be investigated in more detail, because not all missing value should be imputed;
         //todo: How to decide what column is repairable.
 
-        //todo: Outliers:
-        //todo: if the value is marked as an outlier. (eg.Selected by dBoost)
-        //todo: use their values distribution method - histograms to determine the mean value (most probable repair)
-        //todo: distinguish between discrete and continuous values
 
         //todo: Conbinatorial Multiarmed Bandits;
 
