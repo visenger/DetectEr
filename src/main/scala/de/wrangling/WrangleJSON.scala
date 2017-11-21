@@ -38,7 +38,7 @@ object WrangleJSON {
         jsonDF("statisticMap.Nulls.value").as("nulls count"),
         jsonDF("statisticMap.Percentage of Nulls.value").as("% of nulls"),
         jsonDF("statisticMap.Percentage of Distinct Values.value").as("% of distinct vals"),
-        // jsonDF("statisticMap.Top 10 frequent items.value").as("top10")
+        jsonDF("statisticMap.Top 10 frequent items.value").as("top10"),
         jsonDF("statisticMap.Frequency Of Top 10 Frequent Items.value").as("freqTop10")
       )
 

@@ -1,6 +1,7 @@
 package de.evaluation.data.cleaning.results
 
 import com.typesafe.config.ConfigFactory
+import de.evaluation.data.metadata.MetadataCreator
 import de.evaluation.data.schema.HospSchema
 import de.evaluation.data.util.SchemaUtil
 import de.evaluation.f1.FullResult
@@ -11,7 +12,11 @@ import de.experiments.ExperimentsCommonConfig
 import de.experiments.features.error.prediction.ErrorsPredictor
 import de.experiments.features.generation.FeaturesGenerator
 import de.experiments.metadata.FD
+import de.model.util.NumbersUtil
 import org.apache.spark.sql.DataFrame
+
+import scala.collection.mutable
+import scala.util.{Failure, Success, Try}
 
 object CleaningResultsCollector extends ExperimentsCommonConfig {
 
@@ -127,15 +132,8 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
           .filter(col(FullResult.label).isNotNull)
           .join(cleanDF, SchemaUtil.joinCols)
 
-        errorsAndProposedSolutions.printSchema()
-        errorsAndProposedSolutions.show(30, false)
-
-        //        val appConf = ConfigFactory.load("experiments.conf")
-        //        errorsAndProposedSolutions
-        //          .coalesce(1)
-        //          .write
-        //          .option("header", "True")
-        //          .csv(appConf.getString(s"$dataset.repair.folder"))
+        //        errorsAndProposedSolutions.printSchema()
+        //        errorsAndProposedSolutions.show(30, false)
 
 
         //todo: use FDs to create refined data repair set:
@@ -207,10 +205,19 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
         errorsAndProposedSolutions = errorsAndProposedSolutions
           .join(fdRepairSetDF, Seq(FullResult.recid, FullResult.attrnr), "full_outer")
 
-        //todo: replace nulls
+        //todo: replace nulls with empty arrays or placeholder stings
 
-        errorsAndProposedSolutions.printSchema()
-        errorsAndProposedSolutions.show(31, false)
+        //        errorsAndProposedSolutions.printSchema()
+        //        errorsAndProposedSolutions.show(31, false)
+
+        //        todo: persist the results
+        // todo: in order to persist, the array data types columns should be converted into the string version
+        //        val appConf = ConfigFactory.load("experiments.conf")
+        //        errorsAndProposedSolutions
+        //          .coalesce(1)
+        //          .write
+        //          .option("header", "True")
+        //          .csv(appConf.getString(s"$dataset.repair.folder"))
 
 
         //todo: Outliers:
@@ -219,6 +226,109 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
         //todo: distinguish between discrete and continuous values
 
 
+        val jsonPathForMetadata = allMetadataByName.getOrElse(dataset, "unknown")
+        var metadataDF: DataFrame = MetadataCreator().getFullMetadata(session, jsonPathForMetadata)
+
+        val get_attrNr_by_name = udf {
+          name: String => datasetSchema.getIndexesByAttrNames(List(name)).head
+        }
+
+        metadataDF = metadataDF
+          .where(col("attrName").isin(cleanAttributes: _*))
+          .withColumn(s"meta-${FullResult.attrnr}", get_attrNr_by_name(col("attrName")))
+          .select(col(s"meta-${FullResult.attrnr}"), col("histogram"))
+
+        errorsAndProposedSolutions = errorsAndProposedSolutions
+          .join(metadataDF,
+            errorsAndProposedSolutions(FullResult.attrnr) === metadataDF(s"meta-${FullResult.attrnr}")
+              && errorsAndProposedSolutions("final-predictor") === 0.0, "full_outer")
+          .drop(metadataDF(s"meta-${FullResult.attrnr}"))
+
+        errorsAndProposedSolutions.printSchema()
+        //        errorsAndProposedSolutions.show(32, false)
+
+        //todo: get preliminary stats about the results:
+
+        def contains_truth_value = udf {
+          //todo: java.lang.NullPointerException if truth null is
+          (truth: String, repair: String) => {
+
+            truth.equalsIgnoreCase(repair) match {
+              case true => 1.0
+              case false => 0.0
+            }
+          }
+        }
+
+        def contains_in_list = udf {
+          (truth: String, repair: mutable.Seq[String]) => {
+            var result = 0.0
+
+            val triedBoolean: Try[List[String]] = Try(repair.toList)
+            triedBoolean match {
+              case Success(_) => {
+                repair.contains(truth) match {
+                  case true => result = 1.0
+                  case false => result = 0.0
+                }
+              }
+              case Failure(_) => result = 0.0
+            }
+
+            result
+          }
+        }
+
+        val nadeefResultCol = "newvalue-1"
+        val trifactaResultCol = "newvalue-2"
+        val histogram = "histogram"
+        val fdRepair = "fd-repair"
+        val preliminaryResults = errorsAndProposedSolutions
+          .where(col("final-predictor") === 0.0)
+          .filter(col(truthValue).isNotNull) /* we don't need null values */
+          .withColumn(s"contains-$nadeefResultCol",
+          contains_truth_value(col(truthValue), col(nadeefResultCol)))
+          .withColumn(s"contains-$trifactaResultCol",
+            contains_truth_value(col(truthValue), col(trifactaResultCol)))
+          .withColumn(s"contains-$histogram", contains_in_list(col(truthValue), col(histogram)))
+          .withColumn(s"contains-$fdRepair", contains_in_list(col(truthValue), col(fdRepair)))
+          .withColumn(s"contains-$cleanValSetColumn", contains_in_list(col(truthValue), col(cleanValSetColumn)))
+          .select(col(truthValue),
+            col(nadeefResultCol), col(s"contains-$nadeefResultCol"),
+            col(trifactaResultCol), col(s"contains-$trifactaResultCol"),
+            col(histogram), col(s"contains-$histogram"),
+            col(fdRepair), col(s"contains-$fdRepair"),
+            col(cleanValSetColumn), col(s"contains-$cleanValSetColumn"))
+
+        preliminaryResults.show()
+
+        val total = preliminaryResults.count()
+        val nadeefFound = preliminaryResults.where(col(s"contains-$nadeefResultCol") === 1.0).count()
+        val trifactaFound = preliminaryResults.where(col(s"contains-$trifactaResultCol") === 1.0).count()
+        val top10Found = preliminaryResults.where(col(s"contains-$histogram") === 1.0).count() //outliers
+        val rulesFound = preliminaryResults.where(col(s"contains-$fdRepair") === 1.0).count()
+        val allCleanValuesFound = preliminaryResults.where(col(s"contains-$cleanValSetColumn") === 1.0).count()
+
+        def percentageFound(total: Long, foundByMethod: Long, msg: String): Unit = {
+          val percent = NumbersUtil.round(((foundByMethod * 100) / total.toDouble), 4)
+          println(s"$msg $percent %")
+        }
+
+        percentageFound(total, nadeefFound, "Nadeef repair")
+        percentageFound(total, trifactaFound, "Trifacta repair")
+        percentageFound(total, top10Found, "Zipf distribution repair")
+        percentageFound(total, rulesFound, "FDs repair")
+        percentageFound(total, allCleanValuesFound, "all clean values repair")
+
+        val allRepairsCombinations = preliminaryResults.select(
+          col(s"contains-$nadeefResultCol"),
+          col(s"contains-$trifactaResultCol"),
+          col(s"contains-$histogram"),
+          col(s"contains-$fdRepair"),
+          col(s"contains-$cleanValSetColumn")).rdd.map(row =>
+          (row.getDouble(0), row.getDouble(1), row.getDouble(2), row.getDouble(3), row.getDouble(4))).countByValue()
+
+        allRepairsCombinations.foreach(println(_))
 
         //todo: Missing values:
         //todo: Missing values -> should be investigated in more detail, because not all missing value should be imputed;
