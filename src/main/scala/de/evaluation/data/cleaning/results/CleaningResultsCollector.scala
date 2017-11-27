@@ -91,7 +91,7 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
 
         def empty_str_array = udf { () => Array.empty[String] }
 
-        val noCleanSetPlaceholder = "#NO-CLEAN-SET#"
+        //val noCleanSetPlaceholder = "#NO-CLEAN-SET#"
         errorsAndProposedSolutions = errorsAndProposedSolutions
           .withColumn(s"$cleanValSetColumn-tmp",
             coalesce(col(cleanValSetColumn), empty_str_array()))
@@ -241,7 +241,7 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
         errorsAndProposedSolutions = errorsAndProposedSolutions
           .join(metadataDF,
             errorsAndProposedSolutions(FullResult.attrnr) === metadataDF(s"meta-${FullResult.attrnr}")
-              && errorsAndProposedSolutions("final-predictor") === 0.0, "full_outer")
+              && errorsAndProposedSolutions("final-predictor") === 1.0, "full_outer") /* we want to join the histogram vals on data marked as errors*/
           .drop(metadataDF(s"meta-${FullResult.attrnr}"))
 
         errorsAndProposedSolutions.printSchema()
@@ -284,7 +284,7 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
         val histogram = "histogram"
         val fdRepair = "fd-repair"
         val preliminaryResults = errorsAndProposedSolutions
-          .where(col("final-predictor") === 0.0)
+          .where(col("final-predictor") === 1.0) /* we care about predicted errors */
           .filter(col(truthValue).isNotNull) /* we don't need null values */
           .withColumn(s"contains-$nadeefResultCol",
           contains_truth_value(col(truthValue), col(nadeefResultCol)))
@@ -300,7 +300,7 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
             col(fdRepair), col(s"contains-$fdRepair"),
             col(cleanValSetColumn), col(s"contains-$cleanValSetColumn"))
 
-        preliminaryResults.show()
+        //preliminaryResults.show()
 
         val total = preliminaryResults.count()
         val nadeefFound = preliminaryResults.where(col(s"contains-$nadeefResultCol") === 1.0).count()
