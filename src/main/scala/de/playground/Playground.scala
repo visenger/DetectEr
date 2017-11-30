@@ -2,7 +2,10 @@ package de.playground
 
 import com.typesafe.config.{Config, ConfigFactory}
 import de.experiments.features.prediction.CountsTableRow
+import de.model.util.NumbersUtil
 import org.apache.spark.sql.SparkSession
+
+import scala.collection.mutable
 
 /**
   * Created by visenger on 16/11/16.
@@ -76,8 +79,8 @@ object SparkPlayground {
       .master("local[4]")
       .getOrCreate()
 
-    import session.implicits._
     import org.apache.spark.sql.functions._
+    import session.implicits._
 
     val df = Seq(("stuff2", "stuff2", null),
       ("stuff2", "stuff2", Array("value1", "value2")),
@@ -110,6 +113,48 @@ object F1Calculator extends App {
     println(s"Precision: ${round(tuple._1)}, Recall: ${round(tuple._2)}, F1: ${round(f1, 4)}")
 
   })
+}
+
+object ListsPlayground extends App {
+
+  private val seq0 = Seq("a", "c")
+  private val seq1 = Seq("a", "b")
+  val seq2 = null
+  private val combi = Seq(seq0, seq1, seq2).filter(_ != null).flatten
+  println(combi)
+
+  val emptySet = Seq(seq2, Seq()).filter(_ != null).flatten.toSet
+  println(emptySet)
+
+}
+
+object RepairPlayground extends App {
+
+  val repair1: String = null
+  val repair2: String = null
+  val allClean: mutable.Seq[String] = null
+  val fdClean: mutable.Seq[String] = null
+  val hist: mutable.Seq[String] = null
+
+
+  val totalNumberOfSets = 5
+  val totalListOfRepair = Seq(Seq(repair1), Seq(repair2), allClean, fdClean, hist).filter(_ != null).flatten.filter(_ != null)
+  val totalSet = totalListOfRepair.toSet
+
+  println(totalSet)
+
+  val valuesWithProbs: Map[String, Double] = totalSet.map(element => {
+    val numSetsIncludingElement: Int = totalListOfRepair.count(_.equalsIgnoreCase(element))
+    val probOfElement = NumbersUtil.round(numSetsIncludingElement / totalNumberOfSets.toDouble, 4)
+    element -> probOfElement
+  }).toMap
+
+  val mostFrequentElements: Seq[(String, Double)] = valuesWithProbs.toSeq.sortWith((pair1, pair2) => pair1._2 > pair2._2)
+  val initProbability: Double = NumbersUtil.round(1 / totalNumberOfSets.toDouble, 4)
+  val mostFrequentRepair: Seq[(String, Double)] = mostFrequentElements.filter(el_p => el_p._2 > initProbability)
+  val endValues: Seq[String] = mostFrequentRepair.map(_._1).toSeq
+
+  print(endValues)
 }
 
 

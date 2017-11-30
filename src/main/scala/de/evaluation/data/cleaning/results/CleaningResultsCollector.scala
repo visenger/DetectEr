@@ -286,21 +286,25 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
         val preliminaryResults = errorsAndProposedSolutions
           .where(col("final-predictor") === 1.0) /* we care about predicted errors */
           .filter(col(truthValue).isNotNull) /* we don't need null values */
-          .withColumn(s"contains-$nadeefResultCol",
-          contains_truth_value(col(truthValue), col(nadeefResultCol)))
-          .withColumn(s"contains-$trifactaResultCol",
-            contains_truth_value(col(truthValue), col(trifactaResultCol)))
-          .withColumn(s"contains-$histogram", contains_in_list(col(truthValue), col(histogram)))
-          .withColumn(s"contains-$fdRepair", contains_in_list(col(truthValue), col(fdRepair)))
-          .withColumn(s"contains-$cleanValSetColumn", contains_in_list(col(truthValue), col(cleanValSetColumn)))
-          .select(col(truthValue),
-            col(nadeefResultCol), col(s"contains-$nadeefResultCol"),
-            col(trifactaResultCol), col(s"contains-$trifactaResultCol"),
-            col(histogram), col(s"contains-$histogram"),
-            col(fdRepair), col(s"contains-$fdRepair"),
-            col(cleanValSetColumn), col(s"contains-$cleanValSetColumn"))
+        // /* the code below just looks into suggested repairs sets*/
+        //          .withColumn(s"contains-$nadeefResultCol",
+        //          contains_truth_value(col(truthValue), col(nadeefResultCol)))
+        //          .withColumn(s"contains-$trifactaResultCol",
+        //            contains_truth_value(col(truthValue), col(trifactaResultCol)))
+        //          .withColumn(s"contains-$histogram", contains_in_list(col(truthValue), col(histogram)))
+        //          .withColumn(s"contains-$fdRepair", contains_in_list(col(truthValue), col(fdRepair)))
+        //          .withColumn(s"contains-$cleanValSetColumn", contains_in_list(col(truthValue), col(cleanValSetColumn)))
+        //          .select(col(truthValue),
+        //            col(nadeefResultCol), col(s"contains-$nadeefResultCol"),
+        //            col(trifactaResultCol), col(s"contains-$trifactaResultCol"),
+        //            col(histogram), col(s"contains-$histogram"),
+        //            col(fdRepair), col(s"contains-$fdRepair"),
+        //            col(cleanValSetColumn), col(s"contains-$cleanValSetColumn"))
 
         //preliminaryResults.show()
+
+        /*
+        todo: start: preliminary results
 
         val total = preliminaryResults.count()
         val nadeefFound = preliminaryResults.where(col(s"contains-$nadeefResultCol") === 1.0).count()
@@ -329,6 +333,61 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
           (row.getDouble(0), row.getDouble(1), row.getDouble(2), row.getDouble(3), row.getDouble(4))).countByValue()
 
         allRepairsCombinations.foreach(println(_))
+        todo: end: preliminary results
+*/
+
+
+        //        newvalue-1: string (nullable = true)
+        //        |-- newvalue-2: string (nullable = true)
+        //        |-- clean-values-set: array (nullable = true)
+        //        |    |-- element: string (containsNull = true)
+        //        |-- fd-repair: array (nullable = true)
+        //        |    |-- element: string (containsNull = true)
+        //        |-- histogram: array (nullable = true)
+        //        |    |-- element: string (containsNull = true)
+
+
+        //todo: combining repair values sets
+        def combine_repairs = udf {
+          (repair1: String,
+           repair2: String,
+           allClean: mutable.Seq[String],
+           fdClean: mutable.Seq[String],
+           hist: mutable.Seq[String]) => {
+            val totalNumberOfSets = 5
+            val totalListOfRepair = Seq(Seq(repair1), Seq(repair2), allClean, fdClean, hist)
+              .filter(_ != null)
+              .flatten
+              .filter(_ != null)
+            val totalSet = totalListOfRepair.toSet
+
+            val valuesWithProbs: Map[String, Double] = totalSet.map(element => {
+              val numSetsIncludingElement: Int = totalListOfRepair.count(_.equalsIgnoreCase(element))
+              val probOfElement = NumbersUtil.round(numSetsIncludingElement / totalNumberOfSets.toDouble, 4)
+              element -> probOfElement
+            }).toMap
+
+            val mostFrequentElements: Seq[(String, Double)] = valuesWithProbs.toSeq.sortWith((pair1, pair2) => pair1._2 > pair2._2)
+            val initProbability: Double = NumbersUtil.round(1 / totalNumberOfSets.toDouble, 4)
+            val mostFrequentRepair: Seq[(String, Double)] = mostFrequentElements.filter(el_p => el_p._2 > initProbability)
+            val endValues: Seq[String] = mostFrequentRepair.map(_._1)
+            endValues
+          }
+        }
+
+        val combinedRepairCol = "combined-repair"
+        val combinedRepairs = preliminaryResults
+          .withColumn(combinedRepairCol, combine_repairs(
+            col(nadeefResultCol),
+            col(trifactaResultCol),
+            col(cleanValSetColumn),
+            col(fdRepair),
+            col(histogram)))
+
+        combinedRepairs.show(34, false)
+
+
+
 
         //todo: Missing values:
         //todo: Missing values -> should be investigated in more detail, because not all missing value should be imputed;
@@ -336,7 +395,6 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
 
 
         //todo: Conbinatorial Multiarmed Bandits;
-
 
         //todo: nadeef deduplication. extend every class with method: public Collection<Fix> repair(Violation violation) {
         //todo: run nadeef deduplication repair.
