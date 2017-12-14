@@ -20,6 +20,11 @@ import scala.util.{Failure, Success, Try}
 
 object CleaningResultsCollector extends ExperimentsCommonConfig {
 
+  def percentageFound(total: Long, foundByMethod: Long, msg: String): Unit = {
+    val percent = NumbersUtil.round(((foundByMethod * 100) / total.toDouble), 4)
+    println(s"$msg $percent %")
+  }
+
   def main(args: Array[String]): Unit = {
 
     SparkLOAN.withSparkSession("CLEAN-MODEL") {
@@ -356,9 +361,11 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
            hist: mutable.Seq[String]) => {
             val totalNumberOfSets = 5
             val totalListOfRepair = Seq(Seq(repair1), Seq(repair2), allClean, fdClean, hist)
+              .filter(_ != null) /* filter all null objects but Seq(null)'s are still there */
+              .flatten /* flat all lists: Seq(null) becomes null*/
               .filter(_ != null)
-              .flatten
-              .filter(_ != null)
+            /* remove nulls */
+            /* I <3 scala */
             val totalSet = totalListOfRepair.toSet
 
             val valuesWithProbs: Map[String, Double] = totalSet.map(element => {
@@ -367,10 +374,13 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
               element -> probOfElement
             }).toMap
 
-            val mostFrequentElements: Seq[(String, Double)] = valuesWithProbs.toSeq.sortWith((pair1, pair2) => pair1._2 > pair2._2)
+            val mostFrequentElements: Seq[(String, Double)] = valuesWithProbs
+              .toSeq
+              .sortWith((pair1, pair2) => pair1._2 > pair2._2)
             val initProbability: Double = NumbersUtil.round(1 / totalNumberOfSets.toDouble, 4)
             val mostFrequentRepair: Seq[(String, Double)] = mostFrequentElements.filter(el_p => el_p._2 > initProbability)
             val endValues: Seq[String] = mostFrequentRepair.map(_._1)
+            //todo: if endValues is empty, consider some default values set, e.g. non-empty fd's
             endValues
           }
         }
@@ -384,9 +394,29 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
             col(fdRepair),
             col(histogram)))
 
-        combinedRepairs.show(34, false)
+        val combiResultsWithContains = combinedRepairs
+          .withColumn(s"contains-$combinedRepairCol", contains_in_list(col(truthValue), col(combinedRepairCol)))
 
+        //        val total = combiResultsWithContains.count()
+        //        val combiContainsTruth = combiResultsWithContains.where(col(s"contains-$combinedRepairCol") === 1.0).count()
+        //        percentageFound(total, combiContainsTruth, "combined list")
 
+        def suggest_repair = udf {
+          allClean: mutable.Seq[String] => {
+            allClean.headOption.getOrElse(noRepairPlaceholder)/* because allClean list could be an empty list*/
+          }
+        }
+
+        val suggestedRepairCol = "suggested-repair"
+        val suggestedRepair: DataFrame = combiResultsWithContains
+          .withColumn(s"$suggestedRepairCol", suggest_repair(col(combinedRepairCol)))
+          .withColumn(s"contains-$suggestedRepairCol", contains_truth_value(col(truthValue), col(suggestedRepairCol)))
+
+        val total = suggestedRepair.count()
+        val suggestedContainsTruth = suggestedRepair.where(col(s"contains-$suggestedRepairCol") === 1.0).count()
+        percentageFound(total, suggestedContainsTruth, "suggested repair")
+
+        suggestedRepair.show(45, false)
 
 
         //todo: Missing values:
