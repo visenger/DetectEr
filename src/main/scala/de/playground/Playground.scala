@@ -126,6 +126,11 @@ object ListsPlayground extends App {
   val emptySet = Seq(seq2, Seq()).filter(_ != null).flatten.toSet
   println(emptySet)
 
+  private val newSeqOfThree: Seq[String] = seq0.take(3)
+
+
+  println(newSeqOfThree)
+
 }
 
 object RepairPlayground extends App {

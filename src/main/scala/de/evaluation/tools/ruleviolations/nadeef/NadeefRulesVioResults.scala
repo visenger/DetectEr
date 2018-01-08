@@ -22,6 +22,7 @@ class NadeefRulesVioResults extends Serializable with ExperimentsCommonConfig {
   private var schema: Schema = null
   private var output = ""
   private var datasetName = ""
+  private var auditFile = ""
 
   //generalized:
   private val conf = ConfigFactory.load()
@@ -61,6 +62,7 @@ class NadeefRulesVioResults extends Serializable with ExperimentsCommonConfig {
     schema = allSchemasByName.getOrElse(datasetName, HospSchema)
     recId = schema.getRecID
     dirtyInput = allDBNames.getOrElse(datasetName, "hosp")
+    auditFile = allNadeefRepairedFiles.getOrElse(datasetName, "hosp")
     this
   }
 
@@ -72,7 +74,6 @@ class NadeefRulesVioResults extends Serializable with ExperimentsCommonConfig {
 
   def addDirtyTableName(table: String): this.type = {
     dirtyInput = table
-
     this
   }
 
@@ -82,7 +83,8 @@ class NadeefRulesVioResults extends Serializable with ExperimentsCommonConfig {
   }
 
   def createRepairLog(session: SparkSession): DataFrame = {
-    val audit = session.read.jdbc(url, auditTable, props)
+    //val audit = session.read.jdbc(url, auditTable, props)
+    val audit = DataSetCreator.createFrame(session, auditFile, AuditSchema.getSchema: _*)
     val dirtyTable = session.read.jdbc(url, dirtyInput, props)
 
     /**

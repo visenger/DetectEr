@@ -380,8 +380,15 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
             val initProbability: Double = NumbersUtil.round(1 / totalNumberOfSets.toDouble, 4)
             val mostFrequentRepair: Seq[(String, Double)] = mostFrequentElements.filter(el_p => el_p._2 > initProbability)
             val endValues: Seq[String] = mostFrequentRepair.map(_._1)
-            //todo: if endValues is empty, consider some default values set, e.g. non-empty fd's
-            endValues
+            //todo: if endValues is empty, consider some default values set, e.g. non-empty fd's -> dynamic assignment
+            var result: Seq[String] = Seq()
+
+            if (endValues.isEmpty) {
+              result = mostFrequentElements.map(_._1)
+            } else {
+              result = endValues
+            }
+            result
           }
         }
 
@@ -397,24 +404,39 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
         val combiResultsWithContains = combinedRepairs
           .withColumn(s"contains-$combinedRepairCol", contains_in_list(col(truthValue), col(combinedRepairCol)))
 
-        //        val total = combiResultsWithContains.count()
-        //        val combiContainsTruth = combiResultsWithContains.where(col(s"contains-$combinedRepairCol") === 1.0).count()
-        //        percentageFound(total, combiContainsTruth, "combined list")
 
         def suggest_repair = udf {
           allClean: mutable.Seq[String] => {
-            allClean.headOption.getOrElse(noRepairPlaceholder)/* because allClean list could be an empty list*/
+            allClean.headOption.getOrElse(noRepairPlaceholder) /* because allClean list could be an empty list*/
+          }
+        }
+
+        def suggest_first_three = udf {
+          allClean: mutable.Seq[String] => {
+            val firstThree = if (allClean.isEmpty) Seq(noRepairPlaceholder) else allClean.take(3)
+            firstThree
           }
         }
 
         val suggestedRepairCol = "suggested-repair"
+        val firstThreeValsAsRepair = "first-three-as-repair"
         val suggestedRepair: DataFrame = combiResultsWithContains
           .withColumn(s"$suggestedRepairCol", suggest_repair(col(combinedRepairCol)))
+          .withColumn(s"$firstThreeValsAsRepair", suggest_first_three(col(combinedRepairCol)))
           .withColumn(s"contains-$suggestedRepairCol", contains_truth_value(col(truthValue), col(suggestedRepairCol)))
+          .withColumn(s"contains-$firstThreeValsAsRepair", contains_in_list(col(truthValue), col(firstThreeValsAsRepair)))
+
+        println("counting......")
 
         val total = suggestedRepair.count()
+        val combiContainsTruth = suggestedRepair.where(col(s"contains-$combinedRepairCol") === 1.0).count()
+        percentageFound(total, combiContainsTruth, "combined solutions list")
+
+        val firstThreeContainsTruth = suggestedRepair.where(col(s"contains-$firstThreeValsAsRepair") === 1.0).count()
+        percentageFound(total, firstThreeContainsTruth, "first three values contains the repair")
+
         val suggestedContainsTruth = suggestedRepair.where(col(s"contains-$suggestedRepairCol") === 1.0).count()
-        percentageFound(total, suggestedContainsTruth, "suggested repair")
+        percentageFound(total, suggestedContainsTruth, "suggested repair: single value")
 
         suggestedRepair.show(45, false)
 
@@ -423,11 +445,6 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
         //todo: Missing values -> should be investigated in more detail, because not all missing value should be imputed;
         //todo: How to decide what column is repairable.
 
-
-        //todo: Conbinatorial Multiarmed Bandits;
-
-        //todo: nadeef deduplication. extend every class with method: public Collection<Fix> repair(Violation violation) {
-        //todo: run nadeef deduplication repair.
 
         //todo: combine all of them into one
       }
