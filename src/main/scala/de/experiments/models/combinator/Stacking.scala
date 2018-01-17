@@ -328,6 +328,10 @@ class Stacking extends ExperimentsCommonConfig {
     lrPredictorDF
   }
 
+  /**
+    * returns the Eval object that contains the evaluation information about the prediction: Precision, Recall, F1
+    */
+
   def performStackingOnToolsAndMetadata(session: SparkSession, trainFull: DataFrame, test: DataFrame): Eval = {
     /* import session.implicits._
 

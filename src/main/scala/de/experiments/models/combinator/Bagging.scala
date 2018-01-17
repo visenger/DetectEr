@@ -188,6 +188,9 @@ class Bagging {
 
   }
 
+  /**
+    * returns the Eval object that contains the evaluation information about the prediction: Precision, Recall, F1
+    */
   def performBaggingOnToolsAndMetadata(session: SparkSession, trainFull: DataFrame, test: DataFrame): Eval = {
 
     val majorityVotingDF = runBaggingOnToolsAndMetadata(session, trainFull, test)

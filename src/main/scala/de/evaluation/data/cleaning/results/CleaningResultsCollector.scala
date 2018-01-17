@@ -62,8 +62,8 @@ object CleaningResultsCollector extends ExperimentsCommonConfig {
         The attribute "VALUE" is the original value taken from the dirty dataset.*/
         val predictedErrorsDF: DataFrame = ErrorsPredictor()
           .onDataset(dataset)
-          .runPredictionWithStacking(session)
-        //.runPredictionWithBagging(session)
+          //.runPredictionWithStacking(session)
+          .runPredictionWithBagging(session)
 
         val errorsAndReparsDF: DataFrame = predictedErrorsDF
           //.select(FullResult.recid, FullResult.attrnr, FullResult.value, "final-predictor")

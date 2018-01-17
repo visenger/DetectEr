@@ -1,11 +1,11 @@
 package de.experiments.features.error.prediction
 
-import de.evaluation.f1.FullResult
+import de.evaluation.f1.{F1, FullResult}
 import de.evaluation.util.DataSetCreator
 import de.experiments.ExperimentsCommonConfig
 import de.experiments.features.generation.FeaturesGenerator
 import de.experiments.models.combinator.{Bagging, Stacking}
-import de.model.util.Features
+import de.model.util.{Features, FormatUtil}
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -14,6 +14,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 class ErrorsPredictor extends ExperimentsCommonConfig {
   private var tools: Seq[String] = FullResult.tools
   private var dataset: String = ""
+  private var finalPredictorCol: String = "final-predictor"
 
   private var finalSchema: Seq[String] = null
 
@@ -120,8 +121,8 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
     val testSysAndLabsDF = testSystemsAndLabel
       .join(allMetadata, Seq(FullResult.recid, FullResult.attrnr))
 
-    println("testSysAndLabsDF")
-    testSysAndLabsDF.printSchema()
+    //println("testSysAndLabsDF")
+    //testSysAndLabsDF.printSchema()
 
     var testSystemsAndMetaDF = testSysAndLabsDF
       //          .select(FullResult.label, features: _*)
@@ -161,6 +162,24 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
       .runBaggingOnToolsAndMetadata(session, trainSystemsAndMetaDF, testSystemsAndMetaDF)
       .drop(Features.featuresCol)
     errorsWithBagging
+  }
+
+  def evaluateBagging(session: SparkSession): Unit = {
+    def predictedErrorsDF = runPredictionWithBagging(session)
+
+    val predictionAndLabelDF = FormatUtil.getPredictionAndLabel(predictedErrorsDF, finalPredictorCol)
+    val eval = F1.evalPredictionAndLabels(predictionAndLabelDF)
+    eval.printResult(s"$dataset: Bagging eval: Systems and Metadata - ")
+
+  }
+
+  def evaluateStacking(session: SparkSession): Unit = {
+    def predictedErrorsDF = runPredictionWithStacking(session)
+
+    val predictionAndLabelDF = FormatUtil.getPredictionAndLabel(predictedErrorsDF, finalPredictorCol)
+    val eval = F1.evalPredictionAndLabels(predictionAndLabelDF)
+    eval.printResult(s"$dataset: Stacking eval: Systems and Metadata - ")
+
   }
 
 }
