@@ -142,3 +142,29 @@ object DataSetSchemaCharacteristic extends ExperimentsCommonConfig {
     })
   }
 }
+
+
+object TrainingDataPositiveExaplesStats extends ExperimentsCommonConfig {
+  def main(args: Array[String]): Unit = {
+
+    SparkLOAN.withSparkSession("TRAIN-STAT"){
+      session =>{
+        process_train_data{
+          train_data =>{
+
+            val datasetName = train_data._1
+
+            val trainFile = train_data._2
+
+            val trainDF = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
+            //setting train fraction to 1%
+            val Array(train, _) = trainDF.randomSplit(Array(0.1, 0.9))
+            //todo: how many positive examples do we get in the trainings data for each dataset
+
+
+          }
+        }
+      }
+    }
+  }
+}
