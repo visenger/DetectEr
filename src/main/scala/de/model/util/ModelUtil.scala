@@ -4,7 +4,7 @@ import de.evaluation.f1.F1
 import de.model.logistic.regression.ModelData
 import org.apache.spark.mllib.classification.{LogisticRegressionModel, LogisticRegressionWithLBFGS}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{DecisionTree, RandomForest}
+import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.rdd.RDD
 
@@ -30,6 +30,50 @@ object ModelUtil {
       decisionTreeModel
     })
     decisionTreeModels
+  }
+
+
+  def getDecisionTreeModelsCrossValidated(trainSamples: Seq[RDD[LabeledPoint]],
+                                          testSamples: Seq[RDD[LabeledPoint]],
+                                          toolsNum: Int): Seq[DecisionTreeModel] = {
+    val numClasses = 2
+    val categoricalFeaturesInfo: Map[Int, Int] = (0 until toolsNum)
+      .map(attr => attr -> numClasses).toMap // Map[Int, Int](0 -> 2, 1 -> 2, 2 -> 2, 3 -> 2)
+    //        val impurity = "entropy"
+    val impurity = "gini"
+    val maxDepth = 5
+    // toolsNum
+    val maxBins = 32
+
+    val trainAndTest: Seq[(RDD[LabeledPoint], RDD[LabeledPoint])] = trainSamples.zip(testSamples)
+
+    val decisionTreeModels: Seq[(DecisionTreeModel, Double, Double)] = trainAndTest.map(sample => {
+      val train: RDD[LabeledPoint] = sample._1
+      val test: RDD[LabeledPoint] = sample._2
+      val decisionTreeModel: DecisionTreeModel = DecisionTree
+        .trainClassifier(train, numClasses, categoricalFeaturesInfo,
+          impurity, maxDepth, maxBins)
+      //decisionTreeModel
+      //todo: add crossvalidation: test model and return its 
+
+      val trainAccuracy: Double = computeAccuracy(train, decisionTreeModel)
+
+      val testAccuracy: Double = computeAccuracy(test, decisionTreeModel)
+
+      println(s" dt train accuracy: $trainAccuracy; test accuracy: $testAccuracy")
+
+      (decisionTreeModel, trainAccuracy, testAccuracy)
+    })
+    decisionTreeModels.map(_._1)
+  }
+
+  private def computeAccuracy(data: RDD[LabeledPoint], decisionTreeModel: DecisionTreeModel): Double = {
+    val trainResult: RDD[(Double, Double)] = data.map(point => {
+      val prediction: Double = decisionTreeModel.predict(point.features)
+      (point.label, prediction)
+    })
+    val accuracy: Double = trainResult.filter(p => p._1 == p._2).count().toDouble / trainResult.count()
+    accuracy
   }
 
 

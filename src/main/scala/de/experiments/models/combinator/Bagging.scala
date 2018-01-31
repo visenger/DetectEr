@@ -47,80 +47,6 @@ class Bagging {
     this
   }
 
-  /*def old_performBaggingOnToolsAndMetadata(session: SparkSession, trainFull: DataFrame, test: DataFrame): Eval = {
-    import session.implicits._
-
-    //todo: setting training data to 1%
-    val Array(train, _) = trainFull.randomSplit(Array(0.1, 0.9))
-
-    val trainLabPointRDD: RDD[LabeledPoint] = FormatUtil
-      .prepareDFToLabeledPointRDD(session, train)
-
-    val testLabAndFeatures: DataFrame = FormatUtil
-      .prepareDFToLabeledPointRDD(session, test)
-      .toDF(FullResult.label, featuresCol)
-
-    //APPLY CLASSIFICATION
-    //start: decision tree
-
-    val Array(_, train1) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 123L)
-    val Array(train2, _) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 23L)
-    val Array(_, train3) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 593L)
-    val Array(train4, _) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 941L)
-    val Array(_, train5) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 3L)
-    val Array(train6, _) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 623L)
-
-    val trainSamples = Seq(train1, train2, train3, train4, train5, train6)
-
-    val featuresSize = getFeaturesNumber(train)
-
-    val Array(model1, model2, model3, model4, model5, model6) = ModelUtil.getDecisionTreeModels(trainSamples, featuresSize).toArray
-
-    val bagging1 = udf { (features: org.apache.spark.mllib.linalg.Vector) => model1.predict(features) }
-    val bagging2 = udf { (features: org.apache.spark.mllib.linalg.Vector) => model2.predict(features) }
-    val bagging3 = udf { (features: org.apache.spark.mllib.linalg.Vector) => model3.predict(features) }
-    val bagging4 = udf { (features: org.apache.spark.mllib.linalg.Vector) => model4.predict(features) }
-    val bagging5 = udf { (features: org.apache.spark.mllib.linalg.Vector) => model5.predict(features) }
-    val bagging6 = udf { (features: org.apache.spark.mllib.linalg.Vector) => model6.predict(features) }
-
-
-    val baggingDF = testLabAndFeatures
-      .withColumn(s"model-1", bagging1(testLabAndFeatures(featuresCol)))
-      .withColumn(s"model-2", bagging2(testLabAndFeatures(featuresCol)))
-      .withColumn(s"model-3", bagging3(testLabAndFeatures(featuresCol)))
-      .withColumn(s"model-4", bagging4(testLabAndFeatures(featuresCol)))
-      .withColumn(s"model-5", bagging5(testLabAndFeatures(featuresCol)))
-      .withColumn(s"model-6", bagging6(testLabAndFeatures(featuresCol)))
-
-    // Majority wins
-    val majorityVoter = udf {
-      (tools: mutable.WrappedArray[Double]) => {
-        val total = tools.length
-        val sum1 = tools.count(_ == 1.0)
-        val sum0 = total - sum1
-        val errorDecision = if (sum1 >= sum0) 1.0 else 0.0
-        errorDecision
-      }
-    }
-
-    //todo: make decision rule more sophisticated -> weight classifiers
-
-    val allModelsColumns = (1 to trainSamples.size).map(id => baggingDF(s"model-$id"))
-
-    val majorityCol = "majority-vote"
-    val majorityVotingDF = baggingDF
-      .withColumn(majorityCol, majorityVoter(array(allModelsColumns: _*)))
-    majorityVotingDF.show(45, false)
-
-    val majorityDF = majorityVotingDF
-      .select(FullResult.label, majorityCol)
-
-    val predictAndLabelMajority = FormatUtil.getPredictionAndLabel(majorityDF, majorityCol)
-    val evalMajority = F1.evalPredictionAndLabels(predictAndLabelMajority)
-    //evalMajority.printResult(s"majority vote on $dataset for all tools with metadata")
-
-    evalMajority
-  }*/
 
   def runBaggingOnToolsAndMetadata(session: SparkSession, trainFull: DataFrame, test: DataFrame): DataFrame = {
 
@@ -136,18 +62,23 @@ class Bagging {
     //APPLY CLASSIFICATION
     //start: decision tree
 
-    val Array(_, train1) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 123L)
-    val Array(train2, _) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 23L)
-    val Array(_, train3) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 593L)
-    val Array(train4, _) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 941L)
-    val Array(_, train5) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 3L)
-    val Array(train6, _) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 623L)
+    val Array(test1, train1) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 123L)
+    val Array(train2, test2) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 23L)
+    val Array(test3, train3) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 593L)
+    val Array(train4, test4) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 941L)
+    val Array(test5, train5) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 3L)
+    val Array(train6, test6) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 623L)
 
     val trainSamples = Seq(train1, train2, train3, train4, train5, train6)
+    // val testSamples = Seq(test1, test2, test3, test4, test5, test6)
 
     val featuresSize = getFeaturesNumber(train)
 
+    //todo: comment the second one
     val Array(model1, model2, model3, model4, model5, model6) = ModelUtil.getDecisionTreeModels(trainSamples, featuresSize).toArray
+    //    val Array(model1, model2, model3, model4, model5, model6) = ModelUtil
+    //      .getDecisionTreeModelsCrossValidated(trainSamples, testSamples, featuresSize)
+    //      .toArray
 
     val bagging1 = udf { (features: org.apache.spark.mllib.linalg.Vector) => model1.predict(features) }
     val bagging2 = udf { (features: org.apache.spark.mllib.linalg.Vector) => model2.predict(features) }
@@ -282,14 +213,15 @@ class Bagging {
     //APPLY CLASSIFICATION
     //start: decision tree
 
-    val Array(_, train1) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 123L)
-    val Array(train2, _) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 23L)
-    val Array(_, train3) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 593L)
-    val Array(train4, _) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 941L)
-    val Array(_, train5) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 3L)
-    val Array(train6, _) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 623L)
+    val Array(test1, train1) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 123L)
+    val Array(train2, test2) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 23L)
+    val Array(test3, train3) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 593L)
+    val Array(train4, test4) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 941L)
+    val Array(test5, train5) = trainLabPointRDD.randomSplit(Array(0.3, 0.7), seed = 3L)
+    val Array(train6, test6) = trainLabPointRDD.randomSplit(Array(0.7, 0.3), seed = 623L)
 
     val trainSamples = Seq(train1, train2, train3, train4, train5, train6)
+    val testSamples = Seq(test1, test2, test3, test4, test5, test6)
 
     val featuresSize = getFeaturesNumber(train)
 
@@ -345,24 +277,6 @@ class Bagging {
     featuresDF.select("features").head().getAs[org.apache.spark.ml.linalg.Vector](0).size
   }
 
-  //  private def getDecisionTreeModels(trainSamples: Seq[RDD[LabeledPoint]], toolsNum: Int): Seq[DecisionTreeModel] = {
-  //    val numClasses = 2
-  //    val categoricalFeaturesInfo = (0 until toolsNum)
-  //      .map(attr => attr -> numClasses).toMap // Map[Int, Int](0 -> 2, 1 -> 2, 2 -> 2, 3 -> 2)
-  //    //        val impurity = "entropy"
-  //    val impurity = "gini"
-  //    val maxDepth = 5
-  //    // toolsNum
-  //    val maxBins = 32
-  //
-  //    val decisionTreeModels: Seq[DecisionTreeModel] = trainSamples.map(sample => {
-  //      val decisionTreeModel: DecisionTreeModel = DecisionTree
-  //        .trainClassifier(sample, numClasses, categoricalFeaturesInfo,
-  //          impurity, maxDepth, maxBins)
-  //      decisionTreeModel
-  //    })
-  //    decisionTreeModels
-  //  }
 
   private def getDecisionTreeModelsForTools(trainSamples: Seq[RDD[LabeledPoint]], tools: Seq[String]): Seq[DecisionTreeModel] = {
     val numClasses = 2

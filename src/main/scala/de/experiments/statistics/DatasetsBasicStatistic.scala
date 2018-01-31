@@ -6,6 +6,7 @@ import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
 import de.model.util.NumbersUtil
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 
 /**
   * Created by visenger on 19.05.17.
@@ -144,22 +145,29 @@ object DataSetSchemaCharacteristic extends ExperimentsCommonConfig {
 }
 
 
-object TrainingDataPositiveExaplesStats extends ExperimentsCommonConfig {
+object TrainingDataClassImbalance extends ExperimentsCommonConfig {
   def main(args: Array[String]): Unit = {
 
-    SparkLOAN.withSparkSession("TRAIN-STAT"){
-      session =>{
-        process_train_data{
-          train_data =>{
+    SparkLOAN.withSparkSession("TRAIN-STAT") {
+      session => {
+        process_train_data {
+          train_data => {
+            import org.apache.spark.sql.functions._
+
 
             val datasetName = train_data._1
 
             val trainFile = train_data._2
 
-            val trainDF = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
+            val trainDF: DataFrame = DataSetCreator.createFrame(session, trainFile, FullResult.schema: _*)
             //setting train fraction to 1%
-            val Array(train, _) = trainDF.randomSplit(Array(0.1, 0.9))
+            val Array(train: Dataset[Row], _) = trainDF.randomSplit(Array(0.1, 0.9))
             //todo: how many positive examples do we get in the trainings data for each dataset
+
+            val positiveCount: Double = train.where(col(FullResult.label) === 1.0).count().toDouble
+            val totalCount: Double = train.count().toDouble
+
+            println(s"$datasetName: class imbalance for 1.0 labels: ${NumbersUtil.percentageFound(totalCount, positiveCount, "")}")
 
 
           }
