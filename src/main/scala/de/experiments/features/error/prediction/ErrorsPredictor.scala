@@ -112,6 +112,7 @@ class ErrorsPredictor extends ExperimentsCommonConfig {
       .setOutputCol(Features.featuresCol)
 
     trainSystemsAndMetaDF = trainSystemsAndMetaDF
+      //.select(FullResult.label, features: _*)
       .select(FullResult.label, features: _*)
 
     trainSystemsAndMetaDF = featuresAssembler
