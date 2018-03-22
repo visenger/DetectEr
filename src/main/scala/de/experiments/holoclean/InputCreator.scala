@@ -8,7 +8,7 @@ import de.experiments.ExperimentsCommonConfig
 import de.experiments.features.generation.FeaturesGenerator
 import de.model.util.NumbersUtil
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{Column, DataFrame, Row}
 
 class InputCreator {
 
@@ -206,7 +206,7 @@ object HospSampleGenerator {
 /**
   * Automatic generating the evidence (observed) predicates.
   */
-object EvidenceCreator extends ExperimentsCommonConfig {
+object PredicatesCreator extends ExperimentsCommonConfig {
   def main(args: Array[String]): Unit = {
     val dataset = "hosp"
     val pathToData = "/Users/visenger/deepdive_notebooks/hosp-cleaning"
@@ -310,6 +310,59 @@ object EvidenceCreator extends ExperimentsCommonConfig {
           .option("sep", "\\t")
           .option("header", "false")
           .csv(s"$pathToData/input/extdict")
+
+        //Matched
+
+        /**
+          * The predicate *matched* has the following structure:
+          * matched? (
+          * tid bigint, -> from the dataset (RecId identifiers)
+          * attr int, -> from the dataset (e.g state, city)
+          * value text, -> from the ext dict
+          * dict int -> dictionary identifier (counts in our case)
+          * ).
+          *
+          */
+        val allCitiesFromExtDict: List[String] = zipCodesDF
+          .select("City")
+          .distinct()
+          .collect()
+          .map(row => row.getString(0).trim).toList
+        val citiesCols: List[Column] = allCitiesFromExtDict.map(city => lit(city))
+        val cityIdx: Int = HospSchema.indexAttributes.getOrElse("city", 5)
+
+        val allStatesFromExtDict: List[String] = zipCodesDF
+          .select("State")
+          .distinct()
+          .collect()
+          .map(row => row.getString(0).trim).toList
+        val statesCols: List[Column] = allStatesFromExtDict.map(state => lit(state))
+        val stateIdx: Int = HospSchema.indexAttributes.getOrElse("state", 6)
+
+        val matchedCityDF: DataFrame = tupleDF
+          .withColumn(FullResult.attrnr, lit(cityIdx))
+          .withColumn("values", array(citiesCols: _*))
+          .select(col(schema.getRecID), col(FullResult.attrnr), explode(col("values")).as("value"))
+
+        val matchedStatesDF: DataFrame = tupleDF
+          .withColumn(FullResult.attrnr, lit(stateIdx))
+          .withColumn("values", array(statesCols: _*))
+          .select(col(schema.getRecID), col(FullResult.attrnr), explode(col("values")).as("value"))
+
+        val initialMatchedDF: DataFrame = matchedCityDF
+          .union(matchedStatesDF)
+          .toDF(FullResult.recid, FullResult.attrnr, "value")
+
+        val matchedDF: DataFrame = initialMatchedDF
+          .withColumn("dict", lit(1))
+          .withColumn("label", lit("\\N"))
+
+        matchedDF
+          .repartition(1)
+          .write
+          .option("sep", "\\t")
+          .option("header", "false")
+          .csv(s"$pathToData/input/matched")
 
 
       }
