@@ -1,10 +1,12 @@
 package de.experiments.holoclean
 
+import com.typesafe.config.ConfigFactory
 import de.evaluation.data.schema.{HospSchema, Schema}
 import de.evaluation.f1.FullResult
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
 import de.experiments.features.generation.FeaturesGenerator
+import de.model.util.NumbersUtil
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -69,6 +71,46 @@ object HospPredictedSchema {
     attr25,
     attr26,
     attr27)
+}
+
+object DeepdivePredictedSchema {
+  val tid = "tid"
+  val attr = "attr"
+  val value = "value"
+  val id = "id"
+  val label = "label"
+  val category = "category"
+  val expectation = "expectation"
+
+  val schema = Seq(tid, attr, value, id, label, category, expectation)
+}
+
+object ZipCodesDictSchema {
+  val attr1 = "Zipcode"
+  val attr2 = "ZipCodeType"
+  val attr3 = "City"
+  val attr4 = "State"
+  val attr5 = "LocationType"
+  val attr6 = "Lat"
+  val attr7 = "Long"
+  val attr8 = "Location"
+  val attr9 = "Decommisioned"
+  val attr10 = "TaxReturnsFiled"
+  val attr11 = "EstimatedPopulation"
+  val attr12 = "TotalWages"
+
+  val schema = Seq(attr1,
+    attr2,
+    attr3,
+    attr4,
+    attr5,
+    attr6,
+    attr7,
+    attr8,
+    attr9,
+    attr10,
+    attr11,
+    attr12)
 }
 
 /**
@@ -172,6 +214,8 @@ object EvidenceCreator extends ExperimentsCommonConfig {
     val matrixWithPredictionPath = s"$pathToData/predicted-data/hosp-1k-predicted-errors.csv"
     val schema: Schema = allSchemasByName.getOrElse(dataset, HospSchema)
 
+    val pathToExtDict = "/Users/visenger/research/datasets/zip-code/free-zipcode-database-Primary.csv"
+
     SparkLOAN.withSparkSession("Evidence Predicates") {
       session => {
 
@@ -180,11 +224,25 @@ object EvidenceCreator extends ExperimentsCommonConfig {
 
         val tupleDF: DataFrame = dirtyDF.select(schema.getRecID)
 
+        tupleDF
+          .repartition(1)
+          .write
+          .option("header", "false")
+          .csv(s"$pathToData/input/tuple")
+
         //InitValue
         val predictedMatrixDF: DataFrame = DataSetCreator
           .createFrame(session, matrixWithPredictionPath, HospPredictedSchema.schema: _*)
         val initValueDF: DataFrame = predictedMatrixDF
           .select(FullResult.recid, FullResult.attrnr, FullResult.value)
+
+        initValueDF
+          .repartition(1)
+          .write
+          .option("sep", "\\t")
+          .option("header", "false")
+          .csv(s"$pathToData/input/initvalue")
+
 
         //Domain
         val domainByAttrDF: DataFrame = initValueDF
@@ -200,6 +258,23 @@ object EvidenceCreator extends ExperimentsCommonConfig {
           .join(domainByAttrDF, Seq(FullResult.attrnr), "full_outer")
           .select(col(FullResult.recid), col(FullResult.attrnr), explode(col("domain")).as("domain"))
 
+        domainDF.repartition(1)
+          .write
+          .option("sep", "\\t")
+          .option("header", "false")
+          .csv(s"$pathToData/input/domain")
+
+        //Value?
+        val valueDF: DataFrame = domainDF
+          .withColumn("label", lit("\\N"))
+
+        valueDF
+          .repartition(1)
+          .write.option("sep", "\\t")
+          .option("header", "false")
+          .csv(s"$pathToData/input/value")
+
+
         //HasFeature
         /**
           * first aggregate on RecID, second for each tuple in aggregated bin,
@@ -211,15 +286,132 @@ object EvidenceCreator extends ExperimentsCommonConfig {
 
         val hasFeatureDF: DataFrame = initValueDF
           .join(featuresByRowIdDF, Seq(FullResult.recid), "full_outer")
-          .select(col(FullResult.recid), col(FullResult.attrnr), col(FullResult.value), explode(col("features")).as("feature"))
+          .select(col(FullResult.recid), col(FullResult.attrnr), explode(col("features")).as("feature"))
 
-        //todo: persist all
+        hasFeatureDF.repartition(1)
+          .write
+          .option("sep", "\\t")
+          .option("header", "false")
+          .csv(s"$pathToData/input/hasfeature")
+
+
+        //ExtDict
+        val zipCodesDF: DataFrame = DataSetCreator.createFrame(session, pathToExtDict, ZipCodesDictSchema.schema: _*)
+
+        val extDictDF: DataFrame = zipCodesDF.select("Zipcode", "City", "State")
+          .withColumn("RowId", monotonically_increasing_id())
+          .withColumn("DictNumber", lit(1))
+          .withColumn("valsToArray", array("Zipcode", "City", "State"))
+          .select(col("RowId"), posexplode(col("valsToArray")).as(Seq("extAttrNr  ", "value")), col("DictNumber"))
+
+        extDictDF
+          .repartition(1)
+          .write
+          .option("sep", "\\t")
+          .option("header", "false")
+          .csv(s"$pathToData/input/extdict")
+
 
       }
     }
 
 
   }
+}
+
+
+object EvaluateDeepdive extends ExperimentsCommonConfig {
+  val dataset = "hosp"
+
+  def main(args: Array[String]): Unit = {
+    val config = ConfigFactory.load()
+    val cleanDataPath = config.getString(s"data.$dataset.clean.1k")
+    val pathToData = "/Users/visenger/deepdive_notebooks/hosp-cleaning"
+    val matrixWithPredictionPath = s"$pathToData/predicted-data/hosp-1k-predicted-errors.csv"
+    val deepdivePredictionPath = s"$pathToData/predicted-data/deepdive-predicted.csv"
+
+    SparkLOAN.withSparkSession("EVAL DeepDive") {
+      session => {
+
+        val predictedMatrixDF: DataFrame = DataSetCreator
+          .createFrame(session, matrixWithPredictionPath, HospPredictedSchema.schema: _*)
+
+
+        val datasetSchema = allSchemasByName.getOrElse(dataset, HospSchema)
+        val schema: Seq[String] = datasetSchema.getSchema
+        val cleanData: DataFrame = DataSetCreator.createFrame(session, cleanDataPath, schema: _*)
+        val truthValue = "truth-value"
+
+
+        val cleanAttributes: Seq[String] = schema.filterNot(_.equals(datasetSchema.getRecID))
+
+        val attributesDFs = cleanAttributes.map(attribute => {
+          val indexByAttrName = datasetSchema.getIndexesByAttrNames(List(attribute)).head
+          val flattenDF = cleanData
+            .select(datasetSchema.getRecID, attribute)
+            .withColumn(FullResult.attrnr, lit(indexByAttrName))
+            .withColumn(truthValue, cleanData(attribute))
+
+          flattenDF
+            .select(datasetSchema.getRecID, FullResult.attrnr, truthValue)
+        })
+
+        val cleanDF: DataFrame = attributesDFs
+          .reduce((df1, df2) => df1.union(df2))
+          .repartition(1)
+          .toDF(FullResult.recid, FullResult.attrnr, truthValue)
+
+        val predictedErrorsWithTruthDF: DataFrame = predictedMatrixDF
+          .join(cleanDF, Seq(FullResult.recid, FullResult.attrnr))
+          .select(FullResult.recid, FullResult.attrnr, FullResult.value, FullResult.label, "final-predictor", "truth-value")
+
+        val ddPrediction: DataFrame = DataSetCreator
+          .createFrame(session, deepdivePredictionPath, DeepdivePredictedSchema.schema: _*)
+
+        val joinedPredictions: DataFrame = predictedErrorsWithTruthDF
+          .join(ddPrediction, predictedErrorsWithTruthDF(FullResult.recid) === ddPrediction(DeepdivePredictedSchema.tid)
+            && predictedErrorsWithTruthDF(FullResult.attrnr) === ddPrediction(DeepdivePredictedSchema.attr))
+
+        joinedPredictions
+          .where(ddPrediction(DeepdivePredictedSchema.expectation) > 0.69)
+          .show(67)
+
+        val allCount: Long = joinedPredictions.count()
+
+        val correctPredicted: Long = joinedPredictions
+          //.where(ddPrediction(DeepdivePredictedSchema.expectation) > 0.69)
+          .where(predictedErrorsWithTruthDF("truth-value") === ddPrediction("value"))
+          .count()
+
+        percentageFound(allCount, correctPredicted, "correctly predicted by deepdive")
+
+        val e = 0.69
+        val highProbPrediction: Long = joinedPredictions
+          .where(ddPrediction(DeepdivePredictedSchema.expectation) > e)
+          .where(predictedErrorsWithTruthDF("truth-value") === ddPrediction("value"))
+          .count()
+
+        percentageFound(allCount, highProbPrediction, s"correctly predicted by deepdive with expectation above $e")
+
+      }
+
+        def percentageFound(total: Long, foundByMethod: Long, msg: String): Unit = {
+          val percent = NumbersUtil.round(((foundByMethod * 100) / total.toDouble), 4)
+          println(s"$msg $percent %")
+        }
+
+    }
+
+
+  }
+}
+
+
+object Playground extends App {
+  HospSchema.indexAttributes.foreach(
+    (entry => println(s"${entry._2} -> ${entry._1}"))
+  )
+
 }
 
 
