@@ -218,7 +218,7 @@ object PredicatesCreator extends ExperimentsCommonConfig {
 
     val pathToExtDict = "/Users/visenger/research/datasets/zip-code/free-zipcode-database-Primary.csv"
 
-    SparkLOAN.withSparkSession("Evidence Predicates") {
+    SparkLOAN.withSparkSession("Create Predicates") {
       session => {
 
         //Tuple
@@ -420,6 +420,9 @@ object EvaluateDeepdive extends ExperimentsCommonConfig {
           .join(cleanDF, Seq(FullResult.recid, FullResult.attrnr))
           .select(FullResult.recid, FullResult.attrnr, FullResult.value, FullResult.label, "final-predictor", "truth-value")
 
+        /**
+          * connecting to the database: deepdive results are in the table [query-predicate]_label_inference
+          */
         val props: Properties = new Properties()
         props.put("user", "visenger")
         props.put("driver", "org.postgresql.Driver")
@@ -427,7 +430,7 @@ object EvaluateDeepdive extends ExperimentsCommonConfig {
         val deep_dive_inference_result = "value_label_inference"
         val url = "jdbc:postgresql://localhost:5432/deepdive_hosp"
 
-        val ddPredictionTable: DataFrame = session
+        val ddValuePredictionTable: DataFrame = session
           .read
           .jdbc(url, deep_dive_inference_result, props)
           .toDF(DeepdivePredictedSchema.schema: _*)
@@ -438,42 +441,47 @@ object EvaluateDeepdive extends ExperimentsCommonConfig {
         val cityAttrNr = 5
         val stateAttrNr = 6
 
+        val attributes: Seq[Column] = Seq(cityAttrNr, stateAttrNr).map(lit(_))
+
         val predicted_value = "predicted-value"
-        val ddPrediction = ddPredictionTable
+        val ddValuePrediction = ddValuePredictionTable
           .withColumnRenamed("value", predicted_value)
-          .where(ddPredictionTable(DeepdivePredictedSchema.attr) === cityAttrNr
-            or
-            ddPredictionTable(DeepdivePredictedSchema.attr) === stateAttrNr)
+          .where(ddValuePredictionTable(DeepdivePredictedSchema.attr).isin(attributes: _*))
 
-        //        val ddPrediction: DataFrame = DataSetCreator
-        //          .createFrame(session, deepdivePredictionPath, DeepdivePredictedSchema.schema: _*)
-
-        val joinedPredictions: DataFrame = predictedErrorsWithTruthDF
-          .join(ddPrediction,
-            predictedErrorsWithTruthDF(FullResult.recid) === ddPrediction(DeepdivePredictedSchema.tid)
-              && predictedErrorsWithTruthDF(FullResult.attrnr) === ddPrediction(DeepdivePredictedSchema.attr))
-
+        val joinedPredictionsValue: DataFrame = predictedErrorsWithTruthDF
+          .join(ddValuePrediction,
+            predictedErrorsWithTruthDF(FullResult.recid) === ddValuePrediction(DeepdivePredictedSchema.tid)
+              && predictedErrorsWithTruthDF(FullResult.attrnr) === ddValuePrediction(DeepdivePredictedSchema.attr))
 
         /**
           * Computing the F-measure
           */
-
-        val correctRepair: Long = joinedPredictions
-          .where(predictedErrorsWithTruthDF("truth-value") === ddPrediction(predicted_value))
-          .count()
-
-        val performedRepair: Long = joinedPredictions
-          .where(ddPrediction("expectation") > 0.5)
-          .where(predictedErrorsWithTruthDF("value") =!= ddPrediction(predicted_value))
-          .count()
-
-        val totalErrors: Long = joinedPredictions
+        val totalErrors: Long = joinedPredictionsValue
           .where(predictedErrorsWithTruthDF(FullResult.label) === "1.0")
           .count()
 
-        val precision: Double = correctRepair / performedRepair.toDouble
-        val recall: Double = correctRepair / totalErrors.toDouble
-        val F_1: Double = 2.0 * precision * recall / (precision + recall)
+        (0.5).until(0.95).by(0.05).foreach(e => {
+
+          val correctRepair: Long = joinedPredictionsValue
+            .where(predictedErrorsWithTruthDF("truth-value") === ddValuePrediction(predicted_value)
+              && predictedErrorsWithTruthDF("value") =!= ddValuePrediction(predicted_value)
+              && ddValuePrediction("expectation") >= e)
+            .count()
+
+          val performedRepair: Long = joinedPredictionsValue
+            .where(predictedErrorsWithTruthDF("value") =!= ddValuePrediction(predicted_value)
+              && ddValuePrediction("expectation") >= e) // we want performed repairs, we dont care about unchanged values
+            .count()
+
+          val precision: Double = correctRepair / performedRepair.toDouble
+          val recall: Double = correctRepair / totalErrors.toDouble
+          val F_1: Double = 2.0 * precision * recall / (precision + recall)
+
+          println(s"expectation: ${NumbersUtil.round(e)}")
+          println(s"total errors: $totalErrors correct repair: $correctRepair total repair: $performedRepair")
+          println(s"[Precision: ${NumbersUtil.round(precision, 4)}; Recall: ${NumbersUtil.round(recall, 4)}; F-1: ${NumbersUtil.round(F_1, 4)}]")
+
+        })
 
 
         println(s"considered attributes: ${
@@ -483,15 +491,12 @@ object EvaluateDeepdive extends ExperimentsCommonConfig {
             .map(entry => entry._1)
             .mkString(",")
         }")
-        println(s"Precision: $precision; Recall: $recall; F-1: $F_1")
 
-
-        joinedPredictions
-          .where(ddPrediction(DeepdivePredictedSchema.expectation) > 0.5)
-          .where(predictedErrorsWithTruthDF("truth-value") === ddPrediction(predicted_value))
-          .show(67)
-
-
+        joinedPredictionsValue
+          .where(ddValuePrediction(DeepdivePredictedSchema.expectation) > 0.5)
+          .where(predictedErrorsWithTruthDF("truth-value") === ddValuePrediction(predicted_value))
+          .where(predictedErrorsWithTruthDF("value") =!= ddValuePrediction(predicted_value))
+          .show(100)
       }
 
         def percentageFound(total: Long, foundByMethod: Long, msg: String): Unit = {

@@ -9,11 +9,21 @@ import scala.math.BigDecimal.RoundingMode
 object NumbersUtil {
 
 
-  def round(percentageFound: Double, scale: Int = 2): Double = {
-    val number: Double = percentageFound.isNaN match {
+  def round(inputNumber: Double, scale: Int = 2): Double = {
+    //println(s"number to round: $inputNumber is NaN ${inputNumber.isNaN} is Infinity ${inputNumber.isInfinity}")
+
+    var number: Double = 0.0
+
+    number = inputNumber.isNaN match {
       case true => 0.0
-      case false => percentageFound
+      case false => inputNumber.isInfinity match {
+        case true => 0.0
+        case false => inputNumber
+      }
     }
+
+
+
     BigDecimal(number).setScale(scale, RoundingMode.HALF_UP).toDouble
   }
 
