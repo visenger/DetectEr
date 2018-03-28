@@ -6,25 +6,25 @@ package de.evaluation.data.schema
 object HospSchema extends Schema with AttributesDataType {
 
 
-  private val recid = "oid"
+  val recid = "oid"
 
-  private val prno = "prno"
-  private val hospitalname = "hospitalname"
-  private val address = "address"
-  private val city = "city"
-  private val state = "state"
-  private val zip = "zip"
-  private val countryname = "countryname"
-  private val phone = "phone"
-  private val hospitaltype = "hospitaltype"
-  private val hospitalowner = "hospitalowner"
-  private val emergencyservice = "emergencyservice"
-  private val condition = "condition"
-  private val mc = "mc"
-  private val measurename = "measurename"
-  private val score = "score"
-  private val sample = "sample"
-  private val stateavg = "stateavg"
+  val prno = "prno"
+  val hospitalname = "hospitalname"
+  val address = "address"
+  val city = "city"
+  val state = "state"
+  val zip = "zip"
+  val countryname = "countryname"
+  val phone = "phone"
+  val hospitaltype = "hospitaltype"
+  val hospitalowner = "hospitalowner"
+  val emergencyservice = "emergencyservice"
+  val condition = "condition"
+  val mc = "mc"
+  val measurename = "measurename"
+  val score = "score"
+  val sample = "sample"
+  val stateavg = "stateavg"
 
   private val schema = Seq(recid, prno,
     hospitalname, address,
