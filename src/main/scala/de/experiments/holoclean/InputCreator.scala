@@ -1,7 +1,5 @@
 package de.experiments.holoclean
 
-import java.util.Properties
-
 import com.typesafe.config.ConfigFactory
 import de.evaluation.data.schema.{HospSchema, Schema}
 import de.evaluation.f1.FullResult
@@ -10,8 +8,8 @@ import de.experiments.ExperimentsCommonConfig
 import de.experiments.features.generation.FeaturesGenerator
 import de.experiments.holoclean.HospHolocleanSchema._
 import de.model.util.NumbersUtil
+import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{Column, DataFrame, Row}
 
 class InputCreator {
 
@@ -409,7 +407,7 @@ object HolocleanResultCoverter {
   }
 }
 
-object HospHolocleanEvaluator {
+/*object HospHolocleanEvaluator {
   val groundtruthPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/groundtruth.csv"
   val dirtyDataPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/hospital_dataset.csv"
 
@@ -474,7 +472,7 @@ object HospHolocleanEvaluator {
     }
 
   }
-}
+}*/
 
 /**
   * Creates a sample from the dataset.
@@ -692,37 +690,36 @@ object HospPreparator extends ExperimentsCommonConfig {
   * Automatic generating the evidence (observed) predicates.
   */
 object PredicatesCreator extends ExperimentsCommonConfig {
+  val dataset = "hosp"
+  val config = ConfigFactory.load()
+  val cleanDataPath = config.getString(s"data.$dataset.clean.10k")
+  val pathToData = "/Users/visenger/deepdive_notebooks/hosp-cleaning"
+  val dirtyDataPath = s"$pathToData/dirty-data/hosp-dirty-1k.csv"
+  val matrixWithPredictionPath = s"$pathToData/predicted-data/hosp-1k-predicted-errors.csv"
+  val schema: Schema = allSchemasByName.getOrElse(dataset, HospSchema)
+
+  val groundtruthPath = "/Users/visenger/deepdive_notebooks/hosp-cleaning/groundtruth/hosp-groundtruth.csv"
+
+  val pathToExtDict = "/Users/visenger/research/datasets/zip-code/free-zipcode-database-Primary.csv"
+
+
   def main(args: Array[String]): Unit = {
-    val dataset = "hosp"
-    val config = ConfigFactory.load()
-    val cleanDataPath = config.getString(s"data.$dataset.clean.10k")
-    val pathToData = "/Users/visenger/deepdive_notebooks/hosp-cleaning"
-    val dirtyDataPath = s"$pathToData/dirty-data/hosp-dirty-1k.csv"
-    val matrixWithPredictionPath = s"$pathToData/predicted-data/hosp-1k-predicted-errors.csv"
-    val schema: Schema = allSchemasByName.getOrElse(dataset, HospSchema)
-
-    val groundtruthPath = "/Users/visenger/deepdive_notebooks/hosp-cleaning/groundtruth/hosp-groundtruth.csv"
-
-    val pathToExtDict = "/Users/visenger/research/datasets/zip-code/free-zipcode-database-Primary.csv"
 
     SparkLOAN.withSparkSession("Create Predicates") {
       session => {
-
         //Tuple
         val dirtyDF: DataFrame = DataSetCreator.createFrame(session, dirtyDataPath, schema.getSchema: _*)
-
 
         val predictedMatrixDF: DataFrame = DataSetCreator
           .createFrame(session, matrixWithPredictionPath, HospPredictedSchema.schema: _*)
 
-
         val tupleDF: DataFrame = dirtyDF.select(schema.getRecID)
 
-        tupleDF
+        /*tupleDF
           .repartition(1)
           .write
           .option("header", "false")
-          .csv(s"$pathToData/input/tuple")
+          .csv(s"$pathToData/input/tuple")*/
 
         //InitValue
 
@@ -730,12 +727,12 @@ object PredicatesCreator extends ExperimentsCommonConfig {
         val initValueDF: DataFrame = predictedMatrixDF
           .select(FullResult.recid, FullResult.attrnr, FullResult.value)
 
-        initValueDF
+        /*initValueDF
           .repartition(1)
           .write
           .option("sep", "\\t")
           .option("header", "false")
-          .csv(s"$pathToData/input/initvalue")
+          .csv(s"$pathToData/input/initvalue")*/
 
 
         //Domain
@@ -768,7 +765,6 @@ object PredicatesCreator extends ExperimentsCommonConfig {
           .where(col("final-predictor") === "0.0")
           .toDF()
 
-
         val cleanDomainByAttrDF: DataFrame = predictedCleanValsDF
           .groupBy(col(FullResult.attrnr))
           .agg(collect_set(FullResult.value) as "domain")
@@ -782,19 +778,15 @@ object PredicatesCreator extends ExperimentsCommonConfig {
           .join(cleanDomainByAttrDF, Seq(FullResult.attrnr), "full_outer")
           .select(col(FullResult.recid), col(FullResult.attrnr), explode(col("domain")).as("domain"))
 
-        domainDF.repartition(1)
+
+        /*domainDF
+          .repartition(1)
           .write
           .option("sep", "\\t")
           .option("header", "false")
-          .csv(s"$pathToData/input/domain")
+          .csv(s"$pathToData/input/domain")*/
 
         //Value?
-
-        val predictedDirtyValsDF: DataFrame = predictedMatrixDF
-          .select(FullResult.recid, FullResult.attrnr, FullResult.value)
-          .where(col("final-predictor") === "1.0")
-          .toDF()
-
 
         /*  val prepareValueDF: DataFrame = dirtyValuesDF
             .join(perfectDomainValues, Seq(FullResult.attrnr), "full_outer")
@@ -806,8 +798,12 @@ object PredicatesCreator extends ExperimentsCommonConfig {
             .select(FullResult.recid, FullResult.attrnr, "value", "label")
 
           */
-        //todo: value over predicted errors/clean vals -> current version has error detection f-1 50%
 
+        //todo: value over predicted errors/clean vals -> current version has error detection f-1 50%
+        val predictedDirtyValsDF: DataFrame = predictedMatrixDF
+          .select(FullResult.recid, FullResult.attrnr, FullResult.value)
+          .where(col("final-predictor") === "1.0")
+          .toDF()
         val prepareValueDF: DataFrame = predictedDirtyValsDF
           .join(cleanDomainByAttrDF, Seq(FullResult.attrnr), "full_outer")
           .select(col(FullResult.recid), col(FullResult.attrnr), explode(col("domain")).as("value"))
@@ -818,12 +814,42 @@ object PredicatesCreator extends ExperimentsCommonConfig {
           .where(col(FullResult.recid) =!= lit(""))
           .select(FullResult.recid, FullResult.attrnr, "value", "label")
 
+        //todo: Domain pruning
+        val prunedDomainDF: DataFrame = pruneDomain(session, initValueDF, cleanDomainByAttrDF, predictedDirtyValsDF, dirtyDF, schema)
 
-        valueDF
-          .repartition(1)
-          .write.option("sep", "\\t")
-          .option("header", "false")
-          .csv(s"$pathToData/input/value")
+        /**
+          * prunedDomainDF.printSchema()
+          * root
+          * |-- RecID: string (nullable = true)
+          * |-- attrNr: string (nullable = true)
+          * |-- value: string (nullable = false)
+          * |-- prob-of-domain: double (nullable = false)
+          *
+          */
+
+        (0.0 to 1.0).by(0.1).foreach(τ => {
+
+          val prunedValueDF: DataFrame = prunedDomainDF
+            .where(prunedDomainDF("prob-of-domain") >= τ)
+            .select(FullResult.recid, FullResult.attrnr, FullResult.value)
+            .union(predictedCleanValsDF)
+            .withColumn("label", lit("\\N"))
+            .where(col(FullResult.recid) =!= lit(""))
+            .select(FullResult.recid, FullResult.attrnr, "value", "label")
+
+          prunedValueDF
+            .repartition(1)
+            .write.option("sep", "\\t")
+            .option("header", "false")
+            .csv(s"$pathToData/input-${τ}/value-${τ}")
+        })
+
+
+        /* valueDF
+           .repartition(1)
+           .write.option("sep", "\\t")
+           .option("header", "false")
+           .csv(s"$pathToData/input/value")*/
 
 
         //HasFeature
@@ -917,10 +943,117 @@ object PredicatesCreator extends ExperimentsCommonConfig {
       }
     }
   }
+
+  def pruneDomain(session: SparkSession,
+                  initValueDF: DataFrame,
+                  cleanDomainByAttrDF: DataFrame,
+                  predictedDirtyValsDF: DataFrame,
+                  dirtyDF: DataFrame,
+                  schema: Schema): DataFrame = {
+
+    import session.implicits._
+
+    val otherTupleValues = "other-vals"
+    /**
+      * first aggregate by RecID, second for each tuple in aggregated bin,
+      * concatenate its values as Map "attrNr->value"
+      */
+    val otherValsOfTuple: DataFrame = initValueDF.groupBy(col(FullResult.recid))
+      .agg(collect_list(map(col(FullResult.attrnr), col(FullResult.value))) as otherTupleValues) //collects Map[String, String] as list
+      .as[(String, Seq[Map[String, String]])]
+      .map { case (id, list) => (id, list.reduce(_ ++ _)) } //joining all maps in the list
+      .toDF(FullResult.recid, otherTupleValues)
+
+
+    /**
+      *
+      *  otherValsOfTuple.printSchema()
+      * root
+      * |-- RecID: string (nullable = true)
+      * |-- other-vals: map (nullable = true)
+      * |    |-- key: string
+      * |    |-- value: string (valueContainsNull = true)
+      */
+
+    val domainWithTupleValuesDF: DataFrame = predictedDirtyValsDF
+      .join(cleanDomainByAttrDF, Seq(FullResult.attrnr), "full_outer")
+      .join(otherValsOfTuple, Seq(FullResult.recid))
+
+
+    /**
+      *  domainWithTupleValuesDF.printSchema()
+      * root
+      * 0|-- RecID: string (nullable = true)
+      * 1|-- attrNr: string (nullable = true)
+      * 2|-- value: string (nullable = true)
+      * 3|-- domain: array (nullable = true)
+      * |    |-- element: string (containsNull = true)
+      * 4|-- other-vals: map (nullable = true)
+      * |    |-- key: string
+      * |    |-- value: string (valueContainsNull = true)
+      */
+
+
+    val data: List[(String, String, String, Seq[String], collection.Map[String, String])] = domainWithTupleValuesDF
+      .map(row => (row.getString(0), row.getString(1), row.getString(2), row.getSeq[String](3), row.getMap[String, String](4)))
+      .collect()
+      .toList
+
+    val indxToAttrNames: Map[Int, String] = schema.indexLCAttributes.map(_.swap)
+
+    val domainFull: List[(String, String, String, Map[String, Double])] = data
+      //.take(10) //todo: remove take(x)
+      .par
+      .map(entry => {
+        val recId: String = entry._1
+        val attrNr: String = entry._2
+        val value: String = entry._3
+        val domain: Seq[String] = entry._4
+        val tupleOtherVals: collection.Map[String, String] = entry._5
+
+        val domainWithProbs: Seq[(String, Double)] = for {d <- domain
+                                                          t <- tupleOtherVals} yield {
+          val otherAttrNr: String = t._1
+          val otherValue: String = t._2
+
+          val domainAttrName: String = indxToAttrNames.getOrElse(attrNr.trim.toInt, "unknown")
+          val otherAttrName: String = indxToAttrNames.getOrElse(otherAttrNr.trim.toInt, "unknown")
+
+          val withOtherValDF: DataFrame = dirtyDF
+            .select(domainAttrName, otherAttrName)
+            .where(dirtyDF(otherAttrName) === otherValue).toDF()
+
+          val togetherCount: Long = withOtherValDF.where(dirtyDF(domainAttrName) === d).count()
+
+          val totalV_count: Long = withOtherValDF.count()
+
+          val probOf_d_given_v: Double = togetherCount / totalV_count.toDouble
+
+          (d, probOf_d_given_v)
+        }
+
+        val filteredDomain: Map[String, Double] = domainWithProbs.filter(dom => dom._2 > 0.0).toMap
+
+        (recId, attrNr, value, filteredDomain)
+
+      }).toList
+
+    val tuplesWithDomain: List[(String, String, String, Map[String, Double])] = domainFull
+      .filter(tuple => tuple._4 != null && tuple._4.size > 0)
+
+
+    val domainWithProbsDF: DataFrame = tuplesWithDomain
+      .toDF(FullResult.recid, FullResult.attrnr, FullResult.value, "domain-with-probs")
+      .select(col(FullResult.recid), col(FullResult.attrnr), explode(col("domain-with-probs")).as(Seq("value", "prob-of-domain")))
+
+    domainWithProbsDF
+
+
+  }
 }
 
-
-object EvaluateDeepdive extends ExperimentsCommonConfig {
+//@deprecated
+/*object EvaluateDeepdive extends ExperimentsCommonConfig {
   val dataset = "hosp"
 
   def main(args: Array[String]): Unit = {
@@ -980,8 +1113,73 @@ object EvaluateDeepdive extends ExperimentsCommonConfig {
 
     }
   }
-}
+}*/
 
+
+object Evaluator {
+
+
+  def main(args: Array[String]): Unit = {
+    SparkLOAN.withSparkSession("EVALUATOR") {
+      session => {
+
+        val groundtruthPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/groundtruth.csv"
+        val dirtyInputPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/input_data.csv"
+
+        val cleaningResultPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/holoclean-output.csv"
+        println("holoclean hosp: no pruning, no error detection")
+        evaluate(session, groundtruthPath, cleaningResultPath, dirtyInputPath)
+
+        val idealErrorDetection = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/holoclean-output-ideal-error-detection.csv"
+        println("holoclean hosp: prunning done by perfect error detection")
+        evaluate(session, groundtruthPath, idealErrorDetection, dirtyInputPath)
+
+
+        println("OUR HOSP")
+
+        val ourDataGroundtruthPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/groundtruth/hosp-groundtruth.csv"
+        val ourDirtyDataPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/dirty/hosp-dirty-input.csv"
+
+        val ourCleaningResultPerfectPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/deepdive-result/deepdive-result-ideal-error-detection.csv"
+        println("our hosp: perfect error detection")
+        evaluate(session, ourDataGroundtruthPath, ourCleaningResultPerfectPath, ourDirtyDataPath)
+
+        val ourCleaningResultWithErrorDetPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/deepdive-result/deepdive_result_custom_error_detection.csv"
+        println("our hosp: prunning by f1 50% error detection")
+        evaluate(session, ourDataGroundtruthPath, ourCleaningResultWithErrorDetPath, ourDirtyDataPath)
+      }
+    }
+  }
+
+  def evaluate(session: SparkSession, groundtruth: String, cleaningResult: String, dirtyInput: String): Unit = {
+
+    val schema = Seq("ind", "attr", "val")
+    val cleaningSchema = Seq("ind", "attr", "val", "expectation")
+
+    val groundtruthDF: DataFrame = DataSetCreator.createFrame(session, groundtruth, schema: _*)
+    val cleaningResultDF: DataFrame = DataSetCreator
+      .createFrame(session, cleaningResult, cleaningSchema: _*)
+      .select("ind", "attr", "val")
+    val dirtyInputDF: DataFrame = DataSetCreator.createFrame(session, dirtyInput, schema: _*)
+
+    val incorrect: DataFrame = cleaningResultDF.except(groundtruthDF).toDF()
+    val errors: DataFrame = dirtyInputDF.except(groundtruthDF).toDF()
+    val corrected: DataFrame = errors.intersect(incorrect).toDF()
+
+    val incorrectValues: Long = incorrect.count()
+    val repair: Long = cleaningResultDF.count()
+
+    val precision: Double = (repair - incorrectValues) / repair.toDouble
+    val recall: Double = 1.0 - corrected.count() / errors.count().toDouble
+
+    val f1: Double = (2.0 * precision * recall) / (precision + recall)
+
+
+    println(s"Precision: ${NumbersUtil.round(precision, 4)}, Recall: ${NumbersUtil.round(recall, 4)}, F-1: ${NumbersUtil.round(f1, 4)}")
+
+
+  }
+}
 
 object Playground extends App {
   HospSchema.indexAttributes.foreach(
