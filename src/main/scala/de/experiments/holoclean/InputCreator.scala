@@ -9,6 +9,7 @@ import de.experiments.features.generation.FeaturesGenerator
 import de.experiments.holoclean.HospHolocleanSchema._
 import de.model.util.NumbersUtil
 import org.apache.spark.sql._
+import org.apache.spark.sql.expressions.{Window, WindowSpec}
 import org.apache.spark.sql.functions._
 
 class InputCreator {
@@ -114,261 +115,8 @@ object ZipCodesDictSchema {
     attr12)
 }
 
-object HospHolocleanSchema {
-  var index = "index"
-  var ProviderNumber = "ProviderNumber"
-  var HospitalName = "HospitalName"
-  var Address1 = "Address1"
-  var Address2 = "Address2"
-  var Address3 = "Address3"
-  var City = "City"
-  var State = "State"
-  var ZipCode = "ZipCode"
-  var CountyName = "CountyName"
-  var PhoneNumber = "PhoneNumber"
-  var HospitalType = "HospitalType"
-  var HospitalOwner = "HospitalOwner"
-  var EmergencyService = "EmergencyService"
-  var Condition = "Condition"
-  var MeasureCode = "MeasureCode"
-  var MeasureName = "MeasureName"
-  var Score = "Score"
-  var Sample = "Sample"
-  var Stateavg = "Stateavg"
-
-  val schema = Seq(index,
-    ProviderNumber,
-    HospitalName,
-    Address1,
-    Address2,
-    Address3,
-    City,
-    State,
-    ZipCode,
-    CountyName,
-    PhoneNumber,
-    HospitalType,
-    HospitalOwner,
-    EmergencyService,
-    Condition,
-    MeasureCode,
-    MeasureName,
-    Score,
-    Sample,
-    Stateavg)
-
-  val attrToIdx = Map(index -> 0,
-    ProviderNumber -> 1,
-    HospitalName -> 2,
-    Address1 -> 3,
-    Address2 -> 4,
-    Address3 -> 5,
-    City -> 6,
-    State -> 7,
-    ZipCode -> 8,
-    CountyName -> 9,
-    PhoneNumber -> 10,
-    HospitalType -> 11,
-    HospitalOwner -> 12,
-    EmergencyService -> 13,
-    Condition -> 14,
-    MeasureCode -> 15,
-    MeasureName -> 16,
-    Score -> 17,
-    Sample -> 18,
-    Stateavg -> 19)
-
-  val idxToAttr: Map[Int, String] = attrToIdx.map(_.swap)
 
 
-  /**
-    * Our mapping: (holoclean mapping)
-    * 5 -> city (6)
-    * 12 -> emergencyservice(13)
-    * 7 -> zip(8)
-    * 6 -> state (7)
-    * 3 -> hospitalname (2)
-    * 1 -> oid (0)
-    * 16 -> score(17)
-    * 11 -> hospitalowner()
-    * 18 -> stateavg
-    * 13 -> condition
-    * 8 -> countryname
-    * 4 -> address
-    * 17 -> sample
-    * 2 -> prno
-    * 14 -> mc
-    * 10 -> hospitaltype
-    * 15 -> measurename
-    * 9 -> phone
-    *
-    */
-
-}
-
-object HospHolocleanPredicatesCreator {
-
-  val dirtyDataPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/hospital_dataset.csv"
-  val pathToData = "/Users/visenger/deepdive_notebooks/holoclean-hosp/"
-
-  /**
-    * we simulate the perfect error detection, so the holoclean(deepdive) is getting its chance to shine.
-    */
-  val groundtruthPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/groundtruth.csv"
-
-
-  def main(args: Array[String]): Unit = {
-
-    SparkLOAN.withSparkSession("holoclean hosp predicates") {
-      sesssion => {
-
-        val dirtyDataDF: DataFrame = DataSetCreator.createFrame(sesssion, dirtyDataPath, HospHolocleanSchema.schema: _*)
-        //dirtyDataDF.printSchema()
-
-
-        /**
-          * tuple (
-          * tid bigint
-          * ).
-          **/
-
-        val tupleDF: DataFrame = dirtyDataDF.select(col(HospHolocleanSchema.index))
-        tupleDF
-          .repartition(1)
-          .write
-          .option("header", "false")
-          .csv(s"$pathToData/input/tuple")
-
-        /**
-          * initvalue (
-          * tid bigint,
-          * attr int,
-          * value text
-          * ).
-          **/
-
-        val convert_to_name = udf {
-          idx: Int => {
-            HospHolocleanSchema.idxToAttr.getOrElse(idx, "unknown")
-          }
-        }
-        val initvalueDF: DataFrame = dirtyDataDF.withColumn("valsToArray",
-          array(index,
-            ProviderNumber,
-            HospitalName,
-            Address1,
-            Address2,
-            Address3,
-            City,
-            State,
-            ZipCode,
-            CountyName,
-            PhoneNumber,
-            HospitalType,
-            HospitalOwner,
-            EmergencyService,
-            Condition,
-            MeasureCode,
-            MeasureName,
-            Score,
-            Sample,
-            Stateavg))
-          .select(col(index), posexplode(col("valsToArray")).as(Seq("attr", "value")))
-          .toDF(index, "attr", "value")
-
-
-        initvalueDF
-          .repartition(1)
-          .write
-          .option("sep", "\\t")
-          .option("header", "false")
-          .csv(s"$pathToData/input/initvalue")
-
-
-        /**
-          * domain (
-          * tid bigint,
-          * attr int,
-          * domain text
-          * ).
-          **/
-
-        //todo done: create ideal error detection
-        val groundTruthPrepareDF: DataFrame = DataSetCreator.createFrame(sesssion, groundtruthPath, Seq("ind", "attr", "val"): _*)
-
-        val convert_to_idx = udf {
-          attrName: String => {
-            HospHolocleanSchema.attrToIdx.getOrElse(attrName, 0)
-          }
-        }
-
-        val groundTruthDF: DataFrame = groundTruthPrepareDF
-          .withColumn("attr-idx", convert_to_idx(groundTruthPrepareDF("attr")))
-          .drop(col("attr"))
-          .withColumnRenamed("attr-idx", "attr")
-          .select("ind", "attr", "val")
-          .toDF(index, "attr", "value")
-
-        val cleanValuesDF: DataFrame = initvalueDF
-          .intersect(groundTruthDF)
-          .toDF(index, "attr", "value")
-
-        val dirtyValuesDF: DataFrame = initvalueDF
-          .except(groundTruthDF)
-          .toDF(index, "attr", "value")
-
-        // get clean values and use these clean values to populate domain
-        val domainValues: DataFrame = cleanValuesDF
-          .groupBy(col("attr"))
-          .agg(collect_set(col("value")).as("domain"))
-
-        val domainDF: DataFrame = initvalueDF
-          .join(domainValues, Seq("attr"), "full_outer")
-          .select(initvalueDF(index), col("attr"), explode(col("domain")).as("value"))
-
-        domainDF
-          .repartition(1)
-          .write
-          .option("sep", "\\t")
-          .option("header", "false")
-          .csv(s"$pathToData/input/domain")
-
-
-        /**
-          * value? (
-          * tid bigint,
-          * attr int,
-          * value text
-          * ).
-          */
-
-        val dirtyWithCleanDomainDF: DataFrame = dirtyValuesDF
-          .join(domainValues, Seq("attr"), "full_outer")
-          .select(dirtyValuesDF(index), col("attr"), explode(col("domain")).as("value"))
-
-        val preparedValueDF: DataFrame = dirtyWithCleanDomainDF
-          .union(cleanValuesDF)
-          .toDF()
-
-        val valueDF: DataFrame = preparedValueDF
-          .where(col(index) =!= lit(""))
-          .withColumn("label", lit("\\N"))
-
-        valueDF.show()
-
-        valueDF.repartition(1)
-          .write
-          .option("sep", "\\t")
-          .option("header", "false")
-          .csv(s"$pathToData/input/value")
-
-      }
-    }
-
-
-  }
-
-}
 
 object HolocleanResultCoverter {
   def main(args: Array[String]): Unit = {
@@ -837,11 +585,11 @@ object PredicatesCreator extends ExperimentsCommonConfig {
             .where(col(FullResult.recid) =!= lit(""))
             .select(FullResult.recid, FullResult.attrnr, "value", "label")
 
-          prunedValueDF
+          /*prunedValueDF
             .repartition(1)
             .write.option("sep", "\\t")
             .option("header", "false")
-            .csv(s"$pathToData/input-${τ}/value-${τ}")
+            .csv(s"$pathToData/input-${τ}/value-${τ}")*/
         })
 
 
@@ -1052,6 +800,7 @@ object PredicatesCreator extends ExperimentsCommonConfig {
   }
 }
 
+
 //@deprecated
 /*object EvaluateDeepdive extends ExperimentsCommonConfig {
   val dataset = "hosp"
@@ -1116,70 +865,7 @@ object PredicatesCreator extends ExperimentsCommonConfig {
 }*/
 
 
-object Evaluator {
 
-
-  def main(args: Array[String]): Unit = {
-    SparkLOAN.withSparkSession("EVALUATOR") {
-      session => {
-
-        val groundtruthPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/groundtruth.csv"
-        val dirtyInputPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/input_data.csv"
-
-        val cleaningResultPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/holoclean-output.csv"
-        println("holoclean hosp: no pruning, no error detection")
-        evaluate(session, groundtruthPath, cleaningResultPath, dirtyInputPath)
-
-        val idealErrorDetection = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/holoclean-output-ideal-error-detection.csv"
-        println("holoclean hosp: prunning done by perfect error detection")
-        evaluate(session, groundtruthPath, idealErrorDetection, dirtyInputPath)
-
-
-        println("OUR HOSP")
-
-        val ourDataGroundtruthPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/groundtruth/hosp-groundtruth.csv"
-        val ourDirtyDataPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/dirty/hosp-dirty-input.csv"
-
-        val ourCleaningResultPerfectPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/deepdive-result/deepdive-result-ideal-error-detection.csv"
-        println("our hosp: perfect error detection")
-        evaluate(session, ourDataGroundtruthPath, ourCleaningResultPerfectPath, ourDirtyDataPath)
-
-        val ourCleaningResultWithErrorDetPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/deepdive-result/deepdive_result_custom_error_detection.csv"
-        println("our hosp: prunning by f1 50% error detection")
-        evaluate(session, ourDataGroundtruthPath, ourCleaningResultWithErrorDetPath, ourDirtyDataPath)
-      }
-    }
-  }
-
-  def evaluate(session: SparkSession, groundtruth: String, cleaningResult: String, dirtyInput: String): Unit = {
-
-    val schema = Seq("ind", "attr", "val")
-    val cleaningSchema = Seq("ind", "attr", "val", "expectation")
-
-    val groundtruthDF: DataFrame = DataSetCreator.createFrame(session, groundtruth, schema: _*)
-    val cleaningResultDF: DataFrame = DataSetCreator
-      .createFrame(session, cleaningResult, cleaningSchema: _*)
-      .select("ind", "attr", "val")
-    val dirtyInputDF: DataFrame = DataSetCreator.createFrame(session, dirtyInput, schema: _*)
-
-    val incorrect: DataFrame = cleaningResultDF.except(groundtruthDF).toDF()
-    val errors: DataFrame = dirtyInputDF.except(groundtruthDF).toDF()
-    val corrected: DataFrame = errors.intersect(incorrect).toDF()
-
-    val incorrectValues: Long = incorrect.count()
-    val repair: Long = cleaningResultDF.count()
-
-    val precision: Double = (repair - incorrectValues) / repair.toDouble
-    val recall: Double = 1.0 - corrected.count() / errors.count().toDouble
-
-    val f1: Double = (2.0 * precision * recall) / (precision + recall)
-
-
-    println(s"Precision: ${NumbersUtil.round(precision, 4)}, Recall: ${NumbersUtil.round(recall, 4)}, F-1: ${NumbersUtil.round(f1, 4)}")
-
-
-  }
-}
 
 object Playground extends App {
   HospSchema.indexAttributes.foreach(
