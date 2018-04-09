@@ -473,7 +473,6 @@ object PredicatesCreator extends ExperimentsCommonConfig {
 
         //InitValue
 
-        //todo: populate evidence predicates with the domain over clean values.
         val initValueDF: DataFrame = predictedMatrixDF
           .select(FullResult.recid, FullResult.attrnr, FullResult.value)
 
