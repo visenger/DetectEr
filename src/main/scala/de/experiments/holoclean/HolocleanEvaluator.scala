@@ -29,6 +29,8 @@ object Evaluator {
 
         println("OUR HOSP - NO PRUNING:")
 
+        // todo : value predicate always union with the clean values.
+
         val ourDataGroundtruthPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/groundtruth/hosp-groundtruth.csv"
         val ourDirtyDataPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/dirty/hosp-dirty-input.csv"
 
@@ -47,6 +49,8 @@ object Evaluator {
           evaluate(session, ourDataGroundtruthPath, ourCleaningResultWithErrorDetPath, ourDirtyDataPath)
 
         })
+
+
       }
     }
   }
@@ -64,13 +68,14 @@ object Evaluator {
 
     val incorrect: DataFrame = cleaningResultDF.except(groundtruthDF).toDF()
     val errors: DataFrame = dirtyInputDF.except(groundtruthDF).toDF()
-    val corrected: DataFrame = errors.intersect(incorrect).toDF()
+    val uncorrected: DataFrame = errors.intersect(incorrect).toDF()
 
     val incorrectValues: Long = incorrect.count()
     val repair: Long = cleaningResultDF.count()
+    val uncorrectedValues: Long = uncorrected.count()
 
     val precision: Double = (repair - incorrectValues) / repair.toDouble
-    val recall: Double = 1.0 - (corrected.count() / errors.count().toDouble)
+    val recall: Double = 1.0 - (uncorrectedValues / errors.count().toDouble)
 
     val f1: Double = (2.0 * precision * recall) / (precision + recall)
 

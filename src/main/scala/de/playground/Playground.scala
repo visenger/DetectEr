@@ -3,7 +3,8 @@ package de.playground
 import com.typesafe.config.{Config, ConfigFactory}
 import de.experiments.features.prediction.CountsTableRow
 import de.model.util.NumbersUtil
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.expressions.{Window, WindowSpec}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import scala.collection.mutable
 
@@ -93,6 +94,43 @@ object SparkPlayground {
 
     val df2 = df.withColumn("values", coalesce(df("values"), array_()))
     df2.show()
+
+
+    val data: DataFrame = Seq((0, "DO"),
+      (1, "FR"),
+      (0, "MK"),
+      (0, "FR"),
+      (0, "RU"),
+      (0, "TN"),
+      (0, "TN"),
+      (0, "KW"),
+      (1, "RU"),
+      (0, "JP"),
+      (0, "US"),
+      (0, "CL"),
+      (0, "ES"),
+      (0, "KR"),
+      (0, "US"),
+      (0, "IT"),
+      (0, "SE"),
+      (0, "MX"),
+      (0, "CN"),
+      (1, "EE")).toDF("x", "y")
+    data.show()
+
+    val cooccurrDF: DataFrame = data
+      .groupBy(col("x"), col("y"))
+      .count()
+      .toDF("x", "y", "count-x-y")
+
+    val windowX: WindowSpec = Window.partitionBy("x")
+    val windowY: WindowSpec = Window.partitionBy("y")
+
+    val countsDF: DataFrame = cooccurrDF
+      .withColumn("count-x", sum("count-x-y") over windowX)
+      .withColumn("count-y", sum("count-x-y") over windowY)
+    countsDF.show()
+
     session.stop();
 
   }

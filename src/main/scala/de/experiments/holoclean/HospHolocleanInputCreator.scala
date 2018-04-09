@@ -86,13 +86,12 @@ object HospHolocleanPredicatesCreator {
           .toDF(index, attrCol, valueCol)
 
 
-        initvalueDF
-          .repartition(1)
-          .write
-          .option("sep", "\\t")
-          .option("header", "false")
-          .csv(s"$pathToData/input/initvalue")
-
+        //        initvalueDF
+        //          .repartition(1)
+        //          .write
+        //          .option("sep", "\\t")
+        //          .option("header", "false")
+        //          .csv(s"$pathToData/input/initvalue")
 
         /**
           * domain (
@@ -135,12 +134,12 @@ object HospHolocleanPredicatesCreator {
           .join(domainValues, Seq(attrCol), "full_outer")
           .select(initvalueDF(index), col(attrCol), explode(col("domain")).as(valueCol))
 
-        domainDF
+        /*domainDF
           .repartition(1)
           .write
           .option("sep", "\\t")
           .option("header", "false")
-          .csv(s"$pathToData/input/domain")
+          .csv(s"$pathToData/input/domain")*/
 
 
         /**
@@ -156,7 +155,7 @@ object HospHolocleanPredicatesCreator {
 
 
         (0.0 to 1.0).by(0.1).foreach(τ => {
-
+          println(s"pruning for $τ")
           val prunedValueDF: DataFrame = preparedValueDF
             .where(preparedValueDF("prob-of-domain") >= τ)
             .select(index, attrCol, valueCol)
@@ -164,11 +163,11 @@ object HospHolocleanPredicatesCreator {
             .where(col(index) =!= lit(""))
             .select(index, attrCol, "value", "label")
 
-          /*prunedValueDF
-            .repartition(1)
-            .write.option("sep", "\\t")
-            .option("header", "false")
-            .csv(s"$pathToData/input-${τ}/value-${τ}")*/
+          //          prunedValueDF
+          //            .repartition(1)
+          //            .write.option("sep", "\\t")
+          //            .option("header", "false")
+          //            .csv(s"$pathToData/input-${τ}/value-${τ}")
         })
 
         /* valueDF.repartition(1)
@@ -284,57 +283,56 @@ object HospHolocleanPredicatesCreator {
     val errorCellsWithDomain: DataFrame = domainWithTupleValuesDF
       .rdd
       .collect()
-      //.take(3)
       .map(row => {
-      println(s"processing row: ${row.mkString("; ")}")
-      val index: String = row.getString(0)
-      val attrNr: Int = row.getInt(1)
-      val value: String = row.getString(2)
-      val domain: List[String] = row.getSeq[String](3).toList
-      val otherValsOfTuple: collection.Map[String, String] = row.getMap[String, String](4).toMap
 
-      val otherValsOfTupleWithoutCurrentAttr = otherValsOfTuple
-        .filter(tuple => !tuple._1.equalsIgnoreCase(attrNr.toString)).toMap
+        val index: String = row.getString(0)
+        val attrNr: Int = row.getInt(1)
+        val value: String = row.getString(2)
+        val domain: List[String] = row.getSeq[String](3).toList
+        val otherValsOfTuple: collection.Map[String, String] = row.getMap[String, String](4).toMap
 
-      val tuples: Seq[(String, Double)] = for {domainValue <- domain;
-                                               other <- otherValsOfTupleWithoutCurrentAttr} yield {
+        val otherValsOfTupleWithoutCurrentAttr = otherValsOfTuple
+          .filter(tuple => !tuple._1.equalsIgnoreCase(attrNr.toString)).toMap
 
-        val otherColIdx: Int = other._1.toInt
-        val otherValue: String = other._2.toString
+        val tuples: Seq[(String, Double)] = for {domainValue <- domain;
+                                                 other <- otherValsOfTupleWithoutCurrentAttr} yield {
 
-        val domainAttrName: String = HospHolocleanSchema.idxToAttr.getOrElse(attrNr, "unknown")
-        val otherAttrName: String = HospHolocleanSchema.idxToAttr.getOrElse(otherColIdx, "unknown")
+          val otherColIdx: Int = other._1.toInt
+          val otherValue: String = other._2.toString
 
-        //          println(s"getting $domainAttrName and $otherAttrName")
-        //          println(s"cooccurr dict size: ${attrCombiToCooccurrDFs.size}")
-        //
-        //          println(s"dict contains key: ${attrCombiToCooccurrDFs.contains(ColumnsPair(domainAttrName, otherAttrName))} ")
-        //          println(s"cooccurr size: ${
-        //            attrCombiToCooccurrDFs.get(
-        //              (ColumnsPair(domainAttrName, otherAttrName))).get.count()
-        //          } ")
+          val domainAttrName: String = HospHolocleanSchema.idxToAttr.getOrElse(attrNr, "unknown")
+          val otherAttrName: String = HospHolocleanSchema.idxToAttr.getOrElse(otherColIdx, "unknown")
+
+          //          println(s"getting $domainAttrName and $otherAttrName")
+          //          println(s"cooccurr dict size: ${attrCombiToCooccurrDFs.size}")
+          //
+          //          println(s"dict contains key: ${attrCombiToCooccurrDFs.contains(ColumnsPair(domainAttrName, otherAttrName))} ")
+          //          println(s"cooccurr size: ${
+          //            attrCombiToCooccurrDFs.get(
+          //              (ColumnsPair(domainAttrName, otherAttrName))).get.count()
+          //          } ")
 
 
-        val cooccurrDF: DataFrame = attrCombiToCooccurrDFs.get(
-          (ColumnsPair(domainAttrName, otherAttrName))).get.cache()
+          val cooccurrDF: DataFrame = attrCombiToCooccurrDFs.get(
+            (ColumnsPair(domainAttrName, otherAttrName))).get.cache()
 
-        val probCol = s"prob-$domainAttrName-given-$otherAttrName"
-        val cooccurrRow: DataFrame = cooccurrDF
-          .where(cooccurrDF(domainAttrName) === domainValue && cooccurrDF(otherAttrName) === otherValue)
-          .select(probCol)
+          val probCol = s"prob-$domainAttrName-given-$otherAttrName"
+          val cooccurrRow: DataFrame = cooccurrDF
+            .where(cooccurrDF(domainAttrName) === domainValue && cooccurrDF(otherAttrName) === otherValue)
+            .select(probCol)
 
-        val probOfDomainValue: Double = cooccurrRow.take(1).isEmpty match {
-          case true => 0.0
-          case false => cooccurrRow.head().getDouble(0)
+          val probOfDomainValue: Double = cooccurrRow.take(1).isEmpty match {
+            case true => 0.0
+            case false => cooccurrRow.head().getDouble(0)
+          }
+
+          (domainValue, probOfDomainValue)
+
         }
+        val domainWithProbs: Map[String, Double] = tuples.toMap.filterNot(_._2 == 0.0)
 
-        (domainValue, probOfDomainValue)
-
-      }
-      val domainWithProbs: Map[String, Double] = tuples.toMap.filterNot(_._2 == 0.0)
-
-      (index, attrNr, value, domainWithProbs)
-    }).toList.toDF(index, attrCol, valueCol, "domain-with-probs")
+        (index, attrNr, value, domainWithProbs)
+      }).toList.toDF(index, attrCol, valueCol, "domain-with-probs")
 
     val errorsWithDomainDF: DataFrame = errorCellsWithDomain
       .select(col(index), col(attrCol), explode(col("domain-with-probs")).as(Seq("value", "prob-of-domain")))
