@@ -69,7 +69,7 @@ object Evaluator {
     val incorrect: DataFrame = cleaningResultDF.except(groundtruthDF).toDF()
     val errors: DataFrame = dirtyInputDF.except(groundtruthDF).toDF()
     val uncorrected: DataFrame = errors.intersect(incorrect).toDF()
-
+    //todo:
     val incorrectValues: Long = incorrect.count()
     val repair: Long = cleaningResultDF.count()
     val uncorrectedValues: Long = uncorrected.count()
