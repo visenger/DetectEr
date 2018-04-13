@@ -57,22 +57,64 @@ object PredicateErrorCreator extends ExperimentsCommonConfig {
         //          .csv(s"$targetPath/input/initvalue")
 
         //Error(tid, attr, value, error_indicator)
-        //error_indicator can be 0 or 1 reflecting the presence of an error.
-        val error1DF: DataFrame = initValueDF.withColumn("error", lit(1))
-        val error0DF: DataFrame = initValueDF.withColumn("error", lit(0))
+        //error_indicator can be -1 or 1 reflecting the presence of an error (-1: false; 1: true).
+        val error1DF: DataFrame = initValueDF.withColumn("error-indicator", lit(1))
+        val error0DF: DataFrame = initValueDF.withColumn("error-indicator", lit(-1))
 
-        val errorDF: DataFrame = error0DF
+        val errorCandidateDF: DataFrame = error0DF
           .union(error1DF)
           .withColumn("label", lit("\\N"))
           .toDF()
 
-        //        errorDF
-        //          .repartition(1)
+        errorCandidateDF
+          .repartition(1)
+          .write
+          .option("sep", "\\t")
+          .option("header", "false")
+          .csv(s"$targetPath/input/error_candidate")
+
+        val errorDF: DataFrame = initValueDF
+          .withColumn("label", lit("\\N"))
+          .toDF()
+
+        //        errorDF.repartition(1)
         //          .write
         //          .option("sep", "\\t")
         //          .option("header", "false")
         //          .csv(s"$targetPath/input/error")
 
+
+        val inTail: DataFrame = predictedMatrixDF
+          .where(col("inTail") === "1.0")
+          .select(FullResult.recid, FullResult.attrnr, FullResult.value)
+        //        inTail
+        //          .repartition(1)
+        //          .write
+        //          .option("sep", "\\t")
+        //          .option("header", "false")
+        //          .csv(s"$targetPath/input/intail")
+
+        val isTop10DF: DataFrame = predictedMatrixDF
+          .where(col("isTop10") === "1.0")
+          .select(FullResult.recid, FullResult.attrnr, FullResult.value)
+
+        isTop10DF
+          .repartition(1)
+          .write
+          .option("sep", "\\t")
+          .option("header", "false")
+          .csv(s"$targetPath/input/top_ten")
+
+        val missingValueDF: DataFrame = predictedMatrixDF
+          .where(col("missingValue") === "1.0")
+          .select(FullResult.recid, FullResult.attrnr, FullResult.value)
+
+        missingValueDF
+          .repartition(1)
+          .write
+          .option("sep", "\\t")
+          .option("header", "false")
+          .csv(s"$targetPath/input/missing_value")
 
       }
 
