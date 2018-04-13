@@ -1,0 +1,82 @@
+tuple (
+	tid bigint
+).
+
+initvalue (
+	tid bigint,
+	attr int,
+	value text
+).
+
+intail (
+	tid bigint,
+	attr int,
+	value text
+).
+
+top_ten (
+	tid bigint,
+	attr int,
+	value text
+).
+
+missing_value (
+	tid bigint,
+	attr int,
+	value text
+).
+
+error_candidate? (
+	tid bigint,
+	attr int,
+	value text,
+	indicator int
+).
+
+error? (
+	tid bigint,
+	attr int,
+	value text
+).
+
+################# DISTANT SUPERVISION RULES: ################
+
+## resolve multiple labels by majority vote (summing the labels in {-1,1})
+error_label_resolved(t, a, v, SUM(l)) :- error_candidate(t, a, v, l).
+
+## assign the resolved labels for the spouse relation
+
+error(t, a, v) =   if l > 0 then TRUE
+                   else FALSE
+                   end :- error_label_resolved(t, a, v, l).
+
+error_candidate(t, a, v, 1)  :-  intail(t, a, v).
+
+error_candidate(t, a, v, 1) :-  missing_value(t, a, v).
+
+error_candidate(t, a, v, -1) :-  top_ten(t, a, v).
+
+error_candidate(t, a, v, 0) :- initvalue(t, a, v).
+
+#FD1: zip -> state
+error_candidate(t1, 6, s1, 1):- initvalue(t1, 7, z1), initvalue(t2, 7, z2), initvalue(t1, 6, s1), initvalue(t2, 6, s2), [t1!=t2, z1=z2, s1!=s2].
+
+error_candidate(t2, 6, s2, 1):- initvalue(t1, 7, z1), initvalue(t2, 7, z2), initvalue(t1, 6, s1), initvalue(t2, 6, s2), [t1!=t2, z1=z2, s1!=s2].
+
+error_candidate(t1, 6, s1, -1):- initvalue(t1, 7, z1), initvalue(t2, 7, z2), initvalue(t1, 6, s1), initvalue(t2, 6, s2), [t1!=t2, z1=z2, s1=s2].
+
+error_candidate(t2, 6, s2, -1):- initvalue(t1, 7, z1), initvalue(t2, 7, z2), initvalue(t1, 6, s1), initvalue(t2, 6, s2), [t1!=t2, z1=z2, s1=s2].
+
+error_candidate(t1, 6, s1, -1):- initvalue(t1, 7, z1), initvalue(t2, 7, z2), top_ten(t1, 6, s1), initvalue(t2, 6, s2), [t1!=t2, z1=z2, s1=s2].
+
+error_candidate(t2, 6, s2, -1):- initvalue(t1, 7, z1), initvalue(t2, 7, z2), initvalue(t1, 6, s1), top_ten(t2, 6, s2), [t1!=t2, z1=z2, s1=s2].
+
+################# INFERENCE RULES: ################
+@weight(1.0)
+error_candidate(t, a, v, 1) => error(t, a, v)
+                               :-  initvalue(t, a, v).
+
+@weight(1.0)
+error_candidate(t, a, v, -1) => !error(t, a, v)
+                               :-  initvalue(t, a, v).
+
