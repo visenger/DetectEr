@@ -6,10 +6,7 @@ import de.evaluation.f1.FullResult
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
 import de.experiments.features.generation.FeaturesGenerator
-import de.holoclean.HospHolocleanSchema._
-import de.model.util.NumbersUtil
 import org.apache.spark.sql._
-import org.apache.spark.sql.expressions.{Window, WindowSpec}
 import org.apache.spark.sql.functions._
 
 class InputCreator {
@@ -114,8 +111,6 @@ object ZipCodesDictSchema {
     attr11,
     attr12)
 }
-
-
 
 
 object HolocleanResultCoverter {
@@ -435,6 +430,7 @@ object HospPreparator extends ExperimentsCommonConfig {
     }
   }
 }
+
 
 /**
   * Automatic generating the evidence (observed) predicates.
@@ -802,70 +798,90 @@ object PredicatesCreator extends ExperimentsCommonConfig {
 }
 
 
-//@deprecated
-/*object EvaluateDeepdive extends ExperimentsCommonConfig {
+object DistantSupervisionPredicatesCreator extends ExperimentsCommonConfig {
   val dataset = "hosp"
+  val pathToData = "/Users/visenger/deepdive_notebooks/hosp-cleaning"
+  val dirtyDataPath = s"$pathToData/dirty-data/hosp-dirty-1k.csv"
+  val schema: Schema = allSchemasByName.getOrElse(dataset, HospSchema)
+  private val tid = "tid"
+  private val attr = "attr"
+  private val value = "value"
+  private val label = "label"
+  val distantSupervisionSchema = Seq(tid, attr, value, label)
+
+  val distantSupervisonResultsPath = s"$pathToData/error-detect-dist-supervision/hosp-error-detection.csv"
 
   def main(args: Array[String]): Unit = {
-    val config = ConfigFactory.load()
-    val cleanDataPath = config.getString(s"data.$dataset.clean.10k")
-    val pathToData = "/Users/visenger/deepdive_notebooks/hosp-cleaning"
-    val matrixWithPredictionPath = s"$pathToData/predicted-data/hosp-1k-predicted-errors.csv"
-    val dirtyInput = s"$pathToData/dirty-data/hosp-dirty-1k.csv"
 
-    SparkLOAN.withSparkSession("EVAL DeepDive") {
+    SparkLOAN.withSparkSession("Create Predicates") {
       session => {
+        //Tuple
+        val dirtyDF: DataFrame = DataSetCreator.createFrame(session, dirtyDataPath, schema.getSchema: _*)
 
         val predictedMatrixDF: DataFrame = DataSetCreator
-          .createFrame(session, matrixWithPredictionPath, HospPredictedSchema.schema: _*)
+          .createFrame(session, distantSupervisonResultsPath, distantSupervisionSchema: _*)
+
+        val tupleDF: DataFrame = dirtyDF.select(schema.getRecID)
+        /*tupleDF
+          .repartition(1)
+          .write
+          .option("header", "false")
+          .csv(s"$pathToData/input/tuple")*/
+
+        val initValueDF: DataFrame = predictedMatrixDF
+          .select(tid, attr, value)
+
+        /*initValueDF
+          .repartition(1)
+          .write
+          .option("sep", "\\t")
+          .option("header", "false")
+          .csv(s"$pathToData/input/initvalue")*/
 
 
-        val datasetSchema = allSchemasByName.getOrElse(dataset, HospSchema)
-        val schema: Seq[String] = datasetSchema.getSchema
-        val cleanData: DataFrame = DataSetCreator.createFrame(session, cleanDataPath, schema: _*)
-        val truthValue = "truth-value"
+        val predictedCleanValsDF: DataFrame = predictedMatrixDF
+          .select(tid, attr, value)
+          .where(col(label) === "0")
+          .toDF()
 
-        cleanData.printSchema()
+        val cleanDomainByAttrDF: DataFrame = predictedCleanValsDF
+          .groupBy(col(attr))
+          .agg(collect_set(value) as "domain")
 
-        cleanData.show()
+        val domainDF: DataFrame = initValueDF
+          .join(cleanDomainByAttrDF, Seq(attr))
+          .select(col(tid), col(attr), explode(col("domain")).as("domain"))
 
+        /*domainDF
+          .repartition(1)
+          .write
+          .option("sep", "\\t")
+          .option("header", "false")
+          .csv(s"$pathToData/input/domain")*/
 
+        val predictedErrorValuesDF: DataFrame = predictedMatrixDF
+          .select(tid, attr, value)
+          .where(col(label) === "1")
+          .toDF()
 
-        //        val predictedErrorsWithTruthDF: DataFrame = predictedMatrixDF
-        //          .join(cleanDF, Seq(FullResult.recid, FullResult.attrnr))
-        //          .select(FullResult.recid, FullResult.attrnr, FullResult.value, FullResult.label, "final-predictor", "truth-value")
+        val valueDF: DataFrame = predictedErrorValuesDF
+          .join(cleanDomainByAttrDF, Seq(attr))
+          .select(col(tid), col(attr), explode(col("domain")).as("domain"))
+          .union(predictedCleanValsDF)
+          .withColumn("label", lit("\\N"))
+          .toDF(Seq(tid, attr, value, label): _*)
 
-        /**
-          * connecting to the database: deepdive results are in the table [query-predicate]_label_inference
-          */
-        val props: Properties = new Properties()
-        props.put("user", "visenger")
-        props.put("driver", "org.postgresql.Driver")
+        valueDF.repartition(1)
+          .write
+          .option("sep", "\\t")
+          .option("header", "false")
+          .csv(s"$pathToData/input/value")
 
-        val deep_dive_inference_result = "value_label_inference"
-        val url = "jdbc:postgresql://localhost:5432/deepdive_hosp"
-
-        val ddValuePredictionTable: DataFrame = session
-          .read
-          .jdbc(url, deep_dive_inference_result, props)
-          .toDF(DeepdivePredictedSchema.schema: _*)
-
-        //todo evaluation
-
-
-        def percentageFound(total: Long, foundByMethod: Long, msg: String): Unit = {
-          val percent = NumbersUtil.round(((foundByMethod * 100) / total.toDouble), 4)
-          println(s"$msg $percent %")
-        }
 
       }
-
-
     }
   }
-}*/
-
-
+}
 
 
 object Playground extends App {

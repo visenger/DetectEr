@@ -7,9 +7,8 @@ import de.evaluation.f1.FullResult
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.holoclean.HospPredictedSchema
 import de.model.util.NumbersUtil
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DoubleType
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
 
 class ErrorDetectorEvaluator {
 
@@ -26,7 +25,6 @@ object EvaluatorDetectEr {
 
   val groundtruthPath = "/Users/visenger/deepdive_notebooks/hosp-cleaning/groundtruth/hosp-groundtruth.csv"
 
-  val pathToExtDict = "/Users/visenger/research/datasets/zip-code/free-zipcode-database-Primary.csv"
 
   val targetPath = "/Users/visenger/deepdive_notebooks/error_detection"
 
@@ -41,12 +39,8 @@ object EvaluatorDetectEr {
         val predictedMatrixDF: DataFrame = DataSetCreator
           .createFrame(session, matrixWithPredictionPath, HospPredictedSchema.schema: _*)
 
-        predictedMatrixDF.where(col(FullResult.label) === "1.0").show()
-        val indicator = "indicator"
+        //  predictedMatrixDF.where(col(FullResult.label) === "1.0").show()
 
-
-        //        val errorDetectResultPath = s"$targetPath/result/error-detect.csv"
-        //        val errorDetectResultPath = s"$targetPath/result/error-detect_1.csv"
 
         /**
           *
@@ -56,90 +50,53 @@ object EvaluatorDetectEr {
           * tid,
           * attr,
           * value,
-          * expectation
-          * FROM error_label_inference
-          * WHERE label = TRUE;
+          * CASE WHEN label = TRUE
+          * THEN 1.0
+          * ELSE 0.0 END as prediction
+          * FROM error;
           */
-        //        val errorDetectResultPath = s"$targetPath/result/error-detect_2.csv"
-        //        val errorDetectResultPath = s"$targetPath/result/error-detect_3.csv"
-        val errorDetectResultPath = s"$targetPath/result/error-detect_8.csv"
-        val expectation = "expectation"
-        val resultDF: DataFrame = DataSetCreator
-          .createFrame(session, errorDetectResultPath,
-            Seq(FullResult.recid, FullResult.attrnr, FullResult.value, /*indicator,*/ expectation): _*)
 
 
-        val joinedDF: DataFrame = predictedMatrixDF
-          .join(resultDF, Seq(FullResult.recid, FullResult.attrnr))
-          .select(predictedMatrixDF(FullResult.recid),
-            predictedMatrixDF(FullResult.attrnr),
-            predictedMatrixDF(FullResult.value),
-            //            resultDF(indicator),
-            predictedMatrixDF(FullResult.label),
-            predictedMatrixDF(finalPredictor),
-            resultDF(expectation).cast(DoubleType).as("prob"))
+        val errorDetectPath = s"$targetPath/result/error_detection_10.csv"
 
-        joinedDF.show(120)
+        val prediction = "prediction"
+        val errDetectionDF: DataFrame = DataSetCreator
+          .createFrame(session, errorDetectPath,
+            Seq(FullResult.recid, FullResult.attrnr, FullResult.value, prediction): _*)
 
-        val wrongPrediction: Dataset[Row] = joinedDF
-          .where(col(FullResult.label) === "0.0")
+        val counts: collection.Map[(Double, Double), Long] = predictedMatrixDF
+          .join(errDetectionDF, Seq(FullResult.recid, FullResult.attrnr))
+          .select(col(prediction), col(FullResult.label))
+          .rdd
+          .map(row => (row.getString(0).toDouble, row.getString(1).toDouble))
+          .countByValue()
 
-        println("wrong prediction")
-        wrongPrediction.show(29)
+        var truePos: Long = 0
+        var trueNeg: Long = 0
+        var falsePos: Long = 0
+        var falseNeg: Long = 0
 
-       /* val expectations: List[Double] = joinedDF
-          .select(col("prob"))
-          .distinct()
-          .rdd.collect().toList
-          .map(row => row.getDouble(0))
-          .sorted
-
-
-        expectations.foreach(e => {
-          println()
-          println(s"expectation: $e")
-          val tp: Long = joinedDF
-            .where(col(FullResult.label) === "1.0" && col("prob") >= e)
-            .count()
-
-          val fp: Long = joinedDF
-            .where(col(FullResult.label) === "0.0" && col("prob") >= e)
-            .count()
-
-          val totalErrors: Long = predictedMatrixDF
-            .where(predictedMatrixDF(FullResult.label) === "1.0").count()
-
-          val precision: Double = computePrecision(tp, fp)
-          val recall: Double = computeRecall(tp, totalErrors)
-
-          val f1: Double = computeF1(precision, recall)
-
-          println(s"tp: $tp, fp: $fp, total errors: $totalErrors")
-          println(s"Precision: ${NumbersUtil.round(precision, 4)}, Recall: ${NumbersUtil.round(recall, 4)}, F-1: ${NumbersUtil.round(f1, 4)}")
-
+        counts.foreach(entry => {
+          val count: Long = entry._2
+          val pair: (Double, Double) = entry._1
+          pair match {
+            //(prediction, label)
+            case (1.0, 1.0) => truePos = count
+            case (1.0, 0.0) => falsePos = count
+            case (0.0, 1.0) => falseNeg = count
+            case (0.0, 0.0) => trueNeg = count
+          }
         })
-*/
-        println()
 
-        val tp: Long = joinedDF
-          .where(predictedMatrixDF(FullResult.label) === "1.0")
-          .count()
-
-        val fp: Long = joinedDF
-          .where(predictedMatrixDF(FullResult.label) === "0.0")
-          .count()
-
-        val totalErrors: Long = predictedMatrixDF
-          .where(predictedMatrixDF(FullResult.label) === "1.0")
-          .count()
-
-        val precision: Double = computePrecision(tp, fp)
-        val recall: Double = computeRecall(tp, totalErrors)
-
+        val precision: Double = computePrecision(truePos, falsePos)
+        val totalErrors: Long = truePos + falseNeg
+        val recall: Double = computeRecall(truePos, totalErrors)
         val f1: Double = computeF1(precision, recall)
 
-        println(s"tp: $tp, fp: $fp, total errors: $totalErrors")
+        println(s"evaluating: $errorDetectPath")
+        println(s"tp: $truePos, fp: $falsePos, total errors: ${totalErrors}")
         println(s"Precision: ${NumbersUtil.round(precision, 4)}, Recall: ${NumbersUtil.round(recall, 4)}, F-1: ${NumbersUtil.round(f1, 4)}")
+
 
         println()
         println("Baseline eval: our error detection")

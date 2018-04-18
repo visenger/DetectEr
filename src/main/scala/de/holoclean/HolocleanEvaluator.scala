@@ -34,21 +34,26 @@ object Evaluator {
         val ourDataGroundtruthPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/groundtruth/hosp-groundtruth.csv"
         val ourDirtyDataPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/dirty/hosp-dirty-input.csv"
 
-        val ourCleaningResultPerfectPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/deepdive-result/deepdive-result-ideal-error-detection.csv"
+        val path = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/deepdive-result"
+        val ourCleaningResultPerfectPath = s"$path/deepdive-result-ideal-error-detection.csv"
         println("our hosp: perfect error detection")
         evaluate(session, ourDataGroundtruthPath, ourCleaningResultPerfectPath, ourDirtyDataPath)
 
-        val ourCleaningResultWithErrorDetPath = "/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/deepdive-result/deepdive_result_custom_error_detection.csv"
+        val ourCleaningResultWithErrorDetPath = s"$path/deepdive_result_custom_error_detection.csv"
         println("our hosp: domain on error detection result: f1 50% ")
         evaluate(session, ourDataGroundtruthPath, ourCleaningResultWithErrorDetPath, ourDirtyDataPath)
 
-        println("OUR HOSP - WITH PRUNING (domain on error detection result: f1 50%)")
-        Seq(0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0).foreach(t => {
-          val ourCleaningResultWithErrorDetPath = s"/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/deepdive-result/deepdive_result_custom_err_detect_${t}_pruning.csv"
-          println(s"our hosp: prunning threshold: $t ")
-          evaluate(session, ourDataGroundtruthPath, ourCleaningResultWithErrorDetPath, ourDirtyDataPath)
+        val distantSupervisedErrorDetection = s"$path/deepdive_result_distant_supervision.csv"
+        println("error detection is done by distant supervision with one FD ZIP=>STATE")
+        evaluate(session, ourDataGroundtruthPath, distantSupervisedErrorDetection, ourDirtyDataPath)
 
-        })
+        //        println("OUR HOSP - WITH PRUNING (domain on error detection result: f1 50%)")
+        //        Seq(0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0).foreach(t => {
+        //          val ourCleaningResultWithErrorDetPath = s"/Users/visenger/deepdive_notebooks/holoclean-hosp/datasets/our-hosp/deepdive-result/deepdive_result_custom_err_detect_${t}_pruning.csv"
+        //          println(s"our hosp: prunning threshold: $t ")
+        //          evaluate(session, ourDataGroundtruthPath, ourCleaningResultWithErrorDetPath, ourDirtyDataPath)
+        //
+        //        })
 
 
       }
