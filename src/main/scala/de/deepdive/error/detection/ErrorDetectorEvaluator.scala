@@ -5,7 +5,7 @@ import de.deepdive.error.detection.PredicateErrorCreator.allSchemasByName
 import de.evaluation.data.schema.{HospSchema, Schema}
 import de.evaluation.f1.FullResult
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
-import de.experiments.holoclean.HospPredictedSchema
+import de.holoclean.HospPredictedSchema
 import de.model.util.NumbersUtil
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType

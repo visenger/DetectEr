@@ -5,7 +5,7 @@ import de.evaluation.data.schema.{HospSchema, Schema}
 import de.evaluation.f1.FullResult
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
-import de.experiments.holoclean.HospPredictedSchema
+import de.holoclean.HospPredictedSchema
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 

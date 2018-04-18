@@ -1,4 +1,4 @@
-package de.experiments.holoclean
+package de.holoclean
 
 object HospHolocleanSchema {
   var index = "index"

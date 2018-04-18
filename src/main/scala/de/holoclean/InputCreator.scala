@@ -1,4 +1,4 @@
-package de.experiments.holoclean
+package de.holoclean
 
 import com.typesafe.config.ConfigFactory
 import de.evaluation.data.schema.{HospSchema, Schema}
@@ -6,7 +6,7 @@ import de.evaluation.f1.FullResult
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
 import de.experiments.features.generation.FeaturesGenerator
-import de.experiments.holoclean.HospHolocleanSchema._
+import de.holoclean.HospHolocleanSchema._
 import de.model.util.NumbersUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.{Window, WindowSpec}

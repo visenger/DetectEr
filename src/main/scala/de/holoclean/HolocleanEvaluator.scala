@@ -1,4 +1,4 @@
-package de.experiments.holoclean
+package de.holoclean
 
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.model.util.NumbersUtil

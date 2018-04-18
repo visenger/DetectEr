@@ -1,7 +1,7 @@
-package de.experiments.holoclean
+package de.holoclean
 
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
-import de.experiments.holoclean.HospHolocleanSchema._
+import de.holoclean.HospHolocleanSchema._
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, SparkSession}
