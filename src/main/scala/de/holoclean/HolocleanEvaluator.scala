@@ -40,12 +40,44 @@ object Evaluator {
         evaluate(session, ourDataGroundtruthPath, ourCleaningResultPerfectPath, ourDirtyDataPath)
 
         val ourCleaningResultWithErrorDetPath = s"$path/deepdive_result_custom_error_detection.csv"
-        println("our hosp: domain on error detection result: f1 50% ")
+        println("our hosp: domain on error detection result: f1 50% ()")
         evaluate(session, ourDataGroundtruthPath, ourCleaningResultWithErrorDetPath, ourDirtyDataPath)
+
+        /**
+          * to produce our results we run the following query:
+          *
+          * SELECT
+          *   l.tid   AS ind,
+          *   l.attr,
+          *   l.value AS val,
+          *   l.expectation
+          * FROM value_label_inference AS l,
+          * (
+          * SELECT
+          * tid,
+          * attr,
+          * max(expectation) AS max_exp
+          * FROM value_label_inference
+          * GROUP BY tid, attr) AS m
+          * WHERE l.tid = m.tid AND l.attr = m.attr AND l.expectation > 0 AND l.expectation = m.max_exp;
+          *
+          *
+          */
+
 
         val distantSupervisedErrorDetection = s"$path/deepdive_result_distant_supervision.csv"
         println("error detection is done by distant supervision with one FD ZIP=>STATE")
         evaluate(session, ourDataGroundtruthPath, distantSupervisedErrorDetection, ourDirtyDataPath)
+
+
+        val distantSupervisedErrorDetection2FDs_gt0 = s"$path/deepdive_result_distant_supervision_2fd_gt0.csv"
+        println("error detection is done by distant supervision with 2 FDs ZIP=>STATE, ZIP=>CITY")
+        evaluate(session, ourDataGroundtruthPath, distantSupervisedErrorDetection2FDs_gt0, ourDirtyDataPath)
+
+        val distantSupervisedErrorDetection3FDs = s"$path/deepdive_result_distant_supervision_3fd.csv"
+        println("error detection is done by distant supervision with 3 FDs:")
+        evaluate(session, ourDataGroundtruthPath, distantSupervisedErrorDetection3FDs, ourDirtyDataPath)
+
 
         //        println("OUR HOSP - WITH PRUNING (domain on error detection result: f1 50%)")
         //        Seq(0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0).foreach(t => {

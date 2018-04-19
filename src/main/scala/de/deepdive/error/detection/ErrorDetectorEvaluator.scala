@@ -57,7 +57,7 @@ object EvaluatorDetectEr {
           */
 
 
-        val errorDetectPath = s"$targetPath/result/error_detection_10.csv"
+        val errorDetectPath = s"$targetPath/result/error_detection_12.csv"
 
         val prediction = "prediction"
         val errDetectionDF: DataFrame = DataSetCreator

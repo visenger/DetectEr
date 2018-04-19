@@ -809,7 +809,10 @@ object DistantSupervisionPredicatesCreator extends ExperimentsCommonConfig {
   private val label = "label"
   val distantSupervisionSchema = Seq(tid, attr, value, label)
 
-  val distantSupervisonResultsPath = s"$pathToData/error-detect-dist-supervision/hosp-error-detection.csv"
+  //val distantSupervisonResultsPath = s"$pathToData/error-detect-dist-supervision/hosp-error-detection.csv"
+
+  val errorDetectionPath = "/Users/visenger/deepdive_notebooks/error_detection"
+  val distantSupervisonResultsPath = s"$errorDetectionPath/result/error_detection_12.csv"
 
   def main(args: Array[String]): Unit = {
 
@@ -831,17 +834,17 @@ object DistantSupervisionPredicatesCreator extends ExperimentsCommonConfig {
         val initValueDF: DataFrame = predictedMatrixDF
           .select(tid, attr, value)
 
-        /*initValueDF
+        initValueDF
           .repartition(1)
           .write
           .option("sep", "\\t")
           .option("header", "false")
-          .csv(s"$pathToData/input/initvalue")*/
+          .csv(s"$pathToData/input/initvalue")
 
 
         val predictedCleanValsDF: DataFrame = predictedMatrixDF
           .select(tid, attr, value)
-          .where(col(label) === "0")
+          .where(col(label) === "0.0")
           .toDF()
 
         val cleanDomainByAttrDF: DataFrame = predictedCleanValsDF
@@ -852,16 +855,16 @@ object DistantSupervisionPredicatesCreator extends ExperimentsCommonConfig {
           .join(cleanDomainByAttrDF, Seq(attr))
           .select(col(tid), col(attr), explode(col("domain")).as("domain"))
 
-        /*domainDF
+        domainDF
           .repartition(1)
           .write
           .option("sep", "\\t")
           .option("header", "false")
-          .csv(s"$pathToData/input/domain")*/
+          .csv(s"$pathToData/input/domain")
 
         val predictedErrorValuesDF: DataFrame = predictedMatrixDF
           .select(tid, attr, value)
-          .where(col(label) === "1")
+          .where(col(label) === "1.0")
           .toDF()
 
         val valueDF: DataFrame = predictedErrorValuesDF
