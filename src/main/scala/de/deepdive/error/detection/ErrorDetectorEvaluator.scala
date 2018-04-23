@@ -33,14 +33,10 @@ object EvaluatorDetectEr {
     SparkLOAN.withSparkSession("Create Predicates") {
       session => {
 
-        //val state = "6" //our encoding
         val finalPredictor = "final-predictor"
 
         val predictedMatrixDF: DataFrame = DataSetCreator
           .createFrame(session, matrixWithPredictionPath, HospPredictedSchema.schema: _*)
-
-        //  predictedMatrixDF.where(col(FullResult.label) === "1.0").show()
-
 
         /**
           *
@@ -57,45 +53,54 @@ object EvaluatorDetectEr {
           */
 
 
-        val errorDetectPath = s"$targetPath/result/error_detection_12.csv"
+        Seq("10", "11", "12", "13", "13_5fd",
+          "13_5fd_no5", "13_6_ext", "13_6_exists",
+          "13_6_exists_3",
+          "14_experiment",
+          "14_experiment_N"
+          ).foreach(i => {
+          val errorDetectPath = s"$targetPath/result/error_detection_$i.csv"
 
-        val prediction = "prediction"
-        val errDetectionDF: DataFrame = DataSetCreator
-          .createFrame(session, errorDetectPath,
-            Seq(FullResult.recid, FullResult.attrnr, FullResult.value, prediction): _*)
+          val prediction = "prediction"
+          val errDetectionDF: DataFrame = DataSetCreator
+            .createFrame(session, errorDetectPath,
+              Seq(FullResult.recid, FullResult.attrnr, FullResult.value, prediction): _*)
 
-        val counts: collection.Map[(Double, Double), Long] = predictedMatrixDF
-          .join(errDetectionDF, Seq(FullResult.recid, FullResult.attrnr))
-          .select(col(prediction), col(FullResult.label))
-          .rdd
-          .map(row => (row.getString(0).toDouble, row.getString(1).toDouble))
-          .countByValue()
+          val counts: collection.Map[(Double, Double), Long] = predictedMatrixDF
+            .join(errDetectionDF, Seq(FullResult.recid, FullResult.attrnr))
+            .select(col(prediction), col(FullResult.label))
+            .rdd
+            .map(row => (row.getString(0).toDouble, row.getString(1).toDouble))
+            .countByValue()
 
-        var truePos: Long = 0
-        var trueNeg: Long = 0
-        var falsePos: Long = 0
-        var falseNeg: Long = 0
+          var truePos: Long = 0
+          var trueNeg: Long = 0
+          var falsePos: Long = 0
+          var falseNeg: Long = 0
 
-        counts.foreach(entry => {
-          val count: Long = entry._2
-          val pair: (Double, Double) = entry._1
-          pair match {
-            //(prediction, label)
-            case (1.0, 1.0) => truePos = count
-            case (1.0, 0.0) => falsePos = count
-            case (0.0, 1.0) => falseNeg = count
-            case (0.0, 0.0) => trueNeg = count
-          }
+          counts.foreach(entry => {
+            val count: Long = entry._2
+            val pair: (Double, Double) = entry._1
+            pair match {
+              //(prediction, label)
+              case (1.0, 1.0) => truePos = count
+              case (1.0, 0.0) => falsePos = count
+              case (0.0, 1.0) => falseNeg = count
+              case (0.0, 0.0) => trueNeg = count
+            }
+          })
+
+          val precision: Double = computePrecision(truePos, falsePos)
+          val totalErrors: Long = truePos + falseNeg
+          val recall: Double = computeRecall(truePos, totalErrors)
+          val f1: Double = computeF1(precision, recall)
+
+          println(s"evaluating: $errorDetectPath")
+          println(s"tp: $truePos, fp: $falsePos, total errors: ${totalErrors}")
+          println(s"Precision: ${NumbersUtil.round(precision, 4)}, Recall: ${NumbersUtil.round(recall, 4)}, F-1: ${NumbersUtil.round(f1, 4)}")
+
+
         })
-
-        val precision: Double = computePrecision(truePos, falsePos)
-        val totalErrors: Long = truePos + falseNeg
-        val recall: Double = computeRecall(truePos, totalErrors)
-        val f1: Double = computeF1(precision, recall)
-
-        println(s"evaluating: $errorDetectPath")
-        println(s"tp: $truePos, fp: $falsePos, total errors: ${totalErrors}")
-        println(s"Precision: ${NumbersUtil.round(precision, 4)}, Recall: ${NumbersUtil.round(recall, 4)}, F-1: ${NumbersUtil.round(f1, 4)}")
 
 
         println()
@@ -109,6 +114,9 @@ object EvaluatorDetectEr {
           .where(predictedMatrixDF(finalPredictor) === "1.0"
             && predictedMatrixDF(FullResult.label) === "0.0")
           .count()
+
+        val totalErrors: Long = predictedMatrixDF
+          .where(predictedMatrixDF(FullResult.label) === "1.0").count()
 
         val precision1: Double = computePrecision(tp1, fp1)
         val recall1: Double = computeRecall(tp1, totalErrors)

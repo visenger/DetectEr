@@ -40,7 +40,7 @@ object Evaluator {
         evaluate(session, ourDataGroundtruthPath, ourCleaningResultPerfectPath, ourDirtyDataPath)
 
         val ourCleaningResultWithErrorDetPath = s"$path/deepdive_result_custom_error_detection.csv"
-        println("our hosp: domain on error detection result: f1 50% ()")
+        println("our hosp: domain on error detection result: f1 50% (error aggregation with stacking)")
         evaluate(session, ourDataGroundtruthPath, ourCleaningResultWithErrorDetPath, ourDirtyDataPath)
 
         /**
@@ -69,14 +69,22 @@ object Evaluator {
         println("error detection is done by distant supervision with one FD ZIP=>STATE")
         evaluate(session, ourDataGroundtruthPath, distantSupervisedErrorDetection, ourDirtyDataPath)
 
-
-        val distantSupervisedErrorDetection2FDs_gt0 = s"$path/deepdive_result_distant_supervision_2fd_gt0.csv"
+                val distantSupervisedErrorDetection2FDs_gt0 = s"$path/deepdive_result_distant_supervision_2fd_gt0.csv"
         println("error detection is done by distant supervision with 2 FDs ZIP=>STATE, ZIP=>CITY")
         evaluate(session, ourDataGroundtruthPath, distantSupervisedErrorDetection2FDs_gt0, ourDirtyDataPath)
 
         val distantSupervisedErrorDetection3FDs = s"$path/deepdive_result_distant_supervision_3fd.csv"
         println("error detection is done by distant supervision with 3 FDs:")
         evaluate(session, ourDataGroundtruthPath, distantSupervisedErrorDetection3FDs, ourDirtyDataPath)
+
+        val distantSupervisedErrorDetection5FDs = s"$path/deepdive_result_distant_supervision_5fd.csv"
+        println("error detection is done by distant supervision with 5 FDs:")
+        evaluate(session, ourDataGroundtruthPath, distantSupervisedErrorDetection5FDs, ourDirtyDataPath)
+
+        val distantSupervisedErrorDetection5FDsExt = s"$path/deepdive_result_distant_supervision_5fd_ext.csv"
+        println("error detection is done by distant supervision with 5 FDs and external dictionary:")
+        evaluate(session, ourDataGroundtruthPath, distantSupervisedErrorDetection5FDsExt, ourDirtyDataPath)
+
 
 
         //        println("OUR HOSP - WITH PRUNING (domain on error detection result: f1 50%)")

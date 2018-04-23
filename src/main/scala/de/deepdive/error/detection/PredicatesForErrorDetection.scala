@@ -58,20 +58,20 @@ object PredicateErrorCreator extends ExperimentsCommonConfig {
 
         //Error(tid, attr, value, error_indicator)
         //error_indicator can be -1 or 1 reflecting the presence of an error (-1: false; 1: true).
-        val error1DF: DataFrame = initValueDF.withColumn("error-indicator", lit(1))
-        val error0DF: DataFrame = initValueDF.withColumn("error-indicator", lit(-1))
+        //val error1DF: DataFrame = initValueDF.withColumn("error-indicator", lit(1))
+        val error0DF: DataFrame = initValueDF.withColumn("error-indicator", lit("\\N"))
 
         val errorCandidateDF: DataFrame = error0DF
-          .union(error1DF)
+          // .union(error1DF)
           .withColumn("label", lit("\\N"))
           .toDF()
 
-        errorCandidateDF
+        /*errorCandidateDF
           .repartition(1)
           .write
           .option("sep", "\\t")
           .option("header", "false")
-          .csv(s"$targetPath/input/error_candidate")
+          .csv(s"$targetPath/input/error_candidate")*/
 
         val errorDF: DataFrame = initValueDF
           .withColumn("label", lit("\\N"))
@@ -98,23 +98,51 @@ object PredicateErrorCreator extends ExperimentsCommonConfig {
           .where(col("isTop10") === "1.0")
           .select(FullResult.recid, FullResult.attrnr, FullResult.value)
 
-        isTop10DF
-          .repartition(1)
-          .write
-          .option("sep", "\\t")
-          .option("header", "false")
-          .csv(s"$targetPath/input/top_ten")
+        //        isTop10DF
+        //          .repartition(1)
+        //          .write
+        //          .option("sep", "\\t")
+        //          .option("header", "false")
+        //          .csv(s"$targetPath/input/top_ten")
 
         val missingValueDF: DataFrame = predictedMatrixDF
           .where(col("missingValue") === "1.0")
           .select(FullResult.recid, FullResult.attrnr, FullResult.value)
 
-        missingValueDF
+        //        missingValueDF
+        //          .repartition(1)
+        //          .write
+        //          .option("sep", "\\t")
+        //          .option("header", "false")
+        //          .csv(s"$targetPath/input/missing_value")
+
+        /**
+          * using external knowledge bases/dictionaries to create predicates
+          *
+          */
+
+        val (zipDF, cityDF, stateDF) = ExternalDictionariesPredicatesCreator
+          .createZipCityStatesPredicates(session, pathToExtDict)
+
+        /*zipDF.repartition(1)
+          .write
+          .option("sep", "\\t")
+          .option("header", "false")
+          .csv(s"$targetPath/input/ext-zip")
+
+        cityDF.repartition(1)
+          .write
+          .option("sep", "\\t")
+          .option("header", "false")
+          .csv(s"$targetPath/input/ext-city")
+
+        stateDF
           .repartition(1)
           .write
           .option("sep", "\\t")
           .option("header", "false")
-          .csv(s"$targetPath/input/missing_value")
+          .csv(s"$targetPath/input/ext-state")*/
+
 
       }
 

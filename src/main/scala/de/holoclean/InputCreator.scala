@@ -84,34 +84,6 @@ object DeepdivePredictedSchema {
   val schema = Seq(tid, attr, value, id, label, category, expectation)
 }
 
-object ZipCodesDictSchema {
-  val attr1 = "Zipcode"
-  val attr2 = "ZipCodeType"
-  val attr3 = "City"
-  val attr4 = "State"
-  val attr5 = "LocationType"
-  val attr6 = "Lat"
-  val attr7 = "Long"
-  val attr8 = "Location"
-  val attr9 = "Decommisioned"
-  val attr10 = "TaxReturnsFiled"
-  val attr11 = "EstimatedPopulation"
-  val attr12 = "TotalWages"
-
-  val schema = Seq(attr1,
-    attr2,
-    attr3,
-    attr4,
-    attr5,
-    attr6,
-    attr7,
-    attr8,
-    attr9,
-    attr10,
-    attr11,
-    attr12)
-}
-
 
 object HolocleanResultCoverter {
   def main(args: Array[String]): Unit = {
@@ -812,7 +784,7 @@ object DistantSupervisionPredicatesCreator extends ExperimentsCommonConfig {
   //val distantSupervisonResultsPath = s"$pathToData/error-detect-dist-supervision/hosp-error-detection.csv"
 
   val errorDetectionPath = "/Users/visenger/deepdive_notebooks/error_detection"
-  val distantSupervisonResultsPath = s"$errorDetectionPath/result/error_detection_12.csv"
+  val distantSupervisonResultsPath = s"$errorDetectionPath/result/error_detection_14_experiment_N.csv"
 
   def main(args: Array[String]): Unit = {
 
