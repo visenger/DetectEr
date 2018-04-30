@@ -1,6 +1,7 @@
 package de.deepdive.error.detection
 
 import com.typesafe.config.ConfigFactory
+import de.evaluation.data.metadata.MetadataCreator
 import de.evaluation.data.schema.{HospSchema, Schema}
 import de.evaluation.f1.FullResult
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
@@ -19,6 +20,10 @@ object PredicateErrorCreator extends ExperimentsCommonConfig {
   val cleanDataPath = config.getString(s"data.$dataset.clean.10k")
   val pathToData = "/Users/visenger/deepdive_notebooks/hosp-cleaning"
   val dirtyDataPath = s"$pathToData/dirty-data/hosp-dirty-1k.csv"
+
+  /* todo: always ensure that the metadata is freshly derived from the dataset*/
+  val metadataPath = "/Users/visenger/deepdive_notebooks/hosp-cleaning/dirty-data/SCDP-1.1-SNAPSHOT.jar2018-04-27T143644_stats"
+
   val matrixWithPredictionPath = s"$pathToData/predicted-data/hosp-1k-predicted-errors.csv"
   val schema: Schema = allSchemasByName.getOrElse(dataset, HospSchema)
 
@@ -84,16 +89,6 @@ object PredicateErrorCreator extends ExperimentsCommonConfig {
         //          .csv(s"$targetPath/input/error")
 
 
-        val inTail: DataFrame = predictedMatrixDF
-          .where(col("inTail") === "1.0")
-          .select(FullResult.recid, FullResult.attrnr, FullResult.value)
-        //        inTail
-        //          .repartition(1)
-        //          .write
-        //          .option("sep", "\\t")
-        //          .option("header", "false")
-        //          .csv(s"$targetPath/input/intail")
-
         val isTop10DF: DataFrame = predictedMatrixDF
           .where(col("isTop10") === "1.0")
           .select(FullResult.recid, FullResult.attrnr, FullResult.value)
@@ -104,6 +99,17 @@ object PredicateErrorCreator extends ExperimentsCommonConfig {
         //          .option("sep", "\\t")
         //          .option("header", "false")
         //          .csv(s"$targetPath/input/top_ten")
+
+        val inTail: DataFrame = predictedMatrixDF
+          .where(col("inTail") === "1.0")
+          .select(FullResult.recid, FullResult.attrnr, FullResult.value)
+        //        inTail
+        //          .repartition(1)
+        //          .write
+        //          .option("sep", "\\t")
+        //          .option("header", "false")
+        //          .csv(s"$targetPath/input/intail")
+
 
         val missingValueDF: DataFrame = predictedMatrixDF
           .where(col("missingValue") === "1.0")
@@ -148,5 +154,65 @@ object PredicateErrorCreator extends ExperimentsCommonConfig {
 
 
     }
+  }
+}
+
+object MetadataPlayground {
+  val metadataPath = "/Users/visenger/deepdive_notebooks/hosp-cleaning/dirty-data/SCDP-1.1-SNAPSHOT.jar2018-04-27T143644_stats"
+
+  def main(args: Array[String]): Unit = {
+    SparkLOAN.withSparkSession("metadata reader") {
+      session => {
+        val creator = MetadataCreator.apply()
+
+        val metadataTop10: DataFrame = creator
+          .extractTop10Values(session, metadataPath)
+        metadataTop10.show()
+
+        val fullMetadataDF: DataFrame = creator.getFullMetadata(session, metadataPath)
+        fullMetadataDF.printSchema()
+
+        /**
+          * root
+          * |-- nulls count: long (nullable = true)
+          * |-- % of nulls: long (nullable = true)
+          * |-- % of distinct vals: long (nullable = true)
+          * |-- top10: array (nullable = true)
+          * |    |-- element: string (containsNull = true)
+          * |-- freqTop10: array (nullable = true)
+          * |    |-- element: long (containsNull = true)
+          * |-- histogram: array (nullable = true)
+          * |    |-- element: string (containsNull = true)
+          * |-- attrName: string (nullable = true)
+          */
+        fullMetadataDF.show()
+
+      }
+    }
+  }
+}
+
+object MismatchedValuesGenerator {
+  val path = "/Users/visenger/deepdive_notebooks/hosp-cleaning/dirty-data/mismatched-from-trifacta/hosp-dirty-1k.csv"
+
+  def main(args: Array[String]): Unit = {
+
+    val prno_mismatched = "prno_mismatched"
+    val zip_mismatched = "zip_mismatched"
+    val phone_mismatched = "phone_mismatched"
+
+    val mismatchedSchema = Seq("oid", "prno", prno_mismatched, "hospitalname",
+      "address", "city", "state", "zip", zip_mismatched,
+      "countryname", "phone", phone_mismatched, "hospitaltype", "hospitalowner",
+      "emergencyservice", "condition", "mc", "measurename", "score", "sample1", "stateavg")
+
+    SparkLOAN.withSparkSession("mismatched") {
+      session => {
+        val mismatchedValsDF: DataFrame = DataSetCreator.createFrame(session, path, mismatchedSchema: _*)
+
+        mismatchedValsDF.show()
+      }
+    }
+
   }
 }

@@ -15,9 +15,9 @@ class InputCreator {
 
 object HospPredictedSchema {
 
-  val attr1 = "missingValue"
-  val attr2 = "isTop10"
-  val attr3 = "inTail"
+  val missingValue = "missingValue"
+  val isTop10 = "isTop10"
+  val inTail = "inTail"
   val attr4 = "String-type"
   val attr5 = "Boolean-type"
   val attr6 = "Zip Code-type"
@@ -43,9 +43,9 @@ object HospPredictedSchema {
   val attr26 = "label"
   val attr27 = "final-predictor"
 
-  val schema = Seq(attr1,
-    attr2,
-    attr3,
+  val schema = Seq(missingValue,
+    isTop10,
+    inTail,
     attr4,
     attr5,
     attr6,
@@ -784,7 +784,7 @@ object DistantSupervisionPredicatesCreator extends ExperimentsCommonConfig {
   //val distantSupervisonResultsPath = s"$pathToData/error-detect-dist-supervision/hosp-error-detection.csv"
 
   val errorDetectionPath = "/Users/visenger/deepdive_notebooks/error_detection"
-  val distantSupervisonResultsPath = s"$errorDetectionPath/result/error_detection_14_experiment_N.csv"
+  val distantSupervisonResultsPath = s"$errorDetectionPath/result/error_detection_17_9fd.csv"
 
   def main(args: Array[String]): Unit = {
 

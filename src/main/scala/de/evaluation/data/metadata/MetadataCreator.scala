@@ -49,7 +49,8 @@ class MetadataCreator {
     val top10TransformedDF = flattenTop10DF
       .select(explode(flattenTop10DF("id")).as("id_flat"), flattenTop10DF("top10_flat"))
 
-    val typeAndTop10DF = top10TransformedDF.withColumn("id", getAttrName(top10TransformedDF("id_flat")))
+    val typeAndTop10DF = top10TransformedDF
+      .withColumn("id", getAttrName(top10TransformedDF("id_flat")))
       .withColumnRenamed("top10_flat", "top10")
       .withColumnRenamed("id", "attrNameMeta")
       .select("attrNameMeta", "top10")
@@ -94,20 +95,7 @@ class MetadataCreator {
 
     metadataDF
 
-    /*
-    *
-    * root
- |-- nulls count: long (nullable = true)
- |-- % of nulls: long (nullable = true)
- |-- % of distinct vals: long (nullable = true)
- |-- top10: array (nullable = true)
- |    |-- element: string (containsNull = true)
- |-- freqTop10: array (nullable = true)
- |    |-- element: long (containsNull = true)
- |-- histogram: array (nullable = true)
- |    |-- element: string (containsNull = true)
- |-- attrName: string (nullable = true)
-    * */
+
   }
 
 }

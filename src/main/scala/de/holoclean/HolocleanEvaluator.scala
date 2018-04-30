@@ -69,7 +69,7 @@ object Evaluator {
         println("error detection is done by distant supervision with one FD ZIP=>STATE")
         evaluate(session, ourDataGroundtruthPath, distantSupervisedErrorDetection, ourDirtyDataPath)
 
-                val distantSupervisedErrorDetection2FDs_gt0 = s"$path/deepdive_result_distant_supervision_2fd_gt0.csv"
+        val distantSupervisedErrorDetection2FDs_gt0 = s"$path/deepdive_result_distant_supervision_2fd_gt0.csv"
         println("error detection is done by distant supervision with 2 FDs ZIP=>STATE, ZIP=>CITY")
         evaluate(session, ourDataGroundtruthPath, distantSupervisedErrorDetection2FDs_gt0, ourDirtyDataPath)
 
@@ -84,6 +84,16 @@ object Evaluator {
         val distantSupervisedErrorDetection5FDsExt = s"$path/deepdive_result_distant_supervision_5fd_ext.csv"
         println("error detection is done by distant supervision with 5 FDs and external dictionary:")
         evaluate(session, ourDataGroundtruthPath, distantSupervisedErrorDetection5FDsExt, ourDirtyDataPath)
+
+        val distantSupervisedErrorDetection7FDs = s"$path/deepdive_result_distant_supervision_7fd.csv"
+        println("error detection is done by distant supervision with 7 FDs and external dictionary:")
+        evaluate(session, ourDataGroundtruthPath, distantSupervisedErrorDetection7FDs, ourDirtyDataPath)
+
+        val distantSupervisedErrorDetection9FDs = s"$path/deepdive_result_distant_supervision_9fd.csv"
+        println("error detection is done by distant supervision with 9 FDs and external dictionary:")
+        evaluate(session, ourDataGroundtruthPath, distantSupervisedErrorDetection9FDs, ourDirtyDataPath)
+
+
 
 
 

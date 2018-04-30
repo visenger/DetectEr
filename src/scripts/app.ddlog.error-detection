@@ -26,6 +26,18 @@ missing_value (
 	value text
 ).
 
+ext_city (
+	city text
+).
+
+ext_state (
+	state text
+).
+
+ext_zip (
+	zip text
+).
+
 error_candidate? (
 	tid bigint,
 	attr int,
@@ -57,6 +69,16 @@ error_candidate(t, a, v, 1)  :-  missing_value(t, a, v).
 error_candidate(t, a, v, -1) :-  top_ten(t, a, v).
 
 error_candidate(t, a, v, 0)  :- initvalue(t, a, v).
+
+#external dictionaries usage:
+
+#state:6, zip:7, city:5
+error_candidate(t, 6, v, -1) :- initvalue(t, 6, v), EXISTS[ext_state(v)].
+
+error_candidate(t, 7, v, -1) :- initvalue(t, 7, v), EXISTS[ext_zip(v)].
+
+error_candidate(t, 5, v, -1) :- initvalue(t, 5, v), EXISTS[ext_city(v)].
+
 
 #FD1: zip -> state
 error_candidate(t1, 6, s1, 1):- initvalue(t1, 7, z1), initvalue(t2, 7, z2), initvalue(t1, 6, s1), initvalue(t2, 6, s2), [t1!=t2, z1=z2, s1!=s2].
@@ -102,11 +124,68 @@ error_candidate(t1, 9, p1, -1):- initvalue(t1, 7, z1), initvalue(t2, 7, z2), ini
 
 error_candidate(t2, 9, p2, -1):- initvalue(t1, 7, z1), initvalue(t2, 7, z2), initvalue(t1, 4, a1), initvalue(t2, 4, a2), initvalue(t1, 9, p1), top_ten(t2, 9, p2), [t1!=t2, z1=z2, a1=a2, p1=p2].
 
-#FD4: prno, mc -> stateavg
+#FD4: city, address -> phone
+# encoding rules: city:5, address:4 -> phone:9
+
+error_candidate(t1, 9, p1, 1):- initvalue(t1, 5, c1), initvalue(t2, 5, c2), initvalue(t1, 4, a1), initvalue(t2, 4, a2), initvalue(t1, 9, p1), initvalue(t2, 9, p2), [t1!=t2, c1=c2, a1=a2, p1!=p2].
+
+error_candidate(t2, 9, p2, 1):- initvalue(t1, 5, c1), initvalue(t2, 5, c2), initvalue(t1, 4, a1), initvalue(t2, 4, a2), initvalue(t1, 9, p1), initvalue(t2, 9, p2), [t1!=t2, c1=c2, a1=a2, p1!=p2].
+
+error_candidate(t1, 9, p1, -1):- initvalue(t1, 5, c1), initvalue(t2, 5, c2), initvalue(t1, 4, a1), initvalue(t2, 4, a2), initvalue(t1, 9, p1), initvalue(t2, 9, p2), [t1!=t2, c1=c2, a1=a2, p1=p2].
+
+error_candidate(t2, 9, p2, -1):- initvalue(t1, 5, c1), initvalue(t2, 5, c2), initvalue(t1, 4, a1), initvalue(t2, 4, a2), initvalue(t1, 9, p1), initvalue(t2, 9, p2), [t1!=t2, c1=c2, a1=a2, p1=p2].
+
+error_candidate(t1, 9, p1, -1):- initvalue(t1, 5, c1), initvalue(t2, 5, c2), initvalue(t1, 4, a1), initvalue(t2, 4, a2), top_ten(t1, 9, p1), initvalue(t2, 9, p2), [t1!=t2, c1=c2, a1=a2, p1=p2].
+
+error_candidate(t2, 9, p2, -1):- initvalue(t1, 5, c1), initvalue(t2, 5, c2), initvalue(t1, 4, a1), initvalue(t2, 4, a2), initvalue(t1, 9, p1), top_ten(t2, 9, p2), [t1!=t2, c1=c2, a1=a2, p1=p2].
+
+
+#FD5: prno, mc -> stateavg
 # encoding rules: prno:2, mc:14 -> stateavg:18
 
+error_candidate(t1, 18, sa1, 1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 14, mc1), initvalue(t2, 14, mc2), initvalue(t1, 18, sa1), initvalue(t2, 18, sa2), [t1!=t2, pn1=pn2, mc1=mc2, sa1!=sa2].
+
+error_candidate(t2, 18, sa2, 1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 14, mc1), initvalue(t2, 14, mc2), initvalue(t1, 18, sa1), initvalue(t2, 18, sa2), [t1!=t2, pn1=pn2, mc1=mc2, sa1!=sa2].
+
+error_candidate(t1, 18, sa1, -1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 14, mc1), initvalue(t2, 14, mc2), initvalue(t1, 18, sa1), initvalue(t2, 18, sa2), [t1!=t2, pn1=pn2, mc1=mc2, sa1=sa2].
+
+error_candidate(t2, 18, sa2, -1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 14, mc1), initvalue(t2, 14, mc2), initvalue(t1, 18, sa1), initvalue(t2, 18, sa2), [t1!=t2, pn1=pn2, mc1=mc2, sa1=sa2].
+
+error_candidate(t1, 18, sa1, -1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 14, mc1), initvalue(t2, 14, mc2), top_ten(t1, 18, sa1), initvalue(t2, 18, sa2), [t1!=t2, pn1=pn2, mc1=mc2, sa1=sa2].
+
+error_candidate(t2, 18, sa2, -1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 14, mc1), initvalue(t2, 14, mc2), initvalue(t1, 18, sa1), top_ten(t2, 18, sa2), [t1!=t2, pn1=pn2, mc1=mc2, sa1=sa2].
 
 
+#FD6: ProviderNumber->mc
+#our encoding ProviderNumber:2->mc:14
+
+error_candidate(t1, 14, mc1, 1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 14, mc1), initvalue(t2, 14, mc2), [t1!=t2, pn1=pn2, mc1!=mc2].
+
+error_candidate(t2, 14, mc2, 1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 14, mc1), initvalue(t2, 14, mc2), [t1!=t2, pn1=pn2, mc1!=mc2].
+
+error_candidate(t1, 14, mc1, -1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 14, mc1), initvalue(t2, 14, mc2), [t1!=t2, pn1=pn2, mc1=mc2].
+
+error_candidate(t2, 14, mc2, -1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 14, mc1), initvalue(t2, 14, mc2), [t1!=t2, pn1=pn2, mc1=mc2].
+
+error_candidate(t1, 14, mc1, -1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), top_ten(t1, 14, mc1), initvalue(t2, 14, mc2), [t1!=t2, pn1=pn2, mc1=mc2].
+
+error_candidate(t2, 14, mc2, -1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 14, mc1), top_ten(t2, 14, mc2), [t1!=t2, pn1=pn2, mc1=mc2].
+
+
+#FD7: ProviderNumber->Stateavg
+#our encoding ProviderNumber:2->Stateavg:18
+
+error_candidate(t1, 18, sa1, 1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 18, sa1), initvalue(t2, 18, sa2), [t1!=t2, pn1=pn2, sa1!=sa2].
+
+error_candidate(t2, 18, sa2, 1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 18, sa1), initvalue(t2, 18, sa2), [t1!=t2, pn1=pn2, sa1!=sa2].
+
+error_candidate(t1, 18, sa1, -1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 18, sa1), initvalue(t2, 18, sa2), [t1!=t2, pn1=pn2, sa1=sa2].
+
+error_candidate(t2, 18, sa2, -1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 18, sa1), initvalue(t2, 18, sa2), [t1!=t2, pn1=pn2, sa1=sa2].
+
+error_candidate(t1, 18, sa1, -1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), top_ten(t1, 18, sa1), initvalue(t2, 18, sa2), [t1!=t2, pn1=pn2, sa1=sa2].
+
+error_candidate(t2, 18, sa2, -1):- initvalue(t1, 2, pn1), initvalue(t2, 2, pn2), initvalue(t1, 18, sa1), top_ten(t2, 18, sa2), [t1!=t2, pn1=pn2, sa1=sa2].
 
 ################# INFERENCE RULES: ################
 @weight(1.0)
@@ -120,4 +199,24 @@ error_candidate(t, a, v, -1) => !error(t, a, v)
 @weight(1.0)
 error_candidate(t, a, v, _) => !error(t, a, v)
                                :- error_label_resolved(t, a, v, l),  initvalue(t, a, v), [l < 0; l=0].
+
+
+###################################################
+#Leave commented
+#THIS FD IS NOT USEFULL FOR THE ERROR DETECTION: Decreasing Precision: 0.1316, Recall: 0.8939, F-1: 0.2294
+#FD_: state, address -> phone
+# encoding rules: state:6, address:4 -> phone:9
+
+#error_candidate(t1, 9, p1, 1):- initvalue(t1, 6, s1), initvalue(t2, 6, s2), initvalue(t1, 4, a1), initvalue(t2, 4, a2), initvalue(t1, 9, p1), initvalue(t2, 9, p2), [t1!=t2, s1=s2, a1=a2, p1!=p2].
+
+#error_candidate(t2, 9, p2, 1):- initvalue(t1, 6, s1), initvalue(t2, 6, s2), initvalue(t1, 4, a1), initvalue(t2, 4, a2), initvalue(t1, 9, p1), initvalue(t2, 9, p2), [t1!=t2, s1=s2, a1=a2, p1!=p2].
+
+#error_candidate(t1, 9, p1, -1):- initvalue(t1, 6, s1), initvalue(t2, 6, s2), initvalue(t1, 4, a1), initvalue(t2, 4, a2), initvalue(t1, 9, p1), initvalue(t2, 9, p2), [t1!=t2, s1=s2, a1=a2, p1=p2].
+
+#error_candidate(t2, 9, p2, -1):- initvalue(t1, 6, s1), initvalue(t2, 6, s2), initvalue(t1, 4, a1), initvalue(t2, 4, a2), initvalue(t1, 9, p1), initvalue(t2, 9, p2), [t1!=t2, s1=s2, a1=a2, p1=p2].
+
+#error_candidate(t1, 9, p1, -1):- initvalue(t1, 6, s1), initvalue(t2, 6, s2), initvalue(t1, 4, a1), initvalue(t2, 4, a2), top_ten(t1, 9, p1), initvalue(t2, 9, p2), [t1!=t2, s1=s2, a1=a2, p1=p2].
+
+#error_candidate(t2, 9, p2, -1):- initvalue(t1, 6, s1), initvalue(t2, 6, s2), initvalue(t1, 4, a1), initvalue(t2, 4, a2), initvalue(t1, 9, p1), top_ten(t2, 9, p2), [t1!=t2, s1=s2, a1=a2, p1=p2].
+
 
