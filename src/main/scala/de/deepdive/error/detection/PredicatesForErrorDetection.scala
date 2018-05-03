@@ -158,7 +158,8 @@ object PredicateErrorCreator extends ExperimentsCommonConfig {
 }
 
 object MetadataPlayground {
-  val metadataPath = "/Users/visenger/deepdive_notebooks/hosp-cleaning/dirty-data/SCDP-1.1-SNAPSHOT.jar2018-04-27T143644_stats"
+  //val metadataPath = "/Users/visenger/deepdive_notebooks/hosp-cleaning/dirty-data/SCDP-1.1-SNAPSHOT.jar2018-04-27T143644_stats"
+  val metadataPath = "/Users/visenger/research/datasets/craft-beers/craft-cans/metadata/SCDP-1.1-SNAPSHOT.jar2018-05-02T110514_stats"
 
   def main(args: Array[String]): Unit = {
     SparkLOAN.withSparkSession("metadata reader") {
@@ -185,7 +186,7 @@ object MetadataPlayground {
           * |    |-- element: string (containsNull = true)
           * |-- attrName: string (nullable = true)
           */
-        fullMetadataDF.show()
+        fullMetadataDF.show(false)
 
       }
     }

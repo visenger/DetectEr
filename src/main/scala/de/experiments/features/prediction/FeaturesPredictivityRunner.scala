@@ -28,8 +28,8 @@ object FeaturesPredictivityRunner extends ExperimentsCommonConfig {
            |
            |running on ${dataset.toUpperCase()}
            |""".stripMargin)
-      //computePredictivityOfFeatures(dataset)
-      computeInformationGainOfFeatures(dataset)
+      computePredictivityOfFeatures(dataset)
+      //computeInformationGainOfFeatures(dataset)
     })
 
 
