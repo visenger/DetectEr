@@ -75,9 +75,9 @@ class Stacking extends ExperimentsCommonConfig {
       .toDF(FullResult.label, featuresCol)
 
     val featuresNumber = getFeaturesNumber(train)
-    // val numClasses = 2
 
     //start:neural networks
+    //    val numClasses = 2
     //    val nextLayer = featuresNumber + 1
     //    val layers = Array[Int](featuresNumber, nextLayer, featuresNumber, numClasses)
     //    val trainer = new MultilayerPerceptronClassifier()
@@ -101,7 +101,9 @@ class Stacking extends ExperimentsCommonConfig {
 
 
     //start: decision tree:
-    val decisionTreeModel: DecisionTreeModel = ModelUtil.getDecisionTreeModels(Seq(trainLabPointRDD), featuresNumber).head
+    val decisionTreeModel: DecisionTreeModel = ModelUtil
+      .getDecisionTreeModels(Seq(trainLabPointRDD), featuresNumber)
+      .head
 
     val predictByDT = udf { features: org.apache.spark.ml.linalg.Vector => {
       val transformedFeatures = org.apache.spark.mllib.linalg.Vectors.dense(features.toArray)
@@ -126,7 +128,6 @@ class Stacking extends ExperimentsCommonConfig {
     //end: decision tree
 
     //start: bayes
-    //val bayesModel = NaiveBayes.train(trainLabPointRDD, lambda = 1.0, modelType = "bernoulli") //initial version
     val bayesModel = NaiveBayes.train(trainLabPointRDD, lambda = 1.0, modelType = "bernoulli")
     val predictByBayes = udf { features: org.apache.spark.ml.linalg.Vector => {
       val transformedFeatures = org.apache.spark.mllib.linalg.Vectors.dense(features.toArray)
@@ -134,7 +135,6 @@ class Stacking extends ExperimentsCommonConfig {
       bayesModel.predict(transformedFeatures)
     }
     }
-
 
     // println(s"2. train feature vector size after dt ${dtPrediction.select(featuresCol).first().getAs[org.apache.spark.ml.linalg.Vector](featuresCol).size}")
     val nbPrediction = dtPrediction.withColumn("nb-prediction", predictByBayes(dtPrediction(featuresCol)))

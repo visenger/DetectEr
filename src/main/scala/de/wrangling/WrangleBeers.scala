@@ -116,11 +116,11 @@ object BeersDirtyMaker {
         val dirtyFinalDF: DataFrame = allOunces.reduce((first, second) => first.union(second)).toDF()
         dirtyFinalDF.show(34)
 
-        dirtyFinalDF
-          .repartition(1)
-          .write
-          .option("header", "true")
-          .csv(s"$path/dirty-beers-and-breweries")
+//        dirtyFinalDF
+//          .repartition(1)
+//          .write
+//          .option("header", "true")
+//          .csv(s"$path/dirty-beers-and-breweries")
 
 
       }
