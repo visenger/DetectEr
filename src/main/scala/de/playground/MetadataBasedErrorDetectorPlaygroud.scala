@@ -4,16 +4,17 @@ import de.evaluation.data.metadata.MetadataCreator
 import de.evaluation.util.SparkLOAN
 import org.apache.spark.sql.DataFrame
 
-object MetadataPlayground {
-  //val metadataPath = "/Users/visenger/deepdive_notebooks/hosp-cleaning/dirty-data/SCDP-1.1-SNAPSHOT.jar2018-04-27T143644_stats"
-  //val metadataPath = "/Users/visenger/research/datasets/craft-beers/craft-cans/metadata/SCDP-1.1-SNAPSHOT.jar2018-05-02T110514_stats"
-  //val metadataPath = "/Users/visenger/research/datasets/craft-beers/craft-cans/metadata/dirtySCDP-1.1-SNAPSHOT.jar2018-05-18T125830_stats"
+/**
+  * prototype to an error detection based on metadata information;
+  */
+class MetadataBasedErrorDetectorPlaygroud {
+
   val metadataPath = "/Users/visenger/research/datasets/craft-beers/craft-cans/metadata/dirty-2-SCDP-1.1-SNAPSHOT.jar2018-05-22T150721_stats"
 
   def main(args: Array[String]): Unit = {
     SparkLOAN.withSparkSession("metadata reader") {
       session => {
-        val creator = MetadataCreator.apply()
+        val creator = MetadataCreator()
 
         val fullMetadataDF: DataFrame = creator.getFullMetadata(session, metadataPath)
         fullMetadataDF.printSchema()
@@ -32,6 +33,7 @@ object MetadataPlayground {
           * |-- attrName: string (nullable = true)
           */
         fullMetadataDF.show(false)
+
 
       }
     }

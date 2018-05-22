@@ -22,8 +22,8 @@ trait AttributesDataType {
   val gender = "Gender"
   val zipType = "Zip Code"
 
-  val dataTypes = Seq(string, integer, decimal, boolean, map, array, ipAddress, urlType, httpCode, date, ssn, phoneNumType, email, creditCard, gender, zipType)
-
+  val dataTypes = Seq(string, integer, decimal, boolean, map, array, ipAddress,
+    urlType, httpCode, date, ssn, phoneNumType, email, creditCard, gender, zipType)
 
 
 }

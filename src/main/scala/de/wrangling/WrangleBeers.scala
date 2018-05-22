@@ -1,6 +1,7 @@
 package de.wrangling
 
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
+import de.util.DatasetFlattener
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 
@@ -63,7 +64,8 @@ object BeersDirtyMaker {
           .withColumnRenamed(tmpCol, city)
         val dirty1DF: DataFrame = dirtyCityDF
           .select("tid", "id", "beer-name", "style", "ounces", "abv", "ibu", "brewery_id", "brewery-name", city, state)
-          .union(remains_clean_1).toDF(beersSchema: _*)
+          .union(remains_clean_1)
+          .toDF(beersSchema: _*)
         dirty1DF.show(345)
 
         val Array(abv_to_dirty, remains_clean_2) = dirty1DF.randomSplit(Array(0.3, 0.7), 456L)
@@ -73,10 +75,16 @@ object BeersDirtyMaker {
           .withColumnRenamed("tmp-abv", "abv")
         val dirty2DF: DataFrame = dirtyAbvDF
           .select("tid", "id", "beer-name", "style", "ounces", "abv", "ibu", "brewery_id", "brewery-name", city, state)
-          .union(remains_clean_2).toDF(beersSchema: _*)
+          .union(remains_clean_2)
+          .toDF(beersSchema: _*)
         dirty2DF.show(567)
 
-        val dirty3DF: DataFrame = dirty2DF.na.fill("N/A", Seq("ibu"))
+        val Array(dirty2aDF, clean2aDF) = dirty2DF.randomSplit(Array(0.2, 0.8), seed = 56L)
+        val dirty3DF: DataFrame = dirty2aDF
+          .na.fill("N/A", Seq("ibu"))
+          .select("tid", "id", "beer-name", "style", "ounces", "abv", "ibu", "brewery_id", "brewery-name", city, state)
+          .union(clean2aDF)
+          .toDF(beersSchema: _*)
         dirty3DF.show(45)
 
         /**
@@ -97,7 +105,8 @@ object BeersDirtyMaker {
           5 -> "oz. Alumi-Tek")
 
 
-        val Array(df1, df2, df3, df4, df5, df6) = dirty3DF.randomSplit(Array(0.43, 0.28, 0.25, 0.07, 0.01, 0.06))
+        val Array(df1, df2, df3, df4, df5, df6, cleanDF) = dirty3DF
+          .randomSplit(Array(0.043, 0.028, 0.025, 0.07, 0.01, 0.06, 0.2), seed = 789L)
 
         val allOunces: Array[DataFrame] = Array(df1, df2, df3, df4, df5, df6)
           .zipWithIndex
@@ -107,24 +116,44 @@ object BeersDirtyMaker {
             val ounce: String = addOunce.getOrElse(idx, "oz.")
             println(s"using ounce: $ounce")
 
-            val withNewOuncesDF: DataFrame = df.withColumn("ounce-tmp", concat_ws(" ", col("ounces"), lit(ounce)))
+            val withNewOuncesDF: DataFrame = df
+              .withColumn("ounce-tmp", concat_ws(" ", col("ounces"), lit(ounce)))
               .drop("ounces")
               .withColumnRenamed("ounce-tmp", "ounces")
               .select("tid", "id", "beer-name", "style", "ounces", "abv", "ibu", "brewery_id", "brewery-name", city, state)
             withNewOuncesDF
           })
-        val dirtyFinalDF: DataFrame = allOunces.reduce((first, second) => first.union(second)).toDF()
-        dirtyFinalDF.show(34)
+        val dirtyFinalDF: DataFrame = allOunces
+          .reduce((first, second) => first.union(second))
+          .union(cleanDF)
+          .toDF(beersSchema: _*)
+        dirtyFinalDF.show(347)
 
-//        dirtyFinalDF
-//          .repartition(1)
-//          .write
-//          .option("header", "true")
-//          .csv(s"$path/dirty-beers-and-breweries")
+        dirtyFinalDF
+          .repartition(1)
+          .write
+          .option("header", "true")
+          .csv(s"$path/dirty-beers-and-breweries-2")
 
 
       }
     }
 
+  }
+}
+
+
+object DatasetFlattenerPlayground {
+  def main(args: Array[String]): Unit = {
+    SparkLOAN.withSparkSession("flatten") {
+      session => {
+        Seq("beers", "flights").foreach(dataset => {
+          DatasetFlattener().onDataset(dataset).flattenDirtyData(session).show()
+          DatasetFlattener().onDataset(dataset).flattenCleanData(session).show()
+          DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session).show()
+
+        })
+      }
+    }
   }
 }

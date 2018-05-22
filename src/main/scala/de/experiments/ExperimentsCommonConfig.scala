@@ -57,21 +57,30 @@ trait ExperimentsCommonConfig extends Serializable {
     "blackoak" -> BlackOakSchema,
     "hosp" -> HospSchema,
     "salaries" -> SalariesSchema,
-    "flights" -> FlightsSchema
+    "flights" -> FlightsSchema,
+    "beers" -> BeersSchema
   )
 
   val allMetadataByName: Map[String, String] = Map(
     "blackoak" -> defaultConfig.getString("metadata.blackoak.path"),
     "hosp" -> defaultConfig.getString("metadata.hosp.path"),
     "salaries" -> defaultConfig.getString("metadata.salaries.path"),
-    "flights" -> defaultConfig.getString("metadata.flights.path")
+    "flights" -> defaultConfig.getString("metadata.flights.path"),
+    "beers" -> defaultConfig.getString("metadata.beers.path")
   )
 
   val allRawData: Map[String, String] = Map(
     "blackoak" -> defaultConfig.getString("data.BlackOak.dirty-data-path"),
     "hosp" -> defaultConfig.getString("data.hosp.dirty.10k"),
     "salaries" -> defaultConfig.getString("data.salaries.dirty"),
-    "flights" -> defaultConfig.getString("data.flights.dirty"))
+    "flights" -> defaultConfig.getString("data.flights.dirty"),
+    "beers" -> defaultConfig.getString("data.beers.dirty")
+  )
+
+  val allCleanData: Map[String, String] = Map(
+    "flights" -> defaultConfig.getString("data.flights.clean"),
+    "beers" -> defaultConfig.getString("data.beers.clean")
+  )
 
   val allTestData: Map[String, String] = Map(
     "blackoak" -> blackoakTestFile,
@@ -128,4 +137,8 @@ trait ExperimentsCommonConfig extends Serializable {
   def getExtName(tool: String) = experimentsConf.getString(s"ext.dictionary.names.$tool")
 
 
+}
+
+case class UnknownPath(placeholder: String) {
+  override def toString: String = placeholder
 }
