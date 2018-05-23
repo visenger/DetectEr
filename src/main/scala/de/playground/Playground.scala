@@ -200,4 +200,12 @@ object RepairPlayground extends App {
   print(endValues)
 }
 
+object RegexPlayground extends App {
+  Seq("12.0 oz.", "12.0", "N/A", "0")
+    .foreach(s => {
+      print(s)
+      println(s.matches("^(0|[1-9]\\d*)?(\\.\\d+)?(?<=\\d)$"))
+    })
+}
+
 

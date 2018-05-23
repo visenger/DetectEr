@@ -1,5 +1,6 @@
 package de.evaluation.data.metadata
 
+import de.model.util.NumbersUtil
 import org.apache.spark.sql.functions.{explode, udf}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -58,6 +59,7 @@ class MetadataCreator {
     typeAndTop10DF
   }
 
+
   def getFullMetadata(session: SparkSession, jsonPath: String): DataFrame = {
     import org.apache.spark.sql.functions._
 
@@ -70,6 +72,15 @@ class MetadataCreator {
         histValues
       }
 
+    }
+
+    def get_probabilities = udf {
+      (freqs: mutable.Seq[Long], numTuples: Double) => {
+        val probs: mutable.Seq[Double] = freqs.map(f => {
+          NumbersUtil.round(f / numTuples, scale = 4)
+        })
+        probs
+      }
     }
 
     def get_name = udf {
@@ -85,12 +96,15 @@ class MetadataCreator {
         jsonDF("statisticMap.Percentage of Nulls.value").as("% of nulls"),
         jsonDF("statisticMap.Percentage of Distinct Values.value").as("% of distinct vals"),
         jsonDF("statisticMap.Top 10 frequent items.value").as("top10"),
-        jsonDF("statisticMap.Frequency Of Top 10 Frequent Items.value").as("freqTop10")
+        jsonDF("statisticMap.Frequency Of Top 10 Frequent Items.value").as("freqTop10"),
+        jsonDF("statisticMap.Number of Tuples.value").as("number of tuples"),
+        jsonDF("statisticMap.Standard Deviation.value").as("standard deviation")
       )
 
     metadataDF = metadataDF
       .withColumn("histogram", create_histogram(col("top10"), col("freqTop10")))
       .withColumn("attrName", get_name(col("column name")))
+      .withColumn("probability of top 10 values", get_probabilities(col("freqTop10"), col("number of tuples")))
       .drop("column name")
 
     metadataDF

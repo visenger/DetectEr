@@ -54,7 +54,7 @@ class DatasetFlattener extends ExperimentsCommonConfig {
       .join(flatDirtyDF, Seq(schema.getRecID, "attrName"))
       .withColumn("diff", flatCleanDF(value) <=> flatDirtyDF(value))
       .withColumn(label, create_label(col("diff")))
-      .select(col(schema.getRecID), col(attrName), flatDirtyDF(value), col(label))
+      .select(col(schema.getRecID), col(attrName), flatDirtyDF(value).as("dirty-value"), flatCleanDF(value).as("clean-value"), col(label))
     diffDF
   }
 
