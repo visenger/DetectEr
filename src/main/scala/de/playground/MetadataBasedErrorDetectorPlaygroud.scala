@@ -3,14 +3,18 @@ package de.playground
 import com.typesafe.config.{Config, ConfigFactory}
 import de.evaluation.data.metadata.MetadataCreator
 import de.evaluation.data.schema.{FlightsSchema, Schema}
-import de.evaluation.f1.FullResult
-import de.evaluation.util.SparkLOAN
+import de.evaluation.data.util.LookupColumns
+import de.evaluation.f1.{Eval, F1, FullResult}
+import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
+import de.model.util.FormatUtil
 import de.util.DatasetFlattener
 import de.util.ErrorNotation._
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{Column, DataFrame}
 
+import scala.collection.JavaConversions._
 import scala.collection.convert.decorateAsScala._
 import scala.collection.mutable
 
@@ -22,6 +26,14 @@ object UDF {
         case true => ERROR
         case false => CLEAN
       }
+  }
+
+  def majority_vote = udf {
+    classifiers: mutable.WrappedArray[Int] => {
+      val totalSum: Int = classifiers.sum
+      val result: Int = if (totalSum >= 0) ERROR else CLEAN
+      result
+    }
   }
 
 }
@@ -199,17 +211,66 @@ object MetadataBasedErrorDetectorPlaygroud extends ExperimentsCommonConfig with 
 
           println(s"the number of tuples violating cardinality constraint: ${allTuplesViolatingCardinality.size}")
 
+          //Error Classifier #6: The column, related to the lookup source, its value is absent in the source -> error, else clean.
+          //for unrelated columns -> 0
 
-          flatWithMetadataDF
-            .withColumn("ec-missing-value", UDF.identify_missing(flatWithMetadataDF("dirty-value").isNull))
-            .withColumn("ec-default-value",
+          //todo: refactoring: extract loading lookup information
+
+          val lookupCols: List[Config] = datasetConfig.getConfigList("lookup.columns").toList
+
+          val lookups: List[LookupColumns] = lookupCols.map(c => LookupColumns(c.getString("name"), c.getString("source")))
+
+          lookups.map(l => {
+            val name: String = l.colName
+            val source: String = l.pathToLookupSource
+
+            val lookupDF: DataFrame = DataSetCreator.createFrame(session, source, Seq(s"lookup-$name"): _*)
+
+            dirtyDF.where(dirtyDF("attrName") === name)
+              .join(lookupDF,
+                upper(trim(dirtyDF(FullResult.value))) === upper(trim(lookupDF(s"lookup-$name"))),
+                "left_outer")
+              .show()
+
+          })
+
+          //gathering matrix with all error classifier results
+          val ec_missing_value = "ec-missing-value"
+          val ec_default_value = "ec-default-value"
+          val ec_top_value = "ec-top-value"
+          val ec_valid_number = "ec-valid-number"
+          val ec_cardinality_vio = "ec-cardinality-vio"
+
+          val allMetadataBasedClassifiers: Seq[Column] = Seq(ec_missing_value,
+            ec_default_value,
+            ec_top_value,
+            ec_valid_number,
+            ec_cardinality_vio).map(col(_))
+
+          val matrixWithECsFromMetadataDF: DataFrame = flatWithMetadataDF
+            .withColumn(ec_missing_value, UDF.identify_missing(flatWithMetadataDF("dirty-value").isNull))
+            .withColumn(ec_default_value,
               identify_default_values(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
-            .withColumn("ec-top-value", is_top_value(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("attrName"), flatWithMetadataDF("top10")))
-            .withColumn("ec-valid-number", is_valid_number(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
-            .withColumn("ec-cardinality-vio",
+            .withColumn(ec_top_value, is_top_value(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("attrName"), flatWithMetadataDF("top10")))
+            .withColumn(ec_valid_number, is_valid_number(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
+            .withColumn(ec_cardinality_vio,
               when(flatWithMetadataDF(schema.getRecID).isin(allTuplesViolatingCardinality: _*), lit(ERROR))
                 .otherwise(lit(DOES_NOT_APPLY)))
-            .where(flatWithMetadataDF("label") === 1).show(false)
+
+
+          //1-st aggregation: majority voting
+
+          val majority_voter = "majority-vote"
+          val evaluationMatrixDF: DataFrame = matrixWithECsFromMetadataDF.withColumn(majority_voter,
+            UDF.majority_vote(array(allMetadataBasedClassifiers: _*)))
+
+          evaluationMatrixDF
+            .where(col("label") === 1).show(false)
+
+          val majorityVoterDF: RDD[(Double, Double)] = FormatUtil
+            .getPredictionAndLabelOnIntegers(evaluationMatrixDF, majority_voter)
+          val eval_majority_voter: Eval = F1.evalPredictionAndLabels(majorityVoterDF)
+          eval_majority_voter.printResult(s"majority voter for $dataset:")
 
 
         })

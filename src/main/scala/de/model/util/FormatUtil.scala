@@ -20,6 +20,14 @@ object FormatUtil {
     })
   }
 
+  def getPredictionAndLabelOnIntegers(dataDF: DataFrame, column: String): RDD[(Double, Double)] = {
+    dataDF.select(FullResult.label, column).rdd.map(row => {
+      val label = row.getInt(0).toDouble
+      val prediction = if (row.getInt(1) == -1) 0.0 else 1.0 // we change the error encoding to correspond to the label values
+      (prediction, label)
+    })
+  }
+
   def getStringPredictionAndLabel(dataDF: DataFrame, column: String): RDD[(Double, Double)] = {
     //dataDF.printSchema()
     dataDF.select(FullResult.label, column).rdd.map(row => {
@@ -142,7 +150,7 @@ object FormatUtil {
       .withColumn(s"${FullResult.label}-tmp", convert_to_double(idsLabelAndTools(FullResult.label)))
       .drop(FullResult.label)
       .withColumnRenamed(s"${FullResult.label}-tmp", FullResult.label)
-     // .select(FullResult.label, Seq(Features.featuresCol, FullResult.recid, FullResult.attrnr, FullResult.value) ++ FullResult.tools: _*)
+      // .select(FullResult.label, Seq(Features.featuresCol, FullResult.recid, FullResult.attrnr, FullResult.value) ++ FullResult.tools: _*)
       .toDF()
     curatedLabelsFeaturesIdsDF
 

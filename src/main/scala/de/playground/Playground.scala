@@ -1,6 +1,7 @@
 package de.playground
 
 import com.typesafe.config.{Config, ConfigFactory}
+import de.evaluation.data.util.LookupColumns
 import de.experiments.features.prediction.CountsTableRow
 import de.model.util.NumbersUtil
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
@@ -206,6 +207,26 @@ object RegexPlayground extends App {
       print(s)
       println(s.matches("^(0|[1-9]\\d*)?(\\.\\d+)?(?<=\\d)$"))
     })
+}
+
+object ConfigPlayground extends App {
+
+  import scala.collection.JavaConversions._
+
+  Seq("beers", "flights").foreach(conf => {
+    val datasetConf: Config = ConfigFactory.load(s"$conf.conf")
+    val size: Int = datasetConf.getConfigList("lookup.columns").size()
+    println(size)
+
+
+    val lookupColumns: List[LookupColumns] = datasetConf
+      .getConfigList("lookup.columns")
+      .toList
+      .map(c => {
+        LookupColumns(c.getString("name"), c.getString("source"))
+      })
+    lookupColumns.foreach(println)
+  })
 }
 
 
