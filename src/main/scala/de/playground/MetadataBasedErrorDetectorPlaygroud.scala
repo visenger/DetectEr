@@ -12,11 +12,11 @@ import de.util.DatasetFlattener
 import de.util.ErrorNotation._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 
 import scala.collection.JavaConversions._
 import scala.collection.convert.decorateAsScala._
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 
 object UDF {
 
@@ -36,6 +36,69 @@ object UDF {
     }
   }
 
+}
+
+class LookupsLoader {
+  private var datasetName: String = ""
+  private var dirtyDF: DataFrame = null
+  private var datasetConfig: Config = null
+  private var schema: Schema = null
+
+  def dataSetName(name: String): this.type = {
+    datasetName = name
+    datasetConfig = ConfigFactory.load(s"$name.conf")
+    this
+  }
+
+  def onSchema(datasetSchema: Schema): this.type = {
+    schema = datasetSchema
+    this
+  }
+
+  def forDirtyDataDF(dirtyDataDF: DataFrame): this.type = {
+    dirtyDF = dirtyDataDF
+    this
+  }
+
+  def getLookupColumns(): Seq[String] = {
+    val lookupCols: List[Config] = datasetConfig.getConfigList("lookup.columns").toList
+    val lookupColumnNames: immutable.Seq[String] = lookupCols.map(_.getString("name")).toSeq
+    lookupColumnNames
+  }
+
+  def load(session: SparkSession): Map[String, Seq[String]] = {
+    val lookupCols: List[Config] = datasetConfig.getConfigList("lookup.columns").toList
+    val lookups: List[LookupColumns] = lookupCols
+      .map(c => LookupColumns(c.getString("name"), c.getString("source")))
+
+    val lookupByAttr: Map[String, Seq[String]] = lookups.map(l => {
+      val name: String = l.colName
+      val source: String = l.pathToLookupSource
+
+      val lookupDF: DataFrame = DataSetCreator.createFrame(session, source, Seq(s"lookup-$name"): _*)
+
+      val lookupWithDirtyDF: DataFrame = dirtyDF.where(dirtyDF("attrName") === name)
+        .join(lookupDF,
+          upper(trim(dirtyDF(FullResult.value))) === upper(trim(lookupDF(s"lookup-$name"))),
+          "left_outer")
+
+      val allIDsNotInLookup: Seq[String] = lookupWithDirtyDF
+        .select(schema.getRecID)
+        .where(isnull(col(s"lookup-$name")))
+        .collect()
+        .map(row => row.getString(0))
+        .toSeq
+      (name, allIDsNotInLookup)
+    }).toMap
+
+    lookupByAttr
+  }
+
+
+}
+
+object LookupsLoader {
+  def apply(): LookupsLoader = new LookupsLoader()
 }
 
 trait ConfigBase {
@@ -214,25 +277,28 @@ object MetadataBasedErrorDetectorPlaygroud extends ExperimentsCommonConfig with 
           //Error Classifier #6: The column, related to the lookup source, its value is absent in the source -> error, else clean.
           //for unrelated columns -> 0
 
-          //todo: refactoring: extract loading lookup information
+          val lookupsLoader: LookupsLoader = LookupsLoader()
+            .dataSetName(dataset)
+            .onSchema(schema)
+            .forDirtyDataDF(dirtyDF)
 
-          val lookupCols: List[Config] = datasetConfig.getConfigList("lookup.columns").toList
+          val lookupCols: Seq[String] = lookupsLoader.getLookupColumns()
+          val emptyLookups: Boolean = lookupCols.isEmpty
 
-          val lookups: List[LookupColumns] = lookupCols.map(c => LookupColumns(c.getString("name"), c.getString("source")))
+          val lookupsByAttr: Map[String, Seq[String]] = lookupsLoader
+            .load(session)
 
-          lookups.map(l => {
-            val name: String = l.colName
-            val source: String = l.pathToLookupSource
+          def is_valid_by_lookup = udf {
+            (attrName: String, recId: String) => {
+              if (emptyLookups || !lookupCols.contains(attrName)) DOES_NOT_APPLY
+              else {
+                if (lookupsByAttr(attrName).contains(recId)) ERROR
+                else CLEAN
 
-            val lookupDF: DataFrame = DataSetCreator.createFrame(session, source, Seq(s"lookup-$name"): _*)
-
-            dirtyDF.where(dirtyDF("attrName") === name)
-              .join(lookupDF,
-                upper(trim(dirtyDF(FullResult.value))) === upper(trim(lookupDF(s"lookup-$name"))),
-                "left_outer")
-              .show()
-
-          })
+              }
+            }
+          }
+          //end: Lookups
 
           //gathering matrix with all error classifier results
           val ec_missing_value = "ec-missing-value"
@@ -240,12 +306,15 @@ object MetadataBasedErrorDetectorPlaygroud extends ExperimentsCommonConfig with 
           val ec_top_value = "ec-top-value"
           val ec_valid_number = "ec-valid-number"
           val ec_cardinality_vio = "ec-cardinality-vio"
+          val ec_lookup = "lookup-attr"
 
           val allMetadataBasedClassifiers: Seq[Column] = Seq(ec_missing_value,
             ec_default_value,
             ec_top_value,
             ec_valid_number,
-            ec_cardinality_vio).map(col(_))
+            ec_cardinality_vio,
+            ec_lookup).map(col(_))
+
 
           val matrixWithECsFromMetadataDF: DataFrame = flatWithMetadataDF
             .withColumn(ec_missing_value, UDF.identify_missing(flatWithMetadataDF("dirty-value").isNull))
@@ -256,6 +325,7 @@ object MetadataBasedErrorDetectorPlaygroud extends ExperimentsCommonConfig with 
             .withColumn(ec_cardinality_vio,
               when(flatWithMetadataDF(schema.getRecID).isin(allTuplesViolatingCardinality: _*), lit(ERROR))
                 .otherwise(lit(DOES_NOT_APPLY)))
+            .withColumn(ec_lookup, is_valid_by_lookup(flatWithMetadataDF("attrName"), flatWithMetadataDF(schema.getRecID)))
 
 
           //1-st aggregation: majority voting
