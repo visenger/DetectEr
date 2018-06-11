@@ -10,6 +10,7 @@ import de.model.util.FormatUtil
 import de.util.DatasetFlattener
 import de.util.ErrorNotation._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution.stat.FrequentItems
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Column, DataFrame}
 
@@ -208,7 +209,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
           //Error Classifier # Spell checker for the text attributes
 
-          //Error Classifier #
+          //Error Classifier # For inter-column dependencies
           /**
             * Deepdive format
             * #FD1: zip -> state
@@ -265,6 +266,8 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             .getPredictionAndLabelOnIntegers(evaluationMatrixDF, majority_voter)
           val eval_majority_voter: Eval = F1.evalPredictionAndLabels(majorityVoterDF)
           eval_majority_voter.printResult(s"majority voter for $dataset:")
+
+
 
 
         })
