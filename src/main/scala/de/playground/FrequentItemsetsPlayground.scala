@@ -2,7 +2,6 @@ package de.playground
 
 import de.evaluation.f1.FullResult
 import de.evaluation.util.SparkLOAN
-import de.model.util.NumbersUtil
 import de.util.DatasetFlattener
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel}
@@ -10,6 +9,7 @@ import org.apache.spark.ml.linalg.SparseVector
 import org.apache.spark.mllib.fpm.AssociationRules
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.sql.DataFrame
+
 
 object FrequentItemsetsPlayground {
 
@@ -66,50 +66,62 @@ object FrequentItemsetsFromDirtyData {
   def main(args: Array[String]): Unit = {
     SparkLOAN.withSparkSession("FrItems") {
       session => {
-        val dataset: String = "beers"
-        //val dirtyDataPath = "/Users/visenger/research/datasets/craft-beers/craft-cans/dirty-beers-and-breweries-2/dirty-beers-and-breweries-2.csv"
-        val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
-        val count: Long = dirtyDF.count()
+        Seq("beers", "flights").foreach(dataset => {
 
-        val aggrDirtyDF: DataFrame = dirtyDF.groupBy("attrName")
-          .agg(collect_list(FullResult.value).as("column-values"))
-        aggrDirtyDF.show()
+          val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
+          val count: Long = dirtyDF.count()
 
-        val countVectorizerModel: CountVectorizerModel = new CountVectorizer()
-          .setInputCol("column-values")
-          .setOutputCol("features")
-          .setVocabSize(count.toInt)
-          .fit(aggrDirtyDF)
+          val aggrDirtyDF: DataFrame = dirtyDF.groupBy("attrName")
+            .agg(collect_list(FullResult.value).as("column-values"))
+          aggrDirtyDF.show()
+
+          val countVectorizerModel: CountVectorizerModel = new CountVectorizer()
+            .setInputCol("column-values")
+            .setOutputCol("features")
+            .setVocabSize(count.toInt)
+            .fit(aggrDirtyDF)
+
+          val frequentValsDF: DataFrame = countVectorizerModel.transform(aggrDirtyDF)
+
+          frequentValsDF.printSchema()
+          frequentValsDF.select("attrName", "features").show()
+
+          val vocabulary: Array[String] = countVectorizerModel.vocabulary
+          println(s"size of vocabulary: ${vocabulary.length}")
+          val indexToValsDictionary: Map[Int, String] = vocabulary.zipWithIndex.map(_.swap).toMap
+
+          def extract_counts = udf {
+            features: org.apache.spark.ml.linalg.Vector => {
+
+              val sparse: SparseVector = features.toSparse
+              val totalVals: Int = sparse.size
+              val indices: Array[Int] = sparse.indices
+              val values: Array[Double] = sparse.values
+              val tuples: Seq[(String, Int)] = indices.zip(values)
+                // .filter(_._2 > 1.0)
+                .sortWith(_._2 > _._2)
+                // .map(v => (indexToValsDictionary(v._1), NumbersUtil.round(v._2 / totalVals, 4)))
+                .map(v => (indexToValsDictionary(v._1), v._2.toInt))
+                .toSeq
 
 
-        val frequentValsDF: DataFrame = countVectorizerModel.transform(aggrDirtyDF)
+              //            val sortedTuples: mutable.LinkedHashMap[String, Double] =
+              //              mutable.LinkedHashMap(tuples.toSeq.sortWith(_._2 > _._2): _*)
 
-        frequentValsDF.printSchema()
-        frequentValsDF.select("attrName", "features").show(false)
-
-        val vocabulary: Array[String] = countVectorizerModel.vocabulary
-        println(s"size of vocabulary: ${vocabulary.length}")
-        val indexToValsDictionary: Map[Int, String] = vocabulary.zipWithIndex.map(_.swap).toMap
-
-        val extract_counts = udf {
-          features: org.apache.spark.ml.linalg.Vector => {
-
-            val sparse: SparseVector = features.toSparse
-            val totalVals: Int = sparse.size
-            val indices: Array[Int] = sparse.indices
-            val values: Array[Double] = sparse.values
-            val probOfOneElement: Double = 1.0/totalVals
-            val tuples: Map[String, Double] = indices.zip(values)
-              .map(v => (indexToValsDictionary(v._1), NumbersUtil.round(v._2 / totalVals, 4)))
-              .toMap
-            tuples
+              tuples
+            }
           }
-        }
 
-        frequentValsDF
-          .withColumn("new-features", extract_counts(frequentValsDF("features")))
-          .select("attrName", "new-features")
-          .show(false)
+          val withNewFeatures: DataFrame = frequentValsDF
+            .withColumn("new-features", extract_counts(frequentValsDF("features")))
+            .select("attrName", "new-features")
+
+          withNewFeatures
+            .show()
+          withNewFeatures.printSchema()
+
+
+        })
 
 
       }

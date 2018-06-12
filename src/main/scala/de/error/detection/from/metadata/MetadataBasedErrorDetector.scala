@@ -10,9 +10,8 @@ import de.model.util.FormatUtil
 import de.util.DatasetFlattener
 import de.util.ErrorNotation._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.execution.stat.FrequentItems
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.{Column, DataFrame, Row}
 
 import scala.collection.convert.decorateAsScala._
 import scala.collection.mutable
@@ -79,16 +78,15 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
     SparkLOAN.withSparkSession("metadata reader") {
       session => {
 
-        Seq("flights", "beers").foreach(dataset => {
+        Seq("beers", "flights").foreach(dataset => {
           println(s"processing $dataset.....")
 
           val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
           val creator = MetadataCreator()
 
-          val fullMetadataDF: DataFrame = creator.getFullMetadata(session, metadataPath)
-          fullMetadataDF.show(false)
           val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
-
+          val fullMetadataDF: DataFrame = creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
+          fullMetadataDF.show()
 
           val flatWithLabelDF: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
 
@@ -204,6 +202,26 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           //end: Lookups
 
 
+          //Error Classifier # values with low probabilities are suspicious
+
+          def is_value_with_low_counts = udf {
+            (numOfTuples: Long, columnDistinctVals: Int, value: String, valuesWithCounts: Seq[Row]) => {
+
+              var result = DOES_NOT_APPLY
+              //todo: ValuesWithCounts are not optimal for flights
+              if (numOfTuples == columnDistinctVals) result = DOES_NOT_APPLY
+              else {
+                val first: String = valuesWithCounts.head.getString(0)
+                //todo: FINISH
+
+              }
+
+              result
+
+            }
+          }
+
+
           //Error Classifier # Supported data types
           //https://docs.trifacta.com/display/PE/Supported+Data+Types
 
@@ -229,7 +247,8 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           val ec_top_value = "ec-top-value"
           val ec_valid_number = "ec-valid-number"
           val ec_cardinality_vio = "ec-cardinality-vio"
-          val ec_lookup = "lookup-attr"
+          val ec_lookup = "ec-lookup-attr"
+          val ec_low_counts = "ec-low-counts-suspicious"
 
           val allMetadataBasedClassifiers: Seq[Column] = Seq(
             ec_missing_value,
@@ -237,9 +256,10 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             ec_top_value,
             ec_valid_number,
             ec_cardinality_vio,
-            ec_lookup)
+            ec_lookup /*,
+            ec_low_counts*/
+          )
             .map(col(_))
-
 
           val matrixWithECsFromMetadataDF: DataFrame = flatWithMetadataDF
             .withColumn(ec_missing_value, UDF.identify_missing(flatWithMetadataDF("dirty-value").isNull))
@@ -251,6 +271,11 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
               when(flatWithMetadataDF(schema.getRecID).isin(allTuplesViolatingCardinality: _*), lit(ERROR))
                 .otherwise(lit(DOES_NOT_APPLY)))
             .withColumn(ec_lookup, is_valid_by_lookup(flatWithMetadataDF("attrName"), flatWithMetadataDF(schema.getRecID)))
+          //            .withColumn(ec_low_counts,
+          //              is_value_with_low_counts(flatWithMetadataDF("number of tuples"),
+          //                flatWithMetadataDF("distinct-vals-count"),
+          //                flatWithMetadataDF("dirty-value"),
+          //                flatWithMetadataDF("values-with-counts")))
 
 
           //1-st aggregation: majority voting
@@ -260,14 +285,12 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             UDF.majority_vote(array(allMetadataBasedClassifiers: _*)))
 
           evaluationMatrixDF
-            .where(col("label") === 1).show(false)
+            .where(col("label") === 1).show()
 
           val majorityVoterDF: RDD[(Double, Double)] = FormatUtil
             .getPredictionAndLabelOnIntegers(evaluationMatrixDF, majority_voter)
           val eval_majority_voter: Eval = F1.evalPredictionAndLabels(majorityVoterDF)
           eval_majority_voter.printResult(s"majority voter for $dataset:")
-
-
 
 
         })

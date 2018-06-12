@@ -42,8 +42,16 @@ object F1 {
   }
 
   def evalPredictionAndLabels(predictionAndLabels: RDD[(Double, Double)]): Eval = {
+    println("entering approx evaluation")
+
+    //    val outcome: Map[(Double, Double), BoundedDouble] = predictionAndLabels.countByValueApprox(1000,0.95).getFinalValue()
+    //    outcome.foreach(println)
+    //    outcome.map(element => element._2.mean)
+    //    println("finished .countByValueApprox")
 
     val outcomeCounts: Map[(Double, Double), Long] = predictionAndLabels.countByValue()
+    outcomeCounts.foreach(println)
+    println("finished .countByValue()")
 
     var tp = 0.0
     var fn = 0.0
@@ -70,7 +78,7 @@ object F1 {
     val accuracy = (tp + tn) / totalData.toDouble
     //    println(s"Accuracy: $accuracy")
     val precision = tp / (tp + fp).toDouble
-    //    println(s"Precision: $precision")
+    println(s"Precision: $precision")
 
     val recall = tp / (tp + fn).toDouble
     //    println(s"Recall: $recall")
@@ -85,8 +93,6 @@ object F1 {
       round(precision, 4), round(recall, 4), round(F1, 4), s"accuracy: ${round(accuracy, 4)}")
     Eval(testData.precision, testData.recall, testData.f1, testData.info)
   }
-
-
 
 
   def evaluate(resultDF: DataFrame, model: Map[String, Double], activatedTools: Seq[String]): Eval = {

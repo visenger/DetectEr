@@ -1,7 +1,10 @@
 package de.evaluation.data.metadata
 
+import de.evaluation.f1.FullResult
 import de.model.util.NumbersUtil
-import org.apache.spark.sql.functions.{explode, udf}
+import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel}
+import org.apache.spark.ml.linalg.SparseVector
+import org.apache.spark.sql.functions.{collect_list, explode, udf}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import scala.collection.mutable
@@ -110,6 +113,75 @@ class MetadataCreator {
     metadataDF
 
 
+  }
+
+  def getMetadataWithCounts(session: SparkSession, jsonPath: String, dirtyDF: DataFrame): DataFrame = {
+    val metadata: DataFrame = getFullMetadata(session, jsonPath)
+    val valuesWithCounts: DataFrame = collectValuesWithCounts(dirtyDF)
+
+    val metadataWithCounts: DataFrame = metadata.join(valuesWithCounts, Seq("attrName"))
+    metadataWithCounts
+  }
+
+  private def collectValuesWithCounts(dirtyDF: DataFrame): DataFrame = {
+    val count: Long = dirtyDF.count()
+
+    val aggrDirtyDF: DataFrame = dirtyDF.groupBy("attrName")
+      .agg(collect_list(FullResult.value).as("column-values"))
+
+    val countVectorizerModel: CountVectorizerModel = new CountVectorizer()
+      .setInputCol("column-values")
+      .setOutputCol("features")
+      .setVocabSize(count.toInt)
+      .fit(aggrDirtyDF)
+
+    val frequentValsDF: DataFrame = countVectorizerModel.transform(aggrDirtyDF)
+
+    val vocabulary: Array[String] = countVectorizerModel.vocabulary
+    val indexToValsDictionary: Map[Int, String] = vocabulary.zipWithIndex.map(_.swap).toMap
+
+    def extract_counts = udf {
+      features: org.apache.spark.ml.linalg.Vector => {
+
+        val sparse: SparseVector = features.toSparse
+        //val totalVals: Int = sparse.size
+        val indices: Array[Int] = sparse.indices
+        val values: Array[Double] = sparse.values
+        val tuples: Seq[(String, Int)] = indices.zip(values)
+          // .filter(_._2 > 1.0)
+          .sortWith(_._2 > _._2)
+          // .map(v => (indexToValsDictionary(v._1), NumbersUtil.round(v._2 / totalVals, 4)))
+          .map(v => (indexToValsDictionary(v._1), v._2.toInt))
+          .toSeq
+
+        tuples
+      }
+    }
+
+    def extract_total_number_of_vals = udf {
+      features: org.apache.spark.ml.linalg.Vector => {
+        val sparse: SparseVector = features.toSparse
+        val countOfValues: Int = sparse.indices.length
+        countOfValues
+      }
+    }
+
+    val valuesWithCounts = "values-with-counts"
+    val distinctValsCount = "distinct-vals-count"
+    val withNewFeatures: DataFrame = frequentValsDF
+      .withColumn(valuesWithCounts, extract_counts(frequentValsDF("features")))
+      .withColumn(distinctValsCount, extract_total_number_of_vals(frequentValsDF("features")))
+      .select("attrName", distinctValsCount, valuesWithCounts)
+
+    /** The output:
+      * root
+      * |-- attrName: string (nullable = true)
+      * |-- new-features: array (nullable = true)
+      * |    |-- element: struct (containsNull = true)
+      * |    |    |-- _1: string (nullable = true)
+      * |    |    |-- _2: integer (nullable = false)
+      */
+    withNewFeatures
   }
 
 }
