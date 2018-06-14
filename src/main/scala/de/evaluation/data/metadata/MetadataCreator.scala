@@ -154,7 +154,7 @@ class MetadataCreator {
           .map(v => (indexToValsDictionary(v._1), v._2.toInt))
           .toSeq
 
-        tuples
+        tuples.toMap
       }
     }
 

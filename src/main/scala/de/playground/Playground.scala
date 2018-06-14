@@ -117,7 +117,7 @@ object SparkPlayground {
       (0, "MX"),
       (0, "CN"),
       (1, "EE")).toDF("x", "y")
-    data.show()
+    //data.show()
 
     val cooccurrDF: DataFrame = data
       .groupBy(col("x"), col("y"))
@@ -130,6 +130,7 @@ object SparkPlayground {
     val countsDF: DataFrame = cooccurrDF
       .withColumn("count-x", sum("count-x-y") over windowX)
       .withColumn("count-y", sum("count-x-y") over windowY)
+      .withColumn("list", collect_list("y") over windowX)
     countsDF.show()
 
     session.stop();

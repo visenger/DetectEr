@@ -5,6 +5,7 @@ import de.model.logistic.regression.{LinearFunction, TestData}
 import de.model.naive.bayes.BernoulliNaiveBayes
 import de.model.util.NumbersUtil
 import de.model.util.NumbersUtil.round
+import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 
@@ -41,13 +42,53 @@ object F1 {
     eval
   }
 
-  def evalPredictionAndLabels(predictionAndLabels: RDD[(Double, Double)]): Eval = {
-    println("entering approx evaluation")
 
-    //    val outcome: Map[(Double, Double), BoundedDouble] = predictionAndLabels.countByValueApprox(1000,0.95).getFinalValue()
-    //    outcome.foreach(println)
-    //    outcome.map(element => element._2.mean)
-    //    println("finished .countByValueApprox")
+  def evalPredictionAndLabels_TMP(predictionAndLabels: DataFrame): Eval = {
+    val predictionCol = "prediction"
+    val labelCol = "label"
+
+    val counts: DataFrame = predictionAndLabels
+      .groupBy(predictionAndLabels(predictionCol), predictionAndLabels(labelCol))
+      .count().as("count")
+      .toDF()
+      .cache()
+
+    counts.show()
+
+
+    val tp = counts.select("count").where(counts(predictionCol) === 1.0 && counts(labelCol) === 1.0).head().getLong(0).toDouble
+    val fn = counts.select("count").where(counts(predictionCol) === 0.0 && counts(labelCol) === 1.0).head().getLong(0).toDouble
+    val tn = counts.select("count").where(counts(predictionCol) === 0.0 && counts(labelCol) === 0.0).head().getLong(0).toDouble
+    val fp = counts.select("count").where(counts(predictionCol) === 1.0 && counts(labelCol) === 0.0).head().getLong(0).toDouble
+
+
+    val totalData = predictionAndLabels.count()
+
+    val accuracy = (tp + tn) / totalData.toDouble
+    //    println(s"Accuracy: $accuracy")
+    val precision = tp / (tp + fp).toDouble
+    //println(s"Precision: $precision")
+
+    val recall = tp / (tp + fn).toDouble
+    //    println(s"Recall: $recall")
+
+    val F1 = 2 * precision * recall / (precision + recall)
+    //    println(s"F-1 Score: $F1")
+
+    val wrongPredictions: Double = counts.select("count").where(counts(predictionCol) =!= counts(labelCol)).head().getLong(0).toDouble
+
+    val testData = TestData(totalData, wrongPredictions.toLong, round(accuracy, 4),
+      round(precision, 4), round(recall, 4), round(F1, 4), s"accuracy: ${round(accuracy, 4)}")
+    Eval(testData.precision, testData.recall, testData.f1, testData.info)
+  }
+
+  def evalPredictionAndLabels(predictionAndLabels: RDD[(Double, Double)]): Eval = {
+
+    println("started .countByValueApprox")
+    val outcome: Map[(Double, Double), BoundedDouble] = predictionAndLabels.countByValueApprox(500, 0.85).getFinalValue()
+    outcome.foreach(println)
+    outcome.map(element => element._2.mean)
+    println("finished .countByValueApprox")
 
     val outcomeCounts: Map[(Double, Double), Long] = predictionAndLabels.countByValue()
     outcomeCounts.foreach(println)

@@ -5,7 +5,9 @@ import org.apache.spark.ml.linalg
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.DoubleType
 
 /**
   * Created by visenger on 20/03/17.
@@ -20,12 +22,23 @@ object FormatUtil {
     })
   }
 
-  def getPredictionAndLabelOnIntegers(dataDF: DataFrame, column: String): RDD[(Double, Double)] = {
-    dataDF.select(FullResult.label, column).rdd.map(row => {
-      val label = row.getInt(0).toDouble
-      val prediction = if (row.getInt(1) == -1) 0.0 else 1.0 // we change the error encoding to correspond to the label values
-      (prediction, label)
-    })
+  def getPredictionAndLabelOnIntegers(dataDF: DataFrame, column: String): DataFrame = {
+    val convertedDF: DataFrame = dataDF.select(FullResult.label, column)
+      .withColumn("label-tmp", dataDF(FullResult.label).cast(DoubleType))
+      .withColumn(s"$column-tmp",
+        when(dataDF(column) === -1, lit(0.0).cast(DoubleType)).otherwise(lit(1.0).cast(DoubleType)))
+      .drop(dataDF(FullResult.label))
+      .drop(dataDF(column))
+      .withColumnRenamed("label-tmp", FullResult.label)
+      .withColumnRenamed(s"$column-tmp", "prediction")
+
+    convertedDF.select("prediction", FullResult.label).toDF("prediction", "label")
+
+//        dataDF.select(FullResult.label, column).rdd.map(row => {
+//          val label = row.getInt(0).toDouble
+//          val prediction = if (row.getInt(1) == -1) 0.0 else 1.0 // we change the error encoding to correspond to the label values
+//          (prediction, label)
+//        })
   }
 
   def getStringPredictionAndLabel(dataDF: DataFrame, column: String): RDD[(Double, Double)] = {
