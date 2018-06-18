@@ -6,8 +6,8 @@ import de.util.DatasetFlattener
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel}
 import org.apache.spark.ml.linalg.SparseVector
-import org.apache.spark.mllib.fpm.AssociationRules
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
+import org.apache.spark.mllib.fpm.{AssociationRules, PrefixSpan}
 import org.apache.spark.sql.DataFrame
 
 
@@ -26,13 +26,45 @@ object FrequentItemsetsPlayground {
         ))
 
         val ar = new AssociationRules()
-          .setMinConfidence(0.8)
+          .setMinConfidence(0.5)
         val results = ar.run(freqItemsets)
 
-        results.collect().foreach { rule =>
+        results.collect().foreach { rule: AssociationRules.Rule[String] =>
           println(s"[${rule.antecedent.mkString(",")}=>${rule.consequent.mkString(",")} ]" +
             s" ${rule.confidence}")
         }
+
+        /**
+          * input:
+          * <(12)3>
+          * <1(32)(12)>
+          * <(12)5>
+          * <6>
+          *
+          * output:
+          * [[2]], 3
+          * [[3]], 2
+          * [[1]], 3
+          * [[2, 1]], 3
+          * [[1], [3]], 2
+          */
+
+        val sequences = sc.parallelize(Seq(
+          Array(Array(1, 2), Array(3)),
+          Array(Array(1), Array(3, 2), Array(1, 2)),
+          Array(Array(1, 2), Array(5)),
+          Array(Array(6))
+        ), 2).cache()
+        val prefixSpan = new PrefixSpan()
+          .setMinSupport(0.5)
+          .setMaxPatternLength(5)
+        val model = prefixSpan.run(sequences)
+        model.freqSequences.collect().foreach { freqSequence =>
+          println(
+            s"${freqSequence.sequence.map(_.mkString("[", ", ", "]")).mkString("[", ", ", "]")}," +
+              s" ${freqSequence.freq}")
+        }
+
 
         val df = session.createDataFrame(Seq(
           (0, Array("a", "b", "c")),

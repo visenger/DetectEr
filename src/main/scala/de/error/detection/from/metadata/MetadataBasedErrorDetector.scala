@@ -77,7 +77,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
     SparkLOAN.withSparkSession("metadata reader") {
       session => {
 
-        Seq("beers", "flights").foreach(dataset => {
+        Seq("blackoak", "beers", "flights").foreach(dataset => {
           println(s"processing $dataset.....")
 
           val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
@@ -209,14 +209,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
               var result = DOES_NOT_APPLY
               //todo: ValuesWithCounts are not optimal for flights
-              //the following code takes too long
-              /**
-                * val counts: DataFrame = predictionAndLabels
-                * .groupBy(predictionAndLabels(predictionCol), predictionAndLabels(labelCol))
-                * .count().as("count")
-                * .toDF()
-                * .cache()
-                */
+
               if (numOfTuples == columnDistinctVals) result = DOES_NOT_APPLY
               else {
                 if (valuesWithCounts.contains(value)) {

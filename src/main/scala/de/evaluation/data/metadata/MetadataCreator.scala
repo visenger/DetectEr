@@ -100,8 +100,8 @@ class MetadataCreator {
         jsonDF("statisticMap.Percentage of Distinct Values.value").as("% of distinct vals"),
         jsonDF("statisticMap.Top 10 frequent items.value").as("top10"),
         jsonDF("statisticMap.Frequency Of Top 10 Frequent Items.value").as("freqTop10"),
-        jsonDF("statisticMap.Number of Tuples.value").as("number of tuples"),
-        jsonDF("statisticMap.Standard Deviation.value").as("standard deviation")
+        jsonDF("statisticMap.Number of Tuples.value").as("number of tuples")
+        //jsonDF("statisticMap.Standard Deviation.value").as("standard deviation")
       )
 
     metadataDF = metadataDF
@@ -128,6 +128,34 @@ class MetadataCreator {
 
     val aggrDirtyDF: DataFrame = dirtyDF.groupBy("attrName")
       .agg(collect_list(FullResult.value).as("column-values"))
+
+    def compute_pattern_length = udf {
+      columnValues: mutable.Seq[String] => {
+        columnValues.map(value => value.length)
+      }
+    }
+
+    def compute_pattern_min = udf {
+      columnValues: mutable.Seq[String] => {
+
+        val set: Set[String] = columnValues.toSet
+        set.map(value => value.length).min
+      }
+    }
+
+    def compute_pattern_max = udf {
+      columnValues: mutable.Seq[String] => {
+        val set: Set[String] = columnValues.toSet
+        set.map(value => value.length).max
+      }
+    }
+
+    val patternStatisticsDF: DataFrame = aggrDirtyDF
+      .withColumn("pattern-length", compute_pattern_length(aggrDirtyDF("column-values")))
+      .withColumn("pattern-length-min", compute_pattern_min(aggrDirtyDF("column-values")))
+      .withColumn("pattern-length-max", compute_pattern_max(aggrDirtyDF("column-values")))
+      .drop("column-values")
+
 
     val countVectorizerModel: CountVectorizerModel = new CountVectorizer()
       .setInputCol("column-values")
@@ -173,15 +201,10 @@ class MetadataCreator {
       .withColumn(distinctValsCount, extract_total_number_of_vals(frequentValsDF("features")))
       .select("attrName", distinctValsCount, valuesWithCounts)
 
-    /** The output:
-      * root
-      * |-- attrName: string (nullable = true)
-      * |-- new-features: array (nullable = true)
-      * |    |-- element: struct (containsNull = true)
-      * |    |    |-- _1: string (nullable = true)
-      * |    |    |-- _2: integer (nullable = false)
-      */
-    withNewFeatures
+    val newFeaturesWithPatternStatsDF: DataFrame = withNewFeatures
+      .join(patternStatisticsDF, Seq("attrName"))
+
+    newFeaturesWithPatternStatsDF
   }
 
 }

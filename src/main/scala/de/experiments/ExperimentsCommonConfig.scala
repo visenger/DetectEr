@@ -70,7 +70,8 @@ trait ExperimentsCommonConfig extends Serializable {
   )
 
   val allRawData: Map[String, String] = Map(
-    "blackoak" -> defaultConfig.getString("data.BlackOak.dirty-data-path"),
+    "blackoak" -> defaultConfig.getString("data.blackoak.dirty"),
+    //"blackoak" -> defaultConfig.getString("data.BlackOak.dirty-data-path"),
     "hosp" -> defaultConfig.getString("data.hosp.dirty.10k"),
     "salaries" -> defaultConfig.getString("data.salaries.dirty"),
     "flights" -> defaultConfig.getString("data.flights.dirty"),
@@ -78,6 +79,7 @@ trait ExperimentsCommonConfig extends Serializable {
   )
 
   val allCleanData: Map[String, String] = Map(
+    "blackoak" -> defaultConfig.getString("data.blackoak.clean"),
     "flights" -> defaultConfig.getString("data.flights.clean"),
     "beers" -> defaultConfig.getString("data.beers.clean")
   )

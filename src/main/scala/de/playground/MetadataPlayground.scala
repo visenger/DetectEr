@@ -2,6 +2,8 @@ package de.playground
 
 import de.evaluation.data.metadata.MetadataCreator
 import de.evaluation.util.SparkLOAN
+import de.experiments.ExperimentsCommonConfig
+import de.util.DatasetFlattener
 import org.apache.spark.sql.DataFrame
 
 object MetadataPlayground {
@@ -32,6 +34,31 @@ object MetadataPlayground {
           * |-- attrName: string (nullable = true)
           */
         fullMetadataDF.show(false)
+
+      }
+    }
+  }
+}
+
+object AddressPlayground extends ExperimentsCommonConfig {
+  def main(args: Array[String]): Unit = {
+    SparkLOAN.withSparkSession("plgrd") {
+      session => {
+        val dataset = "blackoak"
+        println(s"playground data: $dataset.....")
+
+        val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
+        val creator = MetadataCreator()
+
+        val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
+        val fullMetadataDF: DataFrame = creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
+        fullMetadataDF.show()
+
+        val flatWithLabelDF: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
+
+        val flatWithMetadataDF: DataFrame = flatWithLabelDF.join(fullMetadataDF, Seq("attrName"))
+
+        flatWithMetadataDF.show()
 
       }
     }
