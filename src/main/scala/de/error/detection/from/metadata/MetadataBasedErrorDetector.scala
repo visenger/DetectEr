@@ -35,7 +35,7 @@ object UDF {
 
   def min_1 = udf {
     classifiers: mutable.WrappedArray[Int] => {
-      val result: Int = if (classifiers.contains(-1)) ERROR else CLEAN
+      val result: Int = if (classifiers.contains(ERROR)) ERROR else CLEAN
       result
     }
   }

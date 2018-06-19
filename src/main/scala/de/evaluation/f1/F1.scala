@@ -56,10 +56,14 @@ object F1 {
     counts.show()
 
 
-    val tp = counts.select("count").where(counts(predictionCol) === 1.0 && counts(labelCol) === 1.0).head().getLong(0).toDouble
-    val fn = counts.select("count").where(counts(predictionCol) === 0.0 && counts(labelCol) === 1.0).head().getLong(0).toDouble
-    val tn = counts.select("count").where(counts(predictionCol) === 0.0 && counts(labelCol) === 0.0).head().getLong(0).toDouble
-    val fp = counts.select("count").where(counts(predictionCol) === 1.0 && counts(labelCol) === 0.0).head().getLong(0).toDouble
+    val tpDF: Dataset[Row] = counts.select("count").where(counts(predictionCol) === 1.0 && counts(labelCol) === 1.0)
+    val tp = if (containsElements(tpDF)) getHeadNumber(tpDF) else 0.0
+    val fnDF: Dataset[Row] = counts.select("count").where(counts(predictionCol) === 0.0 && counts(labelCol) === 1.0)
+    val fn = if (containsElements(fnDF)) getHeadNumber(fnDF) else 0.0
+    val tnDF: Dataset[Row] = counts.select("count").where(counts(predictionCol) === 0.0 && counts(labelCol) === 0.0)
+    val tn = if (containsElements(tnDF)) getHeadNumber(tnDF) else 0.0
+    val fpDF: Dataset[Row] = counts.select("count").where(counts(predictionCol) === 1.0 && counts(labelCol) === 0.0)
+    val fp = if (containsElements(fpDF)) getHeadNumber(fpDF) else 0.0
 
 
     val totalData = predictionAndLabels.count()
@@ -75,11 +79,19 @@ object F1 {
     val F1 = 2 * precision * recall / (precision + recall)
     //    println(s"F-1 Score: $F1")
 
-    val wrongPredictions: Double = counts.select("count").where(counts(predictionCol) =!= counts(labelCol)).head().getLong(0).toDouble
+    val wrongPredictions: Double = getHeadNumber(counts.select("count").where(counts(predictionCol) =!= counts(labelCol)))
 
     val testData = TestData(totalData, wrongPredictions.toLong, round(accuracy, 4),
       round(precision, 4), round(recall, 4), round(F1, 4), s"accuracy: ${round(accuracy, 4)}")
     Eval(testData.precision, testData.recall, testData.f1, testData.info)
+  }
+
+  private def getHeadNumber(df: Dataset[Row]): Double = {
+    df.head().getLong(0).toDouble
+  }
+
+  private def containsElements(df: Dataset[Row]): Boolean = {
+    df.count() > 0
   }
 
   def evalPredictionAndLabels(predictionAndLabels: RDD[(Double, Double)]): Eval = {
