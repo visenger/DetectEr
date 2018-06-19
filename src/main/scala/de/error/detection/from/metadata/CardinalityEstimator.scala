@@ -39,10 +39,9 @@ class CardinalityEstimator {
   }
 
   def getTuplesViolatedCardinality(): List[String] = {
-
     val listOfAttsViolatesCardinality: List[String] = fullMetadataDF
       .select("attrName")
-      .where(fullMetadataDF("attrName").isin(uniqueColumns: _*) && fullMetadataDF("% of distinct vals") =!= 100)
+      .where(fullMetadataDF("attrName").isin(uniqueColumns: _*) && fullMetadataDF("percentage of distinct vals") =!= 100)
       .collect().map(r => r.getString(0)).toList
 
     println(s" this attr violates cardinality: ${listOfAttsViolatesCardinality.mkString(",")}")

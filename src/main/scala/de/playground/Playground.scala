@@ -230,4 +230,15 @@ object ConfigPlayground extends App {
   })
 }
 
+object SeqGroupByPlayground extends App {
+  val lengths = Seq(24, 17, 19, 15, 18, 17, 20, 20, 14, 22, 20, 27, 17, 18, 12, 15, 21, 18, 21, 15, 25,
+    22, 25, 18, 13, 25, 27, 12, 14, 22, 11, 15, 15, 15, 18, 16, 17, 13, 15, 22, 17, 18, 17, 15, 18, 22,
+    15, 31, 18, 16, 18, 15, 19, 20, 15, 27, 17, 17, 30, 17, 27, 12, 17, 22, 31, 15, 20, 15, 15, 18, 16,
+    14, 26)
+  val lengthDistr: Map[Int, Int] = lengths.groupBy(length => length)
+    .map(pair => (pair._1, pair._2.size))
+    .toMap
+  println(lengthDistr)
+}
+
 

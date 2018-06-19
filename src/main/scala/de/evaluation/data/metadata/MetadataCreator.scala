@@ -4,7 +4,7 @@ import de.evaluation.f1.FullResult
 import de.model.util.NumbersUtil
 import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel}
 import org.apache.spark.ml.linalg.SparseVector
-import org.apache.spark.sql.functions.{collect_list, explode, udf}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import scala.collection.mutable
@@ -96,8 +96,8 @@ class MetadataCreator {
         jsonDF("columnCombination.columnIdentifiers.columnIdentifier").as("column name"),
         //jsonDF("statisticMap.Data Type.value"),
         jsonDF("statisticMap.Nulls.value").as("nulls count"),
-        jsonDF("statisticMap.Percentage of Nulls.value").as("% of nulls"),
-        jsonDF("statisticMap.Percentage of Distinct Values.value").as("% of distinct vals"),
+        jsonDF("statisticMap.Percentage of Nulls.value").as("percentage of nulls"),
+        jsonDF("statisticMap.Percentage of Distinct Values.value").as("percentage of distinct vals"),
         jsonDF("statisticMap.Top 10 frequent items.value").as("top10"),
         jsonDF("statisticMap.Frequency Of Top 10 Frequent Items.value").as("freqTop10"),
         jsonDF("statisticMap.Number of Tuples.value").as("number of tuples")
@@ -129,6 +129,37 @@ class MetadataCreator {
     val aggrDirtyDF: DataFrame = dirtyDF.groupBy("attrName")
       .agg(collect_list(FullResult.value).as("column-values"))
 
+    def compute_length_distribution = udf {
+      valuesLength: mutable.Seq[Int] => {
+        val lengthToCount: Map[Int, Int] = valuesLength
+          .groupBy(length => length)
+          .map(pair => (pair._1, pair._2.size))
+          .toMap
+        lengthToCount
+      }
+    }
+
+    def compute_length_distribution_threshold = udf {
+      lengthToCount: Map[Int, Int] => {
+        val totalCount: Int = lengthToCount.size
+        var result: Seq[Int] = lengthToCount.map(_._1).toSeq
+
+        val threshold = 10
+        if (totalCount >= threshold) {
+          val howManyIs10Percent: Double = totalCount / threshold.toDouble
+          val thresholdElements: Int = scala.math.ceil(howManyIs10Percent).toInt
+          val remainingElements: Int = totalCount-thresholdElements
+          result = lengthToCount
+            .toSeq
+            .sortWith(_._2 > _._2)
+            .take(remainingElements)
+            .map(_._1).toSeq
+        }
+
+        result
+      }
+    }
+
     def compute_pattern_length = udf {
       columnValues: mutable.Seq[String] => {
         columnValues.map(value => value.length)
@@ -154,6 +185,8 @@ class MetadataCreator {
       .withColumn("pattern-length", compute_pattern_length(aggrDirtyDF("column-values")))
       .withColumn("pattern-length-min", compute_pattern_min(aggrDirtyDF("column-values")))
       .withColumn("pattern-length-max", compute_pattern_max(aggrDirtyDF("column-values")))
+      .withColumn("pattern-length-dist-full", compute_length_distribution(col("pattern-length")))
+      .withColumn("pattern-length-dist-10", compute_length_distribution_threshold(col("pattern-length-dist-full")))
       .drop("column-values")
 
 

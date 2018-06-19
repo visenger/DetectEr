@@ -33,6 +33,13 @@ object UDF {
     }
   }
 
+  def min_1 = udf {
+    classifiers: mutable.WrappedArray[Int] => {
+      val result: Int = if (classifiers.contains(-1)) ERROR else CLEAN
+      result
+    }
+  }
+
 }
 
 
@@ -40,6 +47,7 @@ trait ConfigBase {
 
   val commonsConfig: Config = ConfigFactory.load("data-commons.conf")
   val VALID_NUMBER = commonsConfig.getString("valid.number")
+  val VALID_SSN = commonsConfig.getString("valid.ssn")
 
   val strDefaultValues: Seq[String] = commonsConfig.getStringList("default.string").asScala
   val intDefaultValues: Seq[String] = commonsConfig.getStringList("default.integer").asScala
@@ -77,7 +85,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
     SparkLOAN.withSparkSession("metadata reader") {
       session => {
 
-        Seq("blackoak", "beers", "flights").foreach(dataset => {
+        Seq("beers", "flights", "blackoak").foreach(dataset => {
           println(s"processing $dataset.....")
 
           val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
@@ -98,7 +106,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           val schema: Schema = allSchemasByName.getOrElse(dataset, FlightsSchema)
           val dataTypesDictionary: Map[String, String] = schema.dataTypesDictionary
 
-          val identify_default_values = udf {
+          def identify_default_values = udf {
             (attrName: String, value: String) => {
 
               var result: Int = DOES_NOT_APPLY
@@ -118,7 +126,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           }
 
           //Error classifier #3: top-values (aka histogram)
-          val is_top_value = udf {
+          def is_top_value = udf {
             (value: String, attrName: String, top10Values: mutable.Seq[String]) => {
 
               var result: Int = DOES_NOT_APPLY
@@ -149,7 +157,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             }
           }
 
-          val is_valid_number = udf {
+          def is_valid_number = udf {
             (attrName: String, value: String) => {
               var result: Int = DOES_NOT_APPLY
 
@@ -221,6 +229,53 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             }
           }
 
+          //Error Classifier: 6 # misfielded values
+          //analysing the pattern length distribution and selecting the trimmed distribution
+          //if the value is inside then clean otherwise error
+          //if number of distinct pattern length <=3 then does-not-apply
+          /**
+            *
+            * param value        :String the cell value
+            * param valuesLength : Seq[Int] the set of the trimmed distribution (threshold 10%) of values pattern length
+            */
+          def is_value_pattern_length_within_trimmed_distr = udf {
+            (value: String, valuesLength: Seq[Int]) => {
+              var result = DOES_NOT_APPLY
+
+              if (value == null) result = DOES_NOT_APPLY
+              else {
+                result = if (valuesLength.contains(value.size)) DOES_NOT_APPLY //here: we cannot say anything about the CLEAN
+                else ERROR
+              }
+
+
+              result
+            }
+          }
+
+          //end: misfielded values
+
+          //Error Classifier #7 valid ssn datatype: matches regex \d{3}-\d{2}-\d{4}
+
+          def is_valid_ssn = udf {
+            (attrName: String, value: String) => {
+              var result: Int = DOES_NOT_APPLY
+
+              if (value != null) {
+                val dataType: String = dataTypesDictionary.getOrElse(attrName, "")
+                result = dataType match {
+                  case "Social Security Number" =>
+                    //if (value.matches(VALID_SSN)) CLEAN else ERROR //todo: shall be this. Hack!
+                    if (value.matches(VALID_NUMBER)) CLEAN else ERROR
+                  case _ => DOES_NOT_APPLY
+                }
+              }
+              result
+            }
+          }
+
+          //end: valid ssn
+
 
           //Error Classifier # Supported data types
           //https://docs.trifacta.com/display/PE/Supported+Data+Types
@@ -249,6 +304,8 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           val ec_cardinality_vio = "ec-cardinality-vio"
           val ec_lookup = "ec-lookup-attr"
           // val ec_low_counts = "ec-low-counts-suspicious"
+          val ec_pattern_length_within_trimmed_dist = "ec-pattern-value"
+          val ec_valid_ssn = "ec-valid-ssn"
 
           val allMetadataBasedClassifiers: Seq[Column] = Seq(
             ec_missing_value,
@@ -258,7 +315,10 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             ec_cardinality_vio,
             ec_lookup /*,
             ec_low_counts*/
+            , ec_pattern_length_within_trimmed_dist
+            , ec_valid_ssn
           ).map(colName => col(colName))
+
 
           val matrixWithECsFromMetadataDF: DataFrame = flatWithMetadataDF
             .withColumn(ec_missing_value, UDF.identify_missing(flatWithMetadataDF("dirty-value").isNull))
@@ -270,26 +330,36 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
               when(flatWithMetadataDF(schema.getRecID).isin(allTuplesViolatingCardinality: _*), lit(ERROR))
                 .otherwise(lit(DOES_NOT_APPLY)))
             .withColumn(ec_lookup, is_valid_by_lookup(flatWithMetadataDF("attrName"), flatWithMetadataDF(schema.getRecID)))
-          /*.withColumn(ec_low_counts,
-            is_value_with_low_counts(flatWithMetadataDF("number of tuples"),
-              flatWithMetadataDF("distinct-vals-count"),
-              flatWithMetadataDF("dirty-value"),
-              flatWithMetadataDF("values-with-counts")))*/
+            /*.withColumn(ec_low_counts,
+              is_value_with_low_counts(flatWithMetadataDF("number of tuples"),
+                flatWithMetadataDF("distinct-vals-count"),
+                flatWithMetadataDF("dirty-value"),
+                flatWithMetadataDF("values-with-counts")))*/
+            .withColumn(ec_pattern_length_within_trimmed_dist,
+            is_value_pattern_length_within_trimmed_distr(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("pattern-length-dist-10")))
+            .withColumn(ec_valid_ssn, is_valid_ssn(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
 
-
-          //1-st aggregation: majority voting
 
           val majority_voter = "majority-vote"
-          val evaluationMatrixDF: DataFrame = matrixWithECsFromMetadataDF.withColumn(majority_voter,
-            UDF.majority_vote(array(allMetadataBasedClassifiers: _*)))
+          val min_1_col = "min-1"
+          val evaluationMatrixDF: DataFrame = matrixWithECsFromMetadataDF
+            .withColumn(majority_voter, UDF.majority_vote(array(allMetadataBasedClassifiers: _*)))
+            .withColumn(min_1_col, UDF.min_1(array(allMetadataBasedClassifiers: _*)))
 
-          evaluationMatrixDF
-            .where(col("label") === 1).show()
+          //          evaluationMatrixDF
+          //            .where(col("label") === 1 ).show()
 
-          val majorityVoterDF = FormatUtil
+          //1-st aggregation: majority voting
+          val majorityVoterDF: DataFrame = FormatUtil
             .getPredictionAndLabelOnIntegers(evaluationMatrixDF, majority_voter)
           val eval_majority_voter: Eval = F1.evalPredictionAndLabels_TMP(majorityVoterDF)
           eval_majority_voter.printResult(s"majority voter for $dataset:")
+
+          //2-nd aggregation: min-1
+          val min1DF: DataFrame = FormatUtil
+            .getPredictionAndLabelOnIntegers(evaluationMatrixDF, min_1_col)
+          val eval_min_1: Eval = F1.evalPredictionAndLabels_TMP(min1DF)
+          eval_min_1.printResult(s"min-1 for $dataset")
 
 
         })
