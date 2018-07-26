@@ -45,6 +45,8 @@ object UDF {
 
 trait ConfigBase {
 
+  val applicationConfig: Config = ConfigFactory.load()
+
   val commonsConfig: Config = ConfigFactory.load("data-commons.conf")
   val VALID_NUMBER = commonsConfig.getString("valid.number")
   val VALID_SSN = commonsConfig.getString("valid.ssn")
@@ -307,7 +309,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           val ec_pattern_length_within_trimmed_dist = "ec-pattern-value"
           val ec_valid_ssn = "ec-valid-ssn"
 
-          val allMetadataBasedClassifiers: Seq[Column] = Seq(
+          val metadataClassifiersNames = Seq(
             ec_missing_value,
             ec_default_value,
             ec_top_value,
@@ -317,7 +319,8 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             ec_low_counts*/
             , ec_pattern_length_within_trimmed_dist
             , ec_valid_ssn
-          ).map(colName => col(colName))
+          )
+          val allMetadataBasedClassifiers: Seq[Column] = metadataClassifiersNames.map(colName => col(colName))
 
 
           val matrixWithECsFromMetadataDF: DataFrame = flatWithMetadataDF
@@ -339,15 +342,30 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             is_value_pattern_length_within_trimmed_distr(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("pattern-length-dist-10")))
             .withColumn(ec_valid_ssn, is_valid_ssn(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
 
+          /* create Matrix for persistence */
+          //          val matrixWithClassifiersResult: DataFrame = matrixWithECsFromMetadataDF
+          //            .select(schema.getRecID,
+          //              "attrName",
+          //              "label",
+          //              ec_missing_value,
+          //              ec_default_value,
+          //              ec_top_value,
+          //              ec_valid_number,
+          //              ec_cardinality_vio,
+          //              ec_lookup,
+          //              ec_pattern_length_within_trimmed_dist,
+          //              ec_valid_ssn)
+          //
+          //          val homeDir: String = applicationConfig.getString(s"home.dir.$dataset")
+          //
+          //          WriterUtil.persistCSV(matrixWithClassifiersResult, s"$homeDir/tmp-matrix")
+          /* end: matrix for persistence */
 
           val majority_voter = "majority-vote"
           val min_1_col = "min-1"
           val evaluationMatrixDF: DataFrame = matrixWithECsFromMetadataDF
             .withColumn(majority_voter, UDF.majority_vote(array(allMetadataBasedClassifiers: _*)))
             .withColumn(min_1_col, UDF.min_1(array(allMetadataBasedClassifiers: _*)))
-
-          //          evaluationMatrixDF
-          //            .where(col("label") === 1 ).show()
 
           //1-st aggregation: majority voting
           val majorityVoterDF: DataFrame = FormatUtil

@@ -2,7 +2,7 @@ package de.evaluation.data.util
 
 import org.apache.spark.sql.DataFrame
 
-class WriterUtil {
+object WriterUtil {
 
   def persistTSVWithoutHeader(dataFrame: DataFrame, pathToWrite: String): Unit = {
     dataFrame
