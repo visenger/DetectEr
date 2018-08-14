@@ -2,6 +2,7 @@ package de.playground
 
 import com.typesafe.config.{Config, ConfigFactory}
 import de.evaluation.data.util.LookupColumns
+import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.features.prediction.CountsTableRow
 import de.model.util.NumbersUtil
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
@@ -241,4 +242,16 @@ object SeqGroupByPlayground extends App {
   println(lengthDistr)
 }
 
+object LoaderPlayground {
+  def main(args: Array[String]): Unit = {
+    SparkLOAN.withSparkSession("mixed csv") {
+      session => {
+        val path = "/Users/visenger/research/datasets/museum/openaccess/MetObjects_tiny.csv"
+        val schema = Seq("Object Number", "Is Highlight", "Is Public Domain", "Object ID", "Department", "Object Name", "Title", "Culture", "Period", "Dynasty", "Reign", "Portfolio", "Artist Role", "Artist Prefix", "Artist Display Name", "Artist Display Bio", "Artist Suffix", "Artist Alpha Sort", "Artist Nationality", "Artist Begin Date", "Artist End Date", "Object Date", "Object Begin Date", "Object End Date", "Medium", "Dimensions", "Credit Line", "Geography Type", "City", "State", "County", "Country", "Region", "Subregion", "Locale", "Locus", "Excavation", "River", "Classification", "Rights and Reproduction", "Link Resource", "Metadata Date", "Repository")
+        val museum: DataFrame = DataSetCreator.createFrame(session, path, schema: _*)
+        museum.show(100, false)
+      }
+    }
+  }
+}
 
