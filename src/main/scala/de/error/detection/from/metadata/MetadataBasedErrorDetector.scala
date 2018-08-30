@@ -342,43 +342,74 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             is_value_pattern_length_within_trimmed_distr(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("pattern-length-dist-10")))
             .withColumn(ec_valid_ssn, is_valid_ssn(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
 
+
+
+
           /* create Matrix for persistence */
+          //
+          //val cols = Seq("attrName",
+          //            "label",
+          //            ec_missing_value,
+          //            ec_default_value,
+          //            ec_top_value,
+          //            ec_valid_number,
+          //            ec_cardinality_vio,
+          //            ec_lookup,
+          //            ec_pattern_length_within_trimmed_dist,
+          //            ec_valid_ssn)
+
           //          val matrixWithClassifiersResult: DataFrame = matrixWithECsFromMetadataDF
-          //            .select(schema.getRecID,
-          //              "attrName",
-          //              "label",
-          //              ec_missing_value,
-          //              ec_default_value,
-          //              ec_top_value,
-          //              ec_valid_number,
-          //              ec_cardinality_vio,
-          //              ec_lookup,
-          //              ec_pattern_length_within_trimmed_dist,
-          //              ec_valid_ssn)
+          //            .select(schema.getRecID, cols: _*)
           //
           //          val homeDir: String = applicationConfig.getString(s"home.dir.$dataset")
           //
           //          WriterUtil.persistCSV(matrixWithClassifiersResult, s"$homeDir/tmp-matrix")
+          //
           /* end: matrix for persistence */
 
+          /* Create matrix for the Dawid-Skene model to discover true item states/effects from multiple noisy measurements
+          * for details see here: http://aclweb.org/anthology/Q14-1025 */
+          //          val classifierCols = Seq(ec_missing_value,
+          //            ec_default_value,
+          //            ec_top_value,
+          //            ec_valid_number,
+          //            ec_cardinality_vio,
+          //            ec_lookup,
+          //            ec_pattern_length_within_trimmed_dist,
+          //            ec_valid_ssn)
+          //
+          //
+          //          val dawidSkeneModelDF: DataFrame = DawidSkeneModel()
+          //            .onDataset(dataset)
+          //            .onDataFrame(matrixWithECsFromMetadataDF)
+          //            .onColumns(classifierCols)
+          //            .createModel()
+          //
+          //
+          //          val homeDir: String = applicationConfig.getString(s"home.dir.$dataset")
+          //          WriterUtil.persistCSV(dawidSkeneModelDF, s"$homeDir/dawidSkeneModel-matrix")
+          /* end: matrix for the Dawid-Skene model */
+
+
+          /* Aggregation strategies */
           val majority_voter = "majority-vote"
           val min_1_col = "min-1"
           val evaluationMatrixDF: DataFrame = matrixWithECsFromMetadataDF
             .withColumn(majority_voter, UDF.majority_vote(array(allMetadataBasedClassifiers: _*)))
             .withColumn(min_1_col, UDF.min_1(array(allMetadataBasedClassifiers: _*)))
 
-          //1-st aggregation: majority voting
+          /*//1-st aggregation: majority voting*/
           val majorityVoterDF: DataFrame = FormatUtil
             .getPredictionAndLabelOnIntegers(evaluationMatrixDF, majority_voter)
           val eval_majority_voter: Eval = F1.evalPredictionAndLabels_TMP(majorityVoterDF)
           eval_majority_voter.printResult(s"majority voter for $dataset:")
 
-          //2-nd aggregation: min-1
+          /*//2-nd aggregation: min-1*/
           val min1DF: DataFrame = FormatUtil
             .getPredictionAndLabelOnIntegers(evaluationMatrixDF, min_1_col)
           val eval_min_1: Eval = F1.evalPredictionAndLabels_TMP(min1DF)
           eval_min_1.printResult(s"min-1 for $dataset")
-
+          /* end: Aggregation strategies */
 
         })
 
