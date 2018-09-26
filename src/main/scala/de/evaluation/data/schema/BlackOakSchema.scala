@@ -58,7 +58,7 @@ object BlackOakSchema extends Schema with AttributesDataType {
     lastname -> string,
     address -> address,
     city -> string,
-    stateAttr -> string,
+    stateAttr -> stateType,
     zipAttr -> zipType,
     pobox -> string,
     pocitystatezip -> address,

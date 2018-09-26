@@ -3,14 +3,12 @@ package de.error.detection.from.metadata
 import com.typesafe.config.{Config, ConfigFactory}
 import de.evaluation.data.metadata.MetadataCreator
 import de.evaluation.data.schema.{FlightsSchema, Schema}
-import de.evaluation.f1.{Eval, F1}
 import de.evaluation.util.SparkLOAN
 import de.experiments.ExperimentsCommonConfig
-import de.model.util.FormatUtil
 import de.util.DatasetFlattener
 import de.util.ErrorNotation._
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{Column, DataFrame}
 
 import scala.collection.convert.decorateAsScala._
 import scala.collection.mutable
@@ -50,6 +48,10 @@ trait ConfigBase {
   val commonsConfig: Config = ConfigFactory.load("data-commons.conf")
   val VALID_NUMBER = commonsConfig.getString("valid.number")
   val VALID_SSN = commonsConfig.getString("valid.ssn")
+  val VALID_ZIP_1 = commonsConfig.getString("valid.zip1")
+  val VALID_ZIP_2 = commonsConfig.getString("valid.zip2")
+  val VALID_STATE_1 = commonsConfig.getString("valid.state1")
+  val VALID_STATE_2 = commonsConfig.getString("valid.state2")
 
   val strDefaultValues: Seq[String] = commonsConfig.getStringList("default.string").asScala
   val intDefaultValues: Seq[String] = commonsConfig.getStringList("default.integer").asScala
@@ -255,20 +257,22 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             }
           }
 
-          //end: misfielded values
+          //end:#6 misfielded values
 
-          //Error Classifier #7 valid ssn datatype: matches regex \d{3}-\d{2}-\d{4}
+          //Error Classifier #7 validate data types by utilizing regular expressions to validate data against the type.
 
-          def is_valid_ssn = udf {
+          def is_valid_data_type = udf {
             (attrName: String, value: String) => {
               var result: Int = DOES_NOT_APPLY
 
               if (value != null) {
-                val dataType: String = dataTypesDictionary.getOrElse(attrName, "")
+                val dataType: String = dataTypesDictionary.getOrElse(attrName, "").toLowerCase
                 result = dataType match {
-                  case "Social Security Number" =>
+                  case "social security number" =>
                     //if (value.matches(VALID_SSN)) CLEAN else ERROR //todo: shall be this. Hack!
                     if (value.matches(VALID_NUMBER)) CLEAN else ERROR
+                  case "zip code" => if (value.matches(VALID_ZIP_1) || value.matches(VALID_ZIP_2)) CLEAN else ERROR
+                  case "state" => if (value.toLowerCase.matches(VALID_STATE_1) || value.toLowerCase.matches(VALID_STATE_2)) CLEAN else ERROR
                   case _ => DOES_NOT_APPLY
                 }
               }
@@ -276,7 +280,17 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             }
           }
 
-          //end: valid ssn
+
+          //end: #7 valid data type
+
+          // Error classifier: Unused columns, indicated either by being largely unpopulated or populated with the same value in all records.
+
+          //Error Classifier: Missing value: Strings with repeated characters or characters that are next
+          //to each other on the used keyboard, e.g., replacing a phone
+          //number with 5555555555.
+
+          // Error Classifier: detect disguised missing values that are far from the rest of the values in the Euclidean
+          //space
 
 
           //Error Classifier # Supported data types
@@ -307,7 +321,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           val ec_lookup = "ec-lookup-attr"
           // val ec_low_counts = "ec-low-counts-suspicious"
           val ec_pattern_length_within_trimmed_dist = "ec-pattern-value"
-          val ec_valid_ssn = "ec-valid-ssn"
+          val ec_valid_data_type = "ec-valid-data-type"
 
           val metadataClassifiersNames = Seq(
             ec_missing_value,
@@ -318,9 +332,9 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             ec_lookup /*,
             ec_low_counts*/
             , ec_pattern_length_within_trimmed_dist
-            , ec_valid_ssn
+            , ec_valid_data_type
           )
-          val allMetadataBasedClassifiers: Seq[Column] = metadataClassifiersNames.map(colName => col(colName))
+          //val allMetadataBasedClassifiers: Seq[Column] = metadataClassifiersNames.map(colName => col(colName))
 
 
           val matrixWithECsFromMetadataDF: DataFrame = flatWithMetadataDF
@@ -340,10 +354,49 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
                 flatWithMetadataDF("values-with-counts")))*/
             .withColumn(ec_pattern_length_within_trimmed_dist,
             is_value_pattern_length_within_trimmed_distr(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("pattern-length-dist-10")))
-            .withColumn(ec_valid_ssn, is_valid_ssn(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
+            .withColumn(ec_valid_data_type, is_valid_data_type(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
+
+          /*End: Final matrix*/
+
+          val cols = Seq(
+            ec_missing_value,
+            ec_default_value,
+            ec_top_value,
+            ec_valid_number,
+            ec_cardinality_vio,
+            ec_lookup,
+            ec_pattern_length_within_trimmed_dist,
+            ec_valid_data_type)
 
 
+          /* Analysing the performance of each classifier.*/
+          //          val matrixWithClassifiersResult: DataFrame = matrixWithECsFromMetadataDF
+          //            .select("label", cols: _*)
+          // val countsByValues: collection.Map[Row, Long] = matrixWithClassifiersResult.rdd.countByValue()
+          //countsByValues.foreach(println)
 
+          //          cols.foreach(column => {
+          //            val singleECPerformnaceDF: DataFrame = FormatUtil
+          //              .getPredictionAndLabelOnIntegersForSingleClassifier(matrixWithECsFromMetadataDF, column)
+          //            val evalEC: Eval = F1.evalPredictionAndLabels_TMP(singleECPerformnaceDF)
+          //            evalEC.printResult(s"evaluation $column")
+          //
+          //          })
+          //          val homeDir: String = applicationConfig.getString(s"home.dir.$dataset")
+          //
+          //
+          //          cols.foreach(column => {
+          //            val performanceDF: DataFrame = matrixWithECsFromMetadataDF
+          //              .where(col(column) === ERROR)
+          //              .withColumn("data-point", concat_ws("-", col(schema.getRecID), col("attrName")))
+          //              .select("data-point")
+          //              .toDF()
+          //
+          //            val pathToWrite = s"$homeDir/ec-classiefiers-performance/$dataset-$column-perfomance"
+          //            WriterUtil.persistCSVWithoutHeader(performanceDF, pathToWrite)
+          //
+          //          })
+          /* End: Analysing the performance of each classifier*/
 
           /* create Matrix for persistence */
           //
@@ -356,7 +409,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           //            ec_cardinality_vio,
           //            ec_lookup,
           //            ec_pattern_length_within_trimmed_dist,
-          //            ec_valid_ssn)
+          //            ec_valid_data_type)
 
           //          val matrixWithClassifiersResult: DataFrame = matrixWithECsFromMetadataDF
           //            .select(schema.getRecID, cols: _*)
@@ -376,7 +429,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           //            ec_cardinality_vio,
           //            ec_lookup,
           //            ec_pattern_length_within_trimmed_dist,
-          //            ec_valid_ssn)
+          //            ec_valid_data_type)
           //
           //
           //          val dawidSkeneModelDF: DataFrame = DawidSkeneModel()
@@ -392,23 +445,23 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
 
           /* Aggregation strategies */
-          val majority_voter = "majority-vote"
-          val min_1_col = "min-1"
-          val evaluationMatrixDF: DataFrame = matrixWithECsFromMetadataDF
-            .withColumn(majority_voter, UDF.majority_vote(array(allMetadataBasedClassifiers: _*)))
-            .withColumn(min_1_col, UDF.min_1(array(allMetadataBasedClassifiers: _*)))
-
-          /*//1-st aggregation: majority voting*/
-          val majorityVoterDF: DataFrame = FormatUtil
-            .getPredictionAndLabelOnIntegers(evaluationMatrixDF, majority_voter)
-          val eval_majority_voter: Eval = F1.evalPredictionAndLabels_TMP(majorityVoterDF)
-          eval_majority_voter.printResult(s"majority voter for $dataset:")
-
-          /*//2-nd aggregation: min-1*/
-          val min1DF: DataFrame = FormatUtil
-            .getPredictionAndLabelOnIntegers(evaluationMatrixDF, min_1_col)
-          val eval_min_1: Eval = F1.evalPredictionAndLabels_TMP(min1DF)
-          eval_min_1.printResult(s"min-1 for $dataset")
+          //          val majority_voter = "majority-vote"
+          //          val min_1_col = "min-1"
+          //          val evaluationMatrixDF: DataFrame = matrixWithECsFromMetadataDF
+          //            .withColumn(majority_voter, UDF.majority_vote(array(allMetadataBasedClassifiers: _*)))
+          //            .withColumn(min_1_col, UDF.min_1(array(allMetadataBasedClassifiers: _*)))
+          //
+          //          /*//1-st aggregation: majority voting*/
+          //          val majorityVoterDF: DataFrame = FormatUtil
+          //            .getPredictionAndLabelOnIntegers(evaluationMatrixDF, majority_voter)
+          //          val eval_majority_voter: Eval = F1.evalPredictionAndLabels_TMP(majorityVoterDF)
+          //          eval_majority_voter.printResult(s"majority voter for $dataset:")
+          //
+          //          /*//2-nd aggregation: min-1*/
+          //          val min1DF: DataFrame = FormatUtil
+          //            .getPredictionAndLabelOnIntegers(evaluationMatrixDF, min_1_col)
+          //          val eval_min_1: Eval = F1.evalPredictionAndLabels_TMP(min1DF)
+          //          eval_min_1.printResult(s"min-1 for $dataset")
           /* end: Aggregation strategies */
 
         })

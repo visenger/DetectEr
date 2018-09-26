@@ -1,6 +1,7 @@
 package de.model.util
 
 import de.evaluation.f1.FullResult
+import de.util.ErrorNotation
 import org.apache.spark.ml.linalg
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -34,11 +35,32 @@ object FormatUtil {
 
     convertedDF.select("prediction", FullResult.label).toDF("prediction", "label")
 
-//        dataDF.select(FullResult.label, column).rdd.map(row => {
-//          val label = row.getInt(0).toDouble
-//          val prediction = if (row.getInt(1) == -1) 0.0 else 1.0 // we change the error encoding to correspond to the label values
-//          (prediction, label)
-//        })
+    //        dataDF.select(FullResult.label, column).rdd.map(row => {
+    //          val label = row.getInt(0).toDouble
+    //          val prediction = if (row.getInt(1) == -1) 0.0 else 1.0 // we change the error encoding to correspond to the label values
+    //          (prediction, label)
+    //        })
+  }
+
+  def getPredictionAndLabelOnIntegersForSingleClassifier(dataDF: DataFrame, column: String): DataFrame = {
+    //todo: remove DOES-NOT-APPLY rows
+    val convertedDF: DataFrame = dataDF.select(FullResult.label, column)
+      .where(dataDF(column) =!= ErrorNotation.DOES_NOT_APPLY)
+      .withColumn("label-tmp", dataDF(FullResult.label).cast(DoubleType))
+      .withColumn(s"$column-tmp",
+        when(dataDF(column) === -1, lit(0.0).cast(DoubleType)).otherwise(dataDF(column).cast(DoubleType)))
+      .drop(dataDF(FullResult.label))
+      .drop(dataDF(column))
+      .withColumnRenamed("label-tmp", FullResult.label)
+      .withColumnRenamed(s"$column-tmp", "prediction")
+
+    convertedDF.select("prediction", FullResult.label).toDF("prediction", "label")
+
+    //        dataDF.select(FullResult.label, column).rdd.map(row => {
+    //          val label = row.getInt(0).toDouble
+    //          val prediction = if (row.getInt(1) == -1) 0.0 else 1.0 // we change the error encoding to correspond to the label values
+    //          (prediction, label)
+    //        })
   }
 
   def getStringPredictionAndLabel(dataDF: DataFrame, column: String): RDD[(Double, Double)] = {

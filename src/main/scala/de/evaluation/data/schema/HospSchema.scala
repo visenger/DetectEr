@@ -28,7 +28,7 @@ object HospSchema extends Schema with AttributesDataType {
 
   private val schema = Seq(recid, prno,
     hospitalname, address,
-    city, state, zip,
+    city, stateType, zip,
     countryname, phone,
     hospitaltype, hospitalowner,
     emergencyservice, condition,
@@ -43,7 +43,7 @@ object HospSchema extends Schema with AttributesDataType {
     hospitalname -> string,
     address -> string,
     city -> string,
-    state -> string,
+    state -> stateType,
     zip -> zipType,
     countryname -> string,
     phone -> phoneNumType,

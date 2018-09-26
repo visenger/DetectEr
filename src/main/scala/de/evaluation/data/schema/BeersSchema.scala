@@ -32,6 +32,6 @@ object BeersSchema extends Schema with AttributesDataType {
     brewery_id -> string,
     brewery_name -> string,
     city -> string,
-    state -> string
+    state -> stateType
   )
 }

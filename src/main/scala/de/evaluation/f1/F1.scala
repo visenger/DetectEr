@@ -79,7 +79,7 @@ object F1 {
     val F1 = 2 * precision * recall / (precision + recall)
     //    println(s"F-1 Score: $F1")
 
-    val wrongPredictions: Double = getHeadNumber(counts.select("count").where(counts(predictionCol) =!= counts(labelCol)))
+    val wrongPredictions: Double = if (containsElements(counts)) getHeadNumber(counts.select("count").where(counts(predictionCol) =!= counts(labelCol))) else 0.0
 
     val testData = TestData(totalData, wrongPredictions.toLong, round(accuracy, 4),
       round(precision, 4), round(recall, 4), round(F1, 4), s"accuracy: ${round(accuracy, 4)}")
@@ -87,7 +87,7 @@ object F1 {
   }
 
   private def getHeadNumber(df: Dataset[Row]): Double = {
-    df.head().getLong(0).toDouble
+    if (df.count() > 0) df.head().getLong(0).toDouble else 0.0
   }
 
   private def containsElements(df: Dataset[Row]): Boolean = {

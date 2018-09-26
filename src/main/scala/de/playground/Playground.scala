@@ -209,6 +209,22 @@ object RegexPlayground extends App {
       print(s)
       println(s.matches("^(0|[1-9]\\d*)?(\\.\\d+)?(?<=\\d)$"))
     })
+
+  Seq("fl 32082").foreach(s => {
+    print(s)
+    println(s.matches("^([\\d]{5}|[\\d]{9})$"))
+  })
+
+  Seq("OR", "IN", "CA", "alabama").foreach(s => {
+    val state0 = "^(or|ca|in)$"
+    val state1 = "^(al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy|pr|dc|vi)$"
+    val state2 = "^(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|puerto rico|district of columbia|virgin islands)$"
+
+    val value: String = s.toLowerCase
+    println(value)
+    println(s.toLowerCase().matches(state1))
+    println(s.toLowerCase().matches(state2))
+  })
 }
 
 object ConfigPlayground extends App {
@@ -254,4 +270,6 @@ object LoaderPlayground {
     }
   }
 }
+
+
 
