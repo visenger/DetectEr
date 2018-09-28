@@ -15,6 +15,8 @@ trait ExperimentsCommonConfig extends Serializable {
 
   val experimentsConf = ConfigFactory.load("experiments.conf")
 
+  val benchmarkConf = ConfigFactory.load("benchmark.conf")
+
   val blackoakTrainFile = experimentsConf.getString("blackoak.experiments.train.file")
   val hospTrainFile = experimentsConf.getString("hosp.experiments.train.file")
   val salariesTrainFile = experimentsConf.getString("salaries.experiments.train.file")
@@ -58,7 +60,16 @@ trait ExperimentsCommonConfig extends Serializable {
     "hosp" -> HospSchema,
     "salaries" -> SalariesSchema,
     "flights" -> FlightsSchema,
-    "beers" -> BeersSchema
+    "beers" -> BeersSchema,
+
+    "beers_dirty_5_explicitmissingvalue" -> BeersSchema,
+    "beers_dirty_5_implicitmissingvaluemedianmode" -> BeersSchema,
+    "beers_dirty_5_noise" -> BeersSchema,
+    "beers_dirty_5_randomactivedomain" -> BeersSchema,
+    "beers_dirty_5_similarbasedactivedomain" -> BeersSchema,
+    "beers_dirty_5_typoGenerator" -> BeersSchema,
+
+    "beers_missfielded_10" -> BeersSchema
   )
 
   val allMetadataByName: Map[String, String] = Map(
@@ -66,7 +77,9 @@ trait ExperimentsCommonConfig extends Serializable {
     "hosp" -> defaultConfig.getString("metadata.hosp.path"),
     "salaries" -> defaultConfig.getString("metadata.salaries.path"),
     "flights" -> defaultConfig.getString("metadata.flights.path"),
-    "beers" -> defaultConfig.getString("metadata.beers.path")
+    "beers" -> defaultConfig.getString("metadata.beers.path"),
+
+    "beers_missfielded_10" -> benchmarkConf.getString("metadata.beers.dirty_missfielded_10")
   )
 
   val allRawData: Map[String, String] = Map(
@@ -75,13 +88,32 @@ trait ExperimentsCommonConfig extends Serializable {
     "hosp" -> defaultConfig.getString("data.hosp.dirty.10k"),
     "salaries" -> defaultConfig.getString("data.salaries.dirty"),
     "flights" -> defaultConfig.getString("data.flights.dirty"),
-    "beers" -> defaultConfig.getString("data.beers.dirty")
+    "beers" -> defaultConfig.getString("data.beers.dirty"),
+
+    "beers_dirty_5_explicitmissingvalue" -> benchmarkConf.getString("data.beers.dirty_5_explicitmissingvalue"),
+    "beers_dirty_5_implicitmissingvaluemedianmode" -> benchmarkConf.getString("data.beers.dirty_5_implicitmissingvaluemedianmode"),
+    "beers_dirty_5_noise" -> benchmarkConf.getString("data.beers.dirty_5_noise"),
+    "beers_dirty_5_randomactivedomain" -> benchmarkConf.getString("data.beers.dirty_5_randomactivedomain"),
+    "beers_dirty_5_similarbasedactivedomain" -> benchmarkConf.getString("data.beers.dirty_5_similarbasedactivedomain"),
+    "beers_dirty_5_typoGenerator" -> benchmarkConf.getString("data.beers.dirty_5_typoGenerator"),
+
+    "beers_missfielded_10" -> benchmarkConf.getString("data.beers.dirty_missfielded_10")
   )
 
   val allCleanData: Map[String, String] = Map(
     "blackoak" -> defaultConfig.getString("data.blackoak.clean"),
     "flights" -> defaultConfig.getString("data.flights.clean"),
-    "beers" -> defaultConfig.getString("data.beers.clean")
+    "beers" -> defaultConfig.getString("data.beers.clean"),
+
+    "beers_dirty_5_explicitmissingvalue" -> benchmarkConf.getString("data.beers.clean"),
+    "beers_dirty_5_implicitmissingvaluemedianmode" -> benchmarkConf.getString("data.beers.clean"),
+    "beers_dirty_5_noise" -> benchmarkConf.getString("data.beers.clean"),
+    "beers_dirty_5_randomactivedomain" -> benchmarkConf.getString("data.beers.clean"),
+    "beers_dirty_5_similarbasedactivedomain" -> benchmarkConf.getString("data.beers.clean"),
+    "beers_dirty_5_typoGenerator" -> benchmarkConf.getString("data.beers.clean"),
+
+    "beers_missfielded_10" -> benchmarkConf.getString("data.beers.clean")
+
   )
 
   val allTestData: Map[String, String] = Map(

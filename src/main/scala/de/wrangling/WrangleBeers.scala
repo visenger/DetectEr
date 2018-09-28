@@ -1,9 +1,14 @@
 package de.wrangling
 
+import de.evaluation.data.metadata.MetadataCreator
+import de.evaluation.data.schema.BeersSchema
+import de.evaluation.data.util.WriterUtil
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
+import de.experiments.ExperimentsCommonConfig
 import de.util.DatasetFlattener
-import org.apache.spark.sql.DataFrame
+import de.wrangling.BeersDirtyMaker.{beersAndBreweriesPath, beersSchema, city, state}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 object WrangleBeers {
 
@@ -45,7 +50,7 @@ object BeersDirtyMaker {
   val beersAndBreweriesPath = s"$path/beers-and-breweries.csv"
   val city = "city"
   val state = "state"
-  val beersSchema = Seq("tid", "id", "beer-name", "style", "ounces", "abv", "ibu", "brewery_id", "brewery-name", city, state)
+  val beersSchema = BeersSchema.getSchema // Seq("tid", "id", "beer-name", "style", "ounces", "abv", "ibu", "brewery_id", "brewery-name", city, state)
 
   def main(args: Array[String]): Unit = {
 
@@ -129,11 +134,13 @@ object BeersDirtyMaker {
           .toDF(beersSchema: _*)
         dirtyFinalDF.show(347)
 
-        dirtyFinalDF
-          .repartition(1)
-          .write
-          .option("header", "true")
-          .csv(s"$path/dirty-beers-and-breweries-2")
+        //        dirtyFinalDF
+        //          .repartition(1)
+        //          .write
+        //          .option("header", "true")
+        //          .csv(s"$path/dirty-beers-and-breweries-2")
+
+        WriterUtil.persistCSV(dirtyFinalDF, s"$path/dirty-beers-and-breweries-2")
 
 
       }
@@ -147,13 +154,104 @@ object DatasetFlattenerPlayground {
   def main(args: Array[String]): Unit = {
     SparkLOAN.withSparkSession("flatten") {
       session => {
-        Seq("beers", "flights").foreach(dataset => {
-          DatasetFlattener().onDataset(dataset).flattenDirtyData(session).show()
-          DatasetFlattener().onDataset(dataset).flattenCleanData(session).show()
-          DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session).show()
+        Seq("beers_dirty_5_explicitmissingvalue",
+          "beers_dirty_5_implicitmissingvaluemedianmode",
+          "beers_dirty_5_noise",
+          "beers_dirty_5_randomactivedomain",
+          "beers_dirty_5_similarbasedactivedomain",
+          "beers_dirty_5_typoGenerator"
+        ).foreach(dataset => {
+          println(s"processing dataset: $dataset")
+
+          val dirtyData: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
+          dirtyData.where(col("tid") === "0").show()
+          dirtyData.groupBy(col("tid")).count().where(col("count") > 11).show()
+
+          val cleanData: DataFrame = DatasetFlattener().onDataset(dataset).flattenCleanData(session)
+          cleanData.show()
+
+          val flatDiff: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
+          flatDiff
+            .where(col("label") === "1")
+            .show(50)
 
         })
       }
     }
+  }
+}
+
+
+object BeersMetadataExplorer extends ExperimentsCommonConfig {
+
+  def main(args: Array[String]): Unit = {
+
+
+    SparkLOAN.withSparkSession("exploring beers") {
+      session => {
+        Seq("beers" /*, "flights", "blackoak"*/).foreach(dataset => {
+          println(s"processing $dataset.....")
+
+          val dataPath = allRawData.getOrElse(dataset, "unknown")
+
+          val dirtyOriginDF: DataFrame = DataSetCreator.createFrame(session, dataPath, BeersSchema.getSchema: _*)
+          dirtyOriginDF.show(false)
+
+          dirtyOriginDF
+            .groupBy(col("style")).count()
+            .where(col("style").contains("IPA"))
+            .show(100, false)
+
+          val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
+          val creator = MetadataCreator()
+
+          val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
+          dirtyDF.show()
+          val fullMetadataDF: DataFrame = creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
+          fullMetadataDF.show()
+        })
+      }
+    }
+  }
+
+}
+
+
+object BeersMissfieldedValsInjector extends ExperimentsCommonConfig {
+
+  val path = defaultConfig.getString("home.dir.beers")
+
+  def main(args: Array[String]): Unit = {
+
+    SparkLOAN.withSparkSession("missfielded values injector") {
+      session => {
+        Seq(0.01, 0.05, 0.1).foreach(err => {
+          val dirtyDF: DataFrame = run(session, err)
+          // dirtyDF.where(col("state") =!= "").show()
+          WriterUtil.persistCSV(dirtyDF, s"$path/beers_missfielded_$err")
+        })
+      }
+    }
+
+  }
+
+  def run(session: SparkSession, err: Double): DataFrame = {
+    val cleanBeersBreweriesDF: DataFrame = DataSetCreator
+      .createFrame(session, beersAndBreweriesPath, beersSchema: _*)
+
+    val cleanPercentage: Double = 1.0 - err
+    val Array(city_to_dirty, remains_clean_1) = cleanBeersBreweriesDF
+      .randomSplit(Array(err, cleanPercentage), 123L)
+    val tmpCol = "tmp-city"
+    val dirtyCityDF: DataFrame = city_to_dirty.withColumn(tmpCol, concat_ws(" ", col(city), col(state)))
+      .drop(state)
+      .drop(city)
+      .withColumn(state, lit(""))
+      .withColumnRenamed(tmpCol, city)
+    val dirty1DF: DataFrame = dirtyCityDF
+      .select("tid", "id", "beer-name", "style", "ounces", "abv", "ibu", "brewery_id", "brewery-name", city, state)
+      .union(remains_clean_1)
+      .toDF(beersSchema: _*)
+    dirty1DF
   }
 }
