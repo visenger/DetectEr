@@ -1,7 +1,7 @@
 # DetectEr
 Data Cleaning Tools Orchestration.
 
-The accompanying paper: Visengeriyeva, Larysa, and Ziawasch Abedjan. "Metadata-driven error detection." Proceedings of the 30th International Conference on Scientific and Statistical Database Management. ACM, 2018.
+The accompanying paper: Visengeriyeva, Larysa, and Ziawasch Abedjan. ["Metadata-driven error detection."](https://www.researchgate.net/publication/326309905_Metadata-driven_error_detection) Proceedings of the 30th International Conference on Scientific and Statistical Database Management. ACM, 2018.
 Starting script is [here](https://github.com/visenger/DetectEr/blob/master/src/main/scala/de/experiments/features/error/prediction/ErrorPredictorRunner.scala).
 Datasets are available [here](https://github.com/visenger/clean-and-dirty-data).
 
