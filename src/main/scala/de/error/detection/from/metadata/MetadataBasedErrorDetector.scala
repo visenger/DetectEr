@@ -1,6 +1,7 @@
 package de.error.detection.from.metadata
 
 import com.typesafe.config.{Config, ConfigFactory}
+import de.aggregation.{MajorityVotingAggregator, UnionAllAggregator}
 import de.evaluation.data.metadata.MetadataCreator
 import de.evaluation.data.schema.{FlightsSchema, Schema}
 import de.evaluation.f1.{Eval, F1}
@@ -14,33 +15,6 @@ import org.apache.spark.sql.functions._
 
 import scala.collection.convert.decorateAsScala._
 import scala.collection.mutable
-
-object UDF {
-
-  val identify_missing = udf {
-    isNull: Boolean =>
-      isNull match {
-        case true => ERROR
-        case false => CLEAN
-      }
-  }
-
-  def majority_vote = udf {
-    classifiers: mutable.WrappedArray[Int] => {
-      val totalSum: Int = classifiers.sum
-      val result: Int = if (totalSum > 0) ERROR else CLEAN
-      result
-    }
-  }
-
-  def min_1 = udf {
-    classifiers: mutable.WrappedArray[Int] => {
-      val result: Int = if (classifiers.contains(ERROR)) ERROR else CLEAN
-      result
-    }
-  }
-
-}
 
 
 trait ConfigBase {
@@ -499,44 +473,8 @@ object MissfieldedValuesErrorDetector extends ExperimentsCommonConfig with Confi
           val flatWithMetadataDF: DataFrame = flatWithLabelDF.join(fullMetadataDF, Seq("attrName"))
           flatWithMetadataDF.where(col("label") === "1").show()
 
-          //Error Classifier: 6 # misfielded values
-          //analysing the pattern length distribution and selecting the trimmed distribution
-          //if the value is inside then clean otherwise error
-          //if number of distinct pattern length <=3 then does-not-apply
-          /**
-            *
-            * param value        :String the cell value
-            * param valuesLength : Seq[Int] the set of the trimmed distribution (threshold 10%) of values pattern length
-            */
-          def is_value_pattern_length_within_trimmed_distr = udf {
-            (value: String, valuesLength: Seq[Int]) => {
-              var result = DOES_NOT_APPLY
 
-              if (value == null) result = DOES_NOT_APPLY
-              else {
-                result = if (valuesLength.contains(value.size)) DOES_NOT_APPLY //here: we cannot say anything about the CLEAN
-                else ERROR
-              }
-              result
-            }
-          }
 
-          def is_value_with_low_counts = udf {
-            (numOfTuples: Long, columnDistinctVals: Int, value: String, valuesWithCounts: Map[String, Int]) => {
-
-              var result = DOES_NOT_APPLY
-              //todo: ValuesWithCounts are not optimal for flights
-
-              if (numOfTuples == columnDistinctVals) result = DOES_NOT_APPLY
-              else {
-                if (valuesWithCounts.contains(value)) {
-                  val counts: Int = valuesWithCounts.getOrElse(value, 0)
-                  result = if (counts > 1) CLEAN else ERROR
-                } else result = DOES_NOT_APPLY
-              }
-              result
-            }
-          }
 
           //Error Classifier #6: The column, related to the lookup source, its value is absent in the source -> error, else clean.
           //for unrelated columns -> 0
@@ -569,9 +507,9 @@ object MissfieldedValuesErrorDetector extends ExperimentsCommonConfig with Confi
           val matrixWithECsFromMetadataDF: DataFrame = flatWithMetadataDF
             .where(col("attrName") === "city") //todo: perform analysis on one column
             .withColumn(ec_pattern_length_within_trimmed_dist,
-            is_value_pattern_length_within_trimmed_distr(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("pattern-length-dist-10")))
+            UDF.is_value_pattern_length_within_trimmed_distr(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("pattern-length-dist-10")))
             .withColumn(ec_low_counts,
-              is_value_with_low_counts(flatWithMetadataDF("number of tuples"),
+              UDF.is_value_with_low_counts(flatWithMetadataDF("number of tuples"),
                 flatWithMetadataDF("distinct-vals-count"),
                 flatWithMetadataDF("dirty-value"),
                 flatWithMetadataDF("values-with-counts")))
@@ -589,26 +527,25 @@ object MissfieldedValuesErrorDetector extends ExperimentsCommonConfig with Confi
 
           })
 
-          //todo: extract class or object MajorityVoter and Min1 -> will be used in all detectors
           /* Aggregation strategies */
-          val allMetadataBasedClassifiers = ec_columns.map(name => col(name))
-          val majority_voter = "majority-vote"
-          val min_1_col = "min-1"
-          val evaluationMatrixDF: DataFrame = matrixWithECsFromMetadataDF
-            .withColumn(majority_voter, UDF.majority_vote(array(allMetadataBasedClassifiers: _*)))
-            .withColumn(min_1_col, UDF.min_1(array(allMetadataBasedClassifiers: _*)))
 
           /*//1-st aggregation: majority voting*/
-          val majorityVoterDF: DataFrame = FormatUtil
-            .getPredictionAndLabelOnIntegers(evaluationMatrixDF, majority_voter)
-          val eval_majority_voter: Eval = F1.evalPredictionAndLabels_TMP(majorityVoterDF)
-          eval_majority_voter.printResult(s"majority voter for $dataset:")
+
+          val majorityVoterEval: Eval = MajorityVotingAggregator()
+            .onDataFrame(matrixWithECsFromMetadataDF)
+            .forColumns(ec_columns)
+            .evaluate()
+          majorityVoterEval.printResult(s"majority voter for $dataset:")
+
 
           /*//2-nd aggregation: min-1*/
-          val min1DF: DataFrame = FormatUtil
-            .getPredictionAndLabelOnIntegers(evaluationMatrixDF, min_1_col)
-          val eval_min_1: Eval = F1.evalPredictionAndLabels_TMP(min1DF)
-          eval_min_1.printResult(s"min-1 for $dataset")
+
+          val unionAllEval: Eval = UnionAllAggregator()
+            .onDataFrame(matrixWithECsFromMetadataDF)
+            .forColumns(ec_columns)
+            .evaluate()
+          unionAllEval.printResult(s"min-1 for $dataset")
+
           /* end: Aggregation strategies */
 
         })
