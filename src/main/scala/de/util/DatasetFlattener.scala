@@ -39,7 +39,9 @@ class DatasetFlattener extends ExperimentsCommonConfig {
   def makeFlattenedDiff(session: SparkSession): DataFrame = {
 
     val flatCleanDF: DataFrame = flattenCleanData(session)
+//    flatCleanDF.show(50, false)
     val flatDirtyDF: DataFrame = flattenDirtyData(session)
+//    flatDirtyDF.show(50, false)
 
     val create_label = udf {
       (are_vals_equal: Boolean) => {

@@ -1,5 +1,7 @@
 package de.evaluation.data.metadata
 
+import breeze.linalg.DenseVector
+import breeze.stats._
 import de.evaluation.f1.FullResult
 import de.model.util.NumbersUtil
 import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel}
@@ -148,7 +150,7 @@ class MetadataCreator {
         if (totalCount >= threshold) {
           val howManyIs10Percent: Double = totalCount / threshold.toDouble
           val thresholdElements: Int = scala.math.ceil(howManyIs10Percent).toInt
-          val remainingElements: Int = totalCount-thresholdElements
+          val remainingElements: Int = totalCount - thresholdElements
           result = lengthToCount
             .toSeq
             .sortWith(_._2 > _._2)
@@ -168,23 +170,29 @@ class MetadataCreator {
 
     def compute_pattern_min = udf {
       columnValues: mutable.Seq[String] => {
-
-        val set: Set[String] = columnValues.toSet
-        set.map(value => value.length).min
+        var result = 0
+        if (!columnValues.isEmpty) {
+          val set: Set[String] = columnValues.toSet
+          result = set.map(value => value.length).min
+        }
+        result
       }
     }
 
     def compute_pattern_max = udf {
       columnValues: mutable.Seq[String] => {
-        val set: Set[String] = columnValues.toSet
-        set.map(value => value.length).max
+        var result = 0
+        if (!columnValues.isEmpty) {
+          val set: Set[String] = columnValues.toSet
+          result = set.map(value => value.length).max
+        }
+        result
+
       }
     }
 
     val patternStatisticsDF: DataFrame = aggrDirtyDF
       .withColumn("pattern-length", compute_pattern_length(aggrDirtyDF("column-values")))
-      .withColumn("pattern-length-min", compute_pattern_min(aggrDirtyDF("column-values")))
-      .withColumn("pattern-length-max", compute_pattern_max(aggrDirtyDF("column-values")))
       .withColumn("pattern-length-dist-full", compute_length_distribution(col("pattern-length")))
       .withColumn("pattern-length-dist-10", compute_length_distribution_threshold(col("pattern-length-dist-full")))
       .drop("column-values")
@@ -237,8 +245,74 @@ class MetadataCreator {
     val newFeaturesWithPatternStatsDF: DataFrame = withNewFeatures
       .join(patternStatisticsDF, Seq("attrName"))
 
-    newFeaturesWithPatternStatsDF
+
+    def descriptive_statistics_pattern_length = udf {
+      valuesLength: mutable.Seq[Int] => {
+        val valsAsDouble: mutable.Seq[Double] = valuesLength.map(_.toDouble)
+        val values: DenseVector[Double] = DenseVector[Double](valsAsDouble: _*)
+
+        val minPatternLenght: Int = if (valuesLength.nonEmpty) valuesLength.min else 0
+        val maxPatternLength: Int = if (valuesLength.nonEmpty) valuesLength.max else 0
+
+        def computeMode(vals: DenseVector[Double]): Double = {
+          val valsMode: Double = mode(values).mode
+          val result: Double = if (valsMode.isNaN) 0.0 else valsMode
+          result
+        }
+
+        val mostFrequentPatternLength: Double = computeMode(values)
+
+        val mv = meanAndVariance(values)
+
+        def computeMedian(valsAsInts: mutable.Seq[Int]): Int = {
+          var result: Int = 0
+          if (valsAsInts.nonEmpty) {
+            result = median(DenseVector[Int](valsAsInts.toArray))
+          }
+          result
+        }
+
+        def computeQuartile(valsAsDouble: mutable.Seq[Double], p: Double): Double = {
+          var result: Double = 0.0
+          if (valsAsDouble.nonEmpty) {
+            result = DescriptiveStats.percentile(valsAsDouble.toArray, p)
+          }
+          result
+        }
+
+        val medianPatternLengths: Int = computeMedian(valuesLength)
+        val lowerQuartile: Double = computeQuartile(valsAsDouble, 0.25)
+        val upperQuartile: Double = computeQuartile(valsAsDouble, 0.75)
+
+        Map(
+          "median" -> medianPatternLengths.toDouble,
+          "min-length" -> minPatternLenght.toDouble,
+          "max-length" -> maxPatternLength.toDouble,
+          "mean" -> mv.mean,
+          "var" -> mv.variance,
+          "stddev" -> mv.stdDev,
+          "most-freq-pattern-length" -> mostFrequentPatternLength,
+          "lower-quartile" -> lowerQuartile,
+          "upper-quartile" -> upperQuartile)
+      }
+    }
+
+    val statCol = "all-statistics"
+    val statisticsAboutPatternLenght: DataFrame = newFeaturesWithPatternStatsDF
+      .withColumn(statCol, descriptive_statistics_pattern_length(col("pattern-length")))
+      .withColumn("pattern-length-min", col(statCol).getItem("min-length"))
+      .withColumn("pattern-length-max", col(statCol).getItem("max-length"))
+      .withColumn("mean-pattern-length", col(statCol).getItem("mean"))
+      .withColumn("variance-pattern-length", col(statCol).getItem("var"))
+      .withColumn("std-dev-pattern-length", col(statCol).getItem("stddev"))
+      .withColumn("most-freq-pattern-lenght", col(statCol).getItem("most-freq-pattern-length"))
+      .withColumn("lower-quartile-pattern-length", col(statCol).getItem("lower-quartile"))
+      .withColumn("upper-quartile-pattern-length", col(statCol).getItem("upper-quartile"))
+      .drop(statCol)
+
+    statisticsAboutPatternLenght
   }
+
 
 }
 

@@ -47,6 +47,24 @@ object UDF {
     }
   }
 
+  //Error classifier #3: top-values (aka histogram)
+  val is_in_top_10_value = udf {
+    (value: String, attrName: String, top10Values: mutable.Seq[String]) => {
+
+      var result: Int = DOES_NOT_APPLY
+
+      if (value != null) {
+
+        val valueInTop10: Boolean = top10Values.map(_.toLowerCase()).contains(value.toLowerCase())
+        valueInTop10 match {
+          case true => result = CLEAN
+          case false => result = ERROR
+        }
+      }
+      result
+    }
+  }
+
   val identify_missing = udf {
     isNull: Boolean =>
       isNull match {

@@ -3,7 +3,7 @@ package de.error.detection.from.metadata
 import com.typesafe.config.{Config, ConfigFactory}
 import de.aggregation.{MajorityVotingAggregator, UnionAllAggregator}
 import de.evaluation.data.metadata.MetadataCreator
-import de.evaluation.data.schema.{FlightsSchema, Schema}
+import de.evaluation.data.schema.{BeersSchema, FlightsSchema, Schema}
 import de.evaluation.f1.{Eval, F1}
 import de.evaluation.util.SparkLOAN
 import de.experiments.ExperimentsCommonConfig
@@ -34,6 +34,9 @@ trait ConfigBase {
   val dateDefaultValues: Seq[String] = commonsConfig.getStringList("default.date").asScala
 
 
+  val ec_valid_number = "ec-valid-number"
+  val ec_low_counts = "ec-low-counts"
+  val ec_top_value = "ec-top-value"
 }
 
 
@@ -65,7 +68,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
     SparkLOAN.withSparkSession("metadata reader") {
       session => {
 
-        Seq("beers" /*, "flights", "blackoak"*/).foreach(dataset => {
+        Seq("museum", "beers", "flights", "blackoak").foreach(dataset => {
           println(s"processing $dataset.....")
 
           val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
@@ -73,7 +76,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
           val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
           val fullMetadataDF: DataFrame = creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
-          fullMetadataDF.show()
+          fullMetadataDF.show(50)
 
           val flatWithLabelDF: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
 
@@ -260,6 +263,54 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           //end: #7 valid data type
 
           // Error classifier: Unused columns, indicated either by being largely unpopulated or populated with the same value in all records.
+          def is_column_unused = udf {
+            distinct_vals_count: Int => {
+              if (distinct_vals_count <= 1) ERROR
+              else DOES_NOT_APPLY
+            }
+          }
+
+          //Error classifier: String length outliers:
+          // Value to String to String-Length -> create length statistics with median, lower/upper quartlile
+          // heuristic: lower_quartile > = len(value) >= upper_quartile -> ERROR
+
+
+          /**
+            * STRING LENGTH STATISTICS
+            * Minimum
+            * 4.00
+            * Lower Quartile
+            * 7.00
+            * Median
+            * 8.00
+            * Upper Quartile
+            * 9.00
+            * Maximum
+            * 26.00
+            * Average
+            * 7.84
+            * Standard Deviation
+            * 1.80
+            */
+
+
+          def is_value_len_within_common_sizes = udf {
+            (value: String, lowQuartile: Double, upQuartile: Double) => {
+              var result = DOES_NOT_APPLY
+              if (value != null && value.nonEmpty) {
+                val len: Int = value.length
+                if (len < lowQuartile || len > upQuartile) result = ERROR
+              }
+              result
+            }
+          }
+
+
+
+
+          //Error classifier: Pattern value regex: https://cloud.trifacta.com/data/7259/22536
+          // see https://docs.trifacta.com/display/SS/Text+Matching to create patterns
+          // create patterns histogram and analyse for errors
 
           //Error Classifier: Missing value: Strings with repeated characters or characters that are next
           //to each other on the used keyboard, e.g., replacing a phone
@@ -295,21 +346,23 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           val ec_valid_number = "ec-valid-number"
           val ec_cardinality_vio = "ec-cardinality-vio"
           val ec_lookup = "ec-lookup-attr"
-          // val ec_low_counts = "ec-low-counts-suspicious"
+          //val ec_low_counts = "ec-low-counts-suspicious"
           val ec_pattern_length_within_trimmed_dist = "ec-pattern-value"
           val ec_valid_data_type = "ec-valid-data-type"
+          val ec_unused_column = "ec-unused-column"
+          val ec_value_len_within_common_sizes = "ec-value-len"
 
-          val metadataClassifiersNames = Seq(
-            ec_missing_value,
-            ec_default_value,
-            ec_top_value,
-            ec_valid_number,
-            ec_cardinality_vio,
-            ec_lookup /*,
-            ec_low_counts*/
-            , ec_pattern_length_within_trimmed_dist
-            , ec_valid_data_type
-          )
+          //          val metadataClassifiersNames = Seq(
+          //            ec_missing_value,
+          //            ec_default_value,
+          //            ec_top_value,
+          //            ec_valid_number,
+          //            ec_cardinality_vio,
+          //            ec_lookup /*,
+          //            ec_low_counts*/
+          //            , ec_pattern_length_within_trimmed_dist
+          //            , ec_valid_data_type
+          //          )
           //val allMetadataBasedClassifiers: Seq[Column] = metadataClassifiersNames.map(colName => col(colName))
 
 
@@ -331,6 +384,8 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             .withColumn(ec_pattern_length_within_trimmed_dist,
             is_value_pattern_length_within_trimmed_distr(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("pattern-length-dist-10")))
             .withColumn(ec_valid_data_type, is_valid_data_type(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
+            .withColumn(ec_unused_column, is_column_unused(flatWithMetadataDF("distinct-vals-count")))
+            .withColumn(ec_value_len_within_common_sizes, is_value_len_within_common_sizes(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("lower-quartile-pattern-length"), flatWithMetadataDF("upper-quartile-pattern-length")))
 
           /*End: Final matrix*/
 
@@ -342,23 +397,25 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             ec_cardinality_vio,
             ec_lookup,
             ec_pattern_length_within_trimmed_dist,
-            ec_valid_data_type)
+            ec_valid_data_type,
+            ec_unused_column,
+            ec_value_len_within_common_sizes)
 
 
           /* Analysing the performance of each classifier.*/
           //          val matrixWithClassifiersResult: DataFrame = matrixWithECsFromMetadataDF
           //            .select("label", cols: _*)
           // val countsByValues: collection.Map[Row, Long] = matrixWithClassifiersResult.rdd.countByValue()
-          //countsByValues.foreach(println)
+          //          countsByValues.foreach(println)
 
-          //          cols.foreach(column => {
-          //            val singleECPerformnaceDF: DataFrame = FormatUtil
-          //              .getPredictionAndLabelOnIntegersForSingleClassifier(matrixWithECsFromMetadataDF, column)
-          //            val evalEC: Eval = F1.evalPredictionAndLabels_TMP(singleECPerformnaceDF)
-          //            evalEC.printResult(s"evaluation $column")
-          //
-          //          })
-          //          val homeDir: String = applicationConfig.getString(s"home.dir.$dataset")
+          cols.foreach(column => {
+            val singleECPerformnaceDF: DataFrame = FormatUtil
+              .getPredictionAndLabelOnIntegersForSingleClassifier(matrixWithECsFromMetadataDF, column)
+            val evalEC: Eval = F1.evalPredictionAndLabels_TMP(singleECPerformnaceDF)
+            evalEC.printResult(s"evaluation $column")
+
+          })
+          //                    val homeDir: String = applicationConfig.getString(s"home.dir.$dataset")
           //
           //
           //          cols.foreach(column => {
@@ -421,23 +478,16 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
 
           /* Aggregation strategies */
-          //          val majority_voter = "majority-vote"
-          //          val min_1_col = "min-1"
-          //          val evaluationMatrixDF: DataFrame = matrixWithECsFromMetadataDF
-          //            .withColumn(majority_voter, UDF.majority_vote(array(allMetadataBasedClassifiers: _*)))
-          //            .withColumn(min_1_col, UDF.min_1(array(allMetadataBasedClassifiers: _*)))
-          //
-          //          /*//1-st aggregation: majority voting*/
-          //          val majorityVoterDF: DataFrame = FormatUtil
-          //            .getPredictionAndLabelOnIntegers(evaluationMatrixDF, majority_voter)
-          //          val eval_majority_voter: Eval = F1.evalPredictionAndLabels_TMP(majorityVoterDF)
-          //          eval_majority_voter.printResult(s"majority voter for $dataset:")
-          //
-          //          /*//2-nd aggregation: min-1*/
-          //          val min1DF: DataFrame = FormatUtil
-          //            .getPredictionAndLabelOnIntegers(evaluationMatrixDF, min_1_col)
-          //          val eval_min_1: Eval = F1.evalPredictionAndLabels_TMP(min1DF)
-          //          eval_min_1.printResult(s"min-1 for $dataset")
+
+          val unionAllEval: Eval = UnionAllAggregator()
+            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
+            .evaluate()
+          unionAllEval.printResult(s"union all for $dataset: ")
+
+          val majorityVoteEval: Eval = MajorityVotingAggregator()
+            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
+            .evaluate()
+          majorityVoteEval.printResult(s"majority vote for $dataset")
           /* end: Aggregation strategies */
 
         })
@@ -448,10 +498,13 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
   }
 }
 
+/**
+  * Noting when values recognizable as belonging to multiple data domains appear in one column
+  */
 object MissfieldedValuesErrorDetector extends ExperimentsCommonConfig with ConfigBase {
   def main(args: Array[String]): Unit = {
 
-    val datasets = Seq("beers_missfielded_10")
+    val datasets = Seq("beers_missfielded_1", "beers_missfielded_5", "beers_missfielded_10")
 
     SparkLOAN.withSparkSession("missfielded errors detector") {
       session => {
@@ -459,21 +512,19 @@ object MissfieldedValuesErrorDetector extends ExperimentsCommonConfig with Confi
 
           println(s"processing $dataset.....")
 
-          val schema: Schema = allSchemasByName.getOrElse(dataset, FlightsSchema)
+          val schema: Schema = allSchemasByName.getOrElse(dataset, BeersSchema)
 
           val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
           val creator = MetadataCreator()
 
           val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
           val fullMetadataDF: DataFrame = creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
-          fullMetadataDF.show()
+          //fullMetadataDF.show()
 
           val flatWithLabelDF: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
 
           val flatWithMetadataDF: DataFrame = flatWithLabelDF.join(fullMetadataDF, Seq("attrName"))
-          flatWithMetadataDF.where(col("label") === "1").show()
-
-
+          // flatWithMetadataDF.where(col("label") === "1").show()
 
 
           //Error Classifier #6: The column, related to the lookup source, its value is absent in the source -> error, else clean.
@@ -519,6 +570,7 @@ object MissfieldedValuesErrorDetector extends ExperimentsCommonConfig with Confi
           val ec_columns = Seq(ec_pattern_length_within_trimmed_dist,
             ec_low_counts,
             ec_lookup)
+
           ec_columns.foreach(column => {
             val singleECPerformnaceDF: DataFrame = FormatUtil
               .getPredictionAndLabelOnIntegersForSingleClassifier(matrixWithECsFromMetadataDF, column)
@@ -552,6 +604,189 @@ object MissfieldedValuesErrorDetector extends ExperimentsCommonConfig with Confi
       }
     }
 
+  }
+}
+
+/**
+  * noting the violation of the data type constraint
+  */
+object WrongdatatypeErrorDetector extends ExperimentsCommonConfig with ConfigBase {
+
+  def main(args: Array[String]): Unit = {
+
+    val datasets = Seq("beers_wrongdatatype_1", "beers_wrongdatatype_5", "beers_wrongdatatype_10")
+
+    SparkLOAN.withSparkSession("wrong data type errors detector") {
+      session => {
+        datasets.foreach(dataset => {
+
+          println(s"processing $dataset.....")
+
+          val schema: Schema = allSchemasByName.getOrElse(dataset, BeersSchema)
+
+          val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
+          val creator = MetadataCreator()
+
+          val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
+          val fullMetadataDF: DataFrame = creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
+          // fullMetadataDF.show()
+
+          val flatWithLabelDF: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
+
+          val flatWithMetadataDF: DataFrame = flatWithLabelDF.join(fullMetadataDF, Seq("attrName"))
+          // flatWithMetadataDF.where(col("label") === "1").show()
+
+          //Error Classifier #4: Semantic role for numbers
+
+          val dataTypesDictionary: Map[String, String] = schema.dataTypesDictionary
+
+          def isValidNumber(value: String): Int = {
+
+            val allDigits: Boolean = value.matches(VALID_NUMBER)
+            allDigits match {
+              case true => CLEAN
+              case false => ERROR
+            }
+          }
+
+          def is_valid_number = udf {
+            (attrName: String, value: String) => {
+              var result: Int = DOES_NOT_APPLY
+
+              if (value != null) {
+                //todo: remove default values from the top10
+                val dataType: String = dataTypesDictionary.getOrElse(attrName, "")
+
+                dataType match {
+                  case "Integer" => result = isValidNumber(value)
+                  case _ => result = DOES_NOT_APPLY
+                }
+              }
+              result
+            }
+          }
+
+
+          val matrixWithECsFromMetadataDF: DataFrame = flatWithMetadataDF
+            .where(col("attrName") === "ounces" or col("attrName") === "abv")
+            .withColumn(ec_valid_number, is_valid_number(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
+            .withColumn(ec_low_counts,
+              UDF.is_value_with_low_counts(flatWithMetadataDF("number of tuples"),
+                flatWithMetadataDF("distinct-vals-count"),
+                flatWithMetadataDF("dirty-value"),
+                flatWithMetadataDF("values-with-counts")))
+
+          val ec_columns: Seq[String] = Seq(ec_valid_number, ec_low_counts)
+          ec_columns.foreach(column => {
+            val singleECPerformnaceDF: DataFrame = FormatUtil
+              .getPredictionAndLabelOnIntegersForSingleClassifier(matrixWithECsFromMetadataDF, column)
+            val evalEC: Eval = F1.evalPredictionAndLabels_TMP(singleECPerformnaceDF)
+            evalEC.printResult(s"evaluation $column")
+          })
+
+          val unionAllEval: Eval = UnionAllAggregator()
+            .onDataFrame(matrixWithECsFromMetadataDF)
+            .forColumns(ec_columns)
+            .evaluate()
+          unionAllEval.printResult(s"union all for $dataset: ")
+
+        })
+      }
+    }
+  }
+
+
+}
+
+
+object MisspellingErrorDetector extends ExperimentsCommonConfig with ConfigBase {
+
+  def main(args: Array[String]): Unit = {
+    val datasets = Seq("beers_misspelings_1", "beers_misspelings_5", "beers_misspelings_10")
+
+    SparkLOAN.withSparkSession("misspelling errors detector") {
+      session => {
+        datasets.foreach(dataset => {
+
+          println(s"processing $dataset.....")
+
+          val schema: Schema = allSchemasByName.getOrElse(dataset, BeersSchema)
+
+          val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
+          val creator = MetadataCreator()
+
+          val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
+          val fullMetadataDF: DataFrame = creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
+          //fullMetadataDF.show()
+
+          val flatWithLabelDF: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
+
+          val flatWithMetadataDF: DataFrame = flatWithLabelDF.join(fullMetadataDF, Seq("attrName"))
+          //flatWithMetadataDF.where(col("label") === "1").show()
+
+          val dataTypesDictionary: Map[String, String] = schema.dataTypesDictionary
+
+          def isValidNumber(value: String): Int = {
+
+            val allDigits: Boolean = value.matches(VALID_NUMBER)
+            allDigits match {
+              case true => CLEAN
+              case false => ERROR
+            }
+          }
+
+          def is_valid_number = udf {
+            (attrName: String, value: String) => {
+              var result: Int = DOES_NOT_APPLY
+
+              if (value != null) {
+                //todo: remove default values from the top10
+                val dataType: String = dataTypesDictionary.getOrElse(attrName, "")
+
+                dataType match {
+                  case "Integer" => result = isValidNumber(value)
+                  case _ => result = DOES_NOT_APPLY
+                }
+              }
+              result
+            }
+          }
+
+
+          val matrixWithECsFromMetadataDF: DataFrame = flatWithMetadataDF
+            .withColumn(ec_top_value, UDF.is_in_top_10_value(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("attrName"), flatWithMetadataDF("top10")))
+            .withColumn(ec_valid_number, is_valid_number(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
+            .withColumn(ec_low_counts,
+              UDF.is_value_with_low_counts(flatWithMetadataDF("number of tuples"),
+                flatWithMetadataDF("distinct-vals-count"),
+                flatWithMetadataDF("dirty-value"),
+                flatWithMetadataDF("values-with-counts")))
+
+
+          val ec_columns = Seq(ec_top_value, ec_valid_number, ec_low_counts)
+          ec_columns.foreach(column => {
+            val singleECPerformnaceDF: DataFrame = FormatUtil
+              .getPredictionAndLabelOnIntegersForSingleClassifier(matrixWithECsFromMetadataDF, column)
+            val evalEC: Eval = F1.evalPredictionAndLabels_TMP(singleECPerformnaceDF)
+            evalEC.printResult(s"evaluation $column")
+
+          })
+
+          val unionAllEval: Eval = UnionAllAggregator()
+            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(ec_columns)
+            .evaluate()
+          unionAllEval.printResult(s"union all for $dataset: ")
+
+          val majorityVoteEval: Eval = MajorityVotingAggregator()
+            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(ec_columns)
+            .evaluate()
+
+          majorityVoteEval.printResult(s"majority vote for $dataset")
+
+        })
+
+      }
+    }
   }
 }
 

@@ -1,10 +1,16 @@
 package de.playground
 
+import breeze.stats._
 import com.typesafe.config.{Config, ConfigFactory}
+import de.error.detection.from.metadata.MisspellingErrorDetector.{allMetadataByName, allSchemasByName}
+import de.evaluation.data.metadata.MetadataCreator
+import de.evaluation.data.schema.{BeersSchema, Schema}
 import de.evaluation.data.util.LookupColumns
-import de.evaluation.util.{DataSetCreator, SparkLOAN}
+import de.evaluation.util.SparkLOAN
+import de.experiments.ExperimentsCommonConfig
 import de.experiments.features.prediction.CountsTableRow
 import de.model.util.NumbersUtil
+import de.util.DatasetFlattener
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -70,6 +76,7 @@ object StatPlayground {
 
   }
 }
+
 
 case class Record(key: Int, value: String)
 
@@ -258,18 +265,163 @@ object SeqGroupByPlayground extends App {
   println(lengthDistr)
 }
 
-object LoaderPlayground {
+object MuseumsLoaderPlayground {
   def main(args: Array[String]): Unit = {
     SparkLOAN.withSparkSession("mixed csv") {
       session => {
-        val path = "/Users/visenger/research/datasets/museum/openaccess/MetObjects_tiny.csv"
-        val schema = Seq("Object Number", "Is Highlight", "Is Public Domain", "Object ID", "Department", "Object Name", "Title", "Culture", "Period", "Dynasty", "Reign", "Portfolio", "Artist Role", "Artist Prefix", "Artist Display Name", "Artist Display Bio", "Artist Suffix", "Artist Alpha Sort", "Artist Nationality", "Artist Begin Date", "Artist End Date", "Object Date", "Object Begin Date", "Object End Date", "Medium", "Dimensions", "Credit Line", "Geography Type", "City", "State", "County", "Country", "Region", "Subregion", "Locale", "Locus", "Excavation", "River", "Classification", "Rights and Reproduction", "Link Resource", "Metadata Date", "Repository")
-        val museum: DataFrame = DataSetCreator.createFrame(session, path, schema: _*)
-        museum.show(100, false)
+        //        val commonPath = "/Users/visenger/research/datasets/museum"
+        //        val path = s"$commonPath/test-museum.csv"
+        //        val schemaM = MuseumSchema.getSchema //Seq("Object Number", "Is Highlight", "Is Public Domain", "Object ID", "Department", "Object Name", "Title", "Culture", "Period", "Dynasty", "Reign", "Portfolio", "Artist Role", "Artist Prefix", "Artist Display Name", "Artist Display Bio", "Artist Suffix", "Artist Alpha Sort", "Artist Nationality", "Artist Begin Date", "Artist End Date", "Object Date", "Object Begin Date", "Object End Date", "Medium", "Dimensions", "Credit Line", "Geography Type", "City", "State", "County", "Country", "Region", "Subregion", "Locale", "Locus", "Excavation", "River", "Classification", "Rights and Reproduction", "Link Resource", "Metadata Date", "Repository")
+        //        val museum: DataFrame = DataSetCreator.createFrame(session, path, schemaM: _*)
+        //
+        //        museum.printSchema()
+        //        museum.show(false)
+
+
+        val dataset = "museum"
+        println(s"processing $dataset.....")
+
+        val schema: Schema = allSchemasByName.getOrElse(dataset, BeersSchema)
+
+        val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
+        val creator = MetadataCreator()
+
+        val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
+        val fullMetadataDF: DataFrame = creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
+        fullMetadataDF.show(50)
+
+        val flatWithLabelDF: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
+        flatWithLabelDF.show(50, false)
+
+        val flatWithMetadataDF: DataFrame = flatWithLabelDF.join(fullMetadataDF, Seq("attrName"))
+        flatWithMetadataDF.show(50)
+
+
       }
     }
   }
 }
+
+object QuotesPlayground {
+  def main(args: Array[String]): Unit = {
+    SparkLOAN.withSparkSession("quotes") {
+      session => {
+        val path = "/Users/visenger/Downloads/to-remove/test-museum.csv"
+
+        val csv = session
+          .read
+          .option("header", "true")
+          .csv(path)
+
+        csv.show(false)
+
+        val commonPath = "/Users/visenger/research/datasets/museum"
+        val path2 = s"$commonPath/museum-clean-tmp.csv"
+        val fullCSV: DataFrame = session
+          .read
+          .option("header", "true")
+          .csv(path2)
+        fullCSV.show(false)
+
+
+
+        //csv.toDF(MuseumSchema.getSchema: _*).show()
+      }
+    }
+  }
+}
+
+object DescriptiveStatPlayground extends ExperimentsCommonConfig {
+  def main(args: Array[String]): Unit = {
+    SparkLOAN.withSparkSession("descriptive stat") {
+      session => {
+        val dataset = "museum"
+        //    val dataset = "beers"
+        val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
+        val creator = MetadataCreator()
+
+        val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
+        val fullMetadataDF: DataFrame = creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
+        fullMetadataDF.show(50)
+        fullMetadataDF.printSchema()
+
+        //
+        //        def calc_mean_var = udf {
+        //          valuesLength: mutable.Seq[Int] => {
+        //            val valsAsDouble: mutable.Seq[Double] = valuesLength.map(_.toDouble)
+        //            val values: DenseVector[Double] = DenseVector[Double](valsAsDouble: _*)
+        //            //mean(values)
+        //            //mode returns a tuple: [22.0,209] or [NaN,0] -> when values are empty
+        //
+        //            val mostFrequentPatternLength: Double = mode(values).mode
+        //
+        //            val mv = meanAndVariance(values)
+        //
+        //            val lowerQuartile: Double = computeQuartile(valsAsDouble, 0.25)
+        //            val upperQuartile: Double = computeQuartile(valsAsDouble, 0.75)
+        //
+        //            Map("mean" -> mv.mean,
+        //              "var" -> mv.variance,
+        //              "stddev" -> mv.stdDev,
+        //              "most-freq-pattern-length" -> mostFrequentPatternLength,
+        //              "lower-quartile" -> lowerQuartile,
+        //              "upper-quartile" -> upperQuartile)
+        //          }
+        //        }
+        //
+        //        val statCol = "all-statistics"
+        //        val newMetaDF: DataFrame = fullMetadataDF
+        //          .withColumn(statCol, calc_mean_var(col("pattern-length")))
+        //          .withColumn("mean-pattern-length", col(statCol).getItem("mean"))
+        //          .withColumn("variance-pattern-length", col(statCol).getItem("var"))
+        //          .withColumn("std-dev-pattern-length", col(statCol).getItem("stddev"))
+        //          .withColumn("most-freq-pattern-lenght", col(statCol).getItem("most-freq-pattern-length"))
+        //          .withColumn("lower-quartile-pattern-length", col(statCol).getItem("lower-quartile"))
+        //          .withColumn("upper-quartile-pattern-length", col(statCol).getItem("upper-quartile"))
+        //          .drop(statCol)
+        //        newMetaDF
+        //          .show(50)
+        //        newMetaDF.printSchema()
+
+
+      }
+    }
+  }
+
+
+  private def computeQuartile(valsAsDouble: mutable.Seq[Double], p: Double): Double = {
+    var result: Double = 0.0
+    if (!valsAsDouble.isEmpty) {
+
+      result = DescriptiveStats.percentile(valsAsDouble.toArray, p)
+    }
+    result
+  }
+}
+
+object BreezePlayground extends App {
+
+  import breeze.linalg.{DenseVector, _}
+  import breeze.stats._
+
+
+  val values: Vector[Double] = DenseVector[Double](2.0, 3.0, 4.0, 5.0, 2.0, 7.0, 9.0, 7.0)
+  val values_empty: Vector[Double] = DenseVector[Double]()
+
+  // val a = DenseVector(2, 10, 3) // cause compiling error
+  println((mean(values)))
+  println(DescriptiveStats.percentile(values.toArray, 0.25))
+  //println(DescriptiveStats.percentile(values_empty.toArray, 0.25))
+
+  println(bincount(DenseVector[Int](0, 1, 2, 3, 1, 3, 3, 3)))
+
+  val valsAsInt: Seq[Int] = Seq()
+
+  if (valsAsInt.nonEmpty) println(median(valsAsInt))
+
+
+}
+
 
 
 

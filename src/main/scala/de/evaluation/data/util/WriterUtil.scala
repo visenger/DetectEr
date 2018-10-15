@@ -27,6 +27,8 @@ object WriterUtil {
       .write
       .option("header", "true")
       .csv(pathToWrite)
+
+    //    todo: consider renaming file
   }
 
 }

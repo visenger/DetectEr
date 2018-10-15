@@ -6,7 +6,7 @@ import de.evaluation.data.util.WriterUtil
 import de.evaluation.util.{DataSetCreator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
 import de.util.DatasetFlattener
-import de.wrangling.BeersDirtyMaker.{beersAndBreweriesPath, beersSchema, city, state}
+import de.wrangling.BeersDirtyMaker.{city, state}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -189,7 +189,7 @@ object BeersMetadataExplorer extends ExperimentsCommonConfig {
 
     SparkLOAN.withSparkSession("exploring beers") {
       session => {
-        Seq("beers" /*, "flights", "blackoak"*/).foreach(dataset => {
+        Seq("beers").foreach(dataset => {
           println(s"processing $dataset.....")
 
           val dataPath = allRawData.getOrElse(dataset, "unknown")
@@ -236,6 +236,8 @@ object BeersMissfieldedValsInjector extends ExperimentsCommonConfig {
   }
 
   def run(session: SparkSession, err: Double): DataFrame = {
+    val beersAndBreweriesPath = allCleanData.getOrElse("beers", "")
+    val beersSchema = BeersSchema.getSchema
     val cleanBeersBreweriesDF: DataFrame = DataSetCreator
       .createFrame(session, beersAndBreweriesPath, beersSchema: _*)
 
@@ -253,5 +255,64 @@ object BeersMissfieldedValsInjector extends ExperimentsCommonConfig {
       .union(remains_clean_1)
       .toDF(beersSchema: _*)
     dirty1DF
+  }
+}
+
+object BeersWrongDataTypeInjector extends ExperimentsCommonConfig {
+  val path = defaultConfig.getString("home.dir.beers")
+
+  def main(args: Array[String]): Unit = {
+
+    SparkLOAN.withSparkSession("wrong data type injector") {
+      session => {
+        Seq(0.01, 0.05, 0.1).foreach(err => {
+          val dirtyDF: DataFrame = run(session, err)
+          dirtyDF.show()
+          //WriterUtil.persistCSV(dirtyDF, s"$path/beers_wrongdatatype_$err")
+        })
+      }
+    }
+
+  }
+
+
+  def run(session: SparkSession, err: Double): DataFrame = {
+    val beersAndBreweriesPath = allCleanData.getOrElse("beers", "")
+    val beersSchema = BeersSchema.getSchema
+    val cleanBeersBreweriesDF: DataFrame = DataSetCreator
+      .createFrame(session, beersAndBreweriesPath, beersSchema: _*)
+
+    val cleanPercentage: Double = 1.0 - err
+    val splitArray = Array(err, cleanPercentage)
+    val Array(abv_to_dirty, remains_clean_1) = cleanBeersBreweriesDF.randomSplit(splitArray, 123L)
+
+    //adding % to the integer value
+    val dirtyAbvDF: DataFrame = abv_to_dirty
+      .withColumn("tmp-abv", concat(col("abv"), lit("%")))
+      .drop("abv")
+      .withColumnRenamed("tmp-abv", "abv")
+
+
+    val dirty1DF: DataFrame = dirtyAbvDF
+      .select("tid", "id", "beer-name", "style", "ounces", "abv", "ibu", "brewery_id", "brewery-name", city, state)
+      .union(remains_clean_1)
+      .toDF(beersSchema: _*)
+
+    val Array(ouncesToDirtyDF, remains_clean_2) = dirty1DF.randomSplit(splitArray, 345L)
+
+    // adding oz. string to the int value
+    val ounce = "oz."
+    val dirtyOuncesDF: DataFrame = ouncesToDirtyDF.withColumn("ounce-tmp", concat_ws(" ", col("ounces"), lit(ounce)))
+      .drop("ounces")
+      .withColumnRenamed("ounce-tmp", "ounces")
+      .select("tid", "id", "beer-name", "style", "ounces", "abv", "ibu", "brewery_id", "brewery-name", city, state)
+
+
+    val dirty2DF: DataFrame = dirtyOuncesDF
+      .select("tid", "id", "beer-name", "style", "ounces", "abv", "ibu", "brewery_id", "brewery-name", city, state)
+      .union(remains_clean_2)
+      .toDF(beersSchema: _*)
+
+    dirty2DF
   }
 }

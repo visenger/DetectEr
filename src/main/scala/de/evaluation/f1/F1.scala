@@ -53,7 +53,7 @@ object F1 {
       .toDF()
       .cache()
 
-    counts.show()
+    // counts.show()
 
 
     val tpDF: Dataset[Row] = counts.select("count").where(counts(predictionCol) === 1.0 && counts(labelCol) === 1.0)
