@@ -179,6 +179,33 @@ object ListsPlayground extends App {
 
   println(newSeqOfThree)
 
+  val ERROR = 1
+  val CLEAN = -1
+  val DOES_NOT_APPLY = 0
+
+  val classifiers: Array[Int] = Array(ERROR, ERROR, ERROR, ERROR, CLEAN, CLEAN, CLEAN, DOES_NOT_APPLY, DOES_NOT_APPLY)
+
+  val identifierToAmount: Map[Int, Int] = classifiers.groupBy(v => v).map(t => {
+    val value: Int = t._1
+    val amount: Int = t._2.size
+    (value, amount)
+  })
+
+  val majorityTuple: (Int, Int) = identifierToAmount.maxBy(t => t._2)
+  val majorityElement: Int = majorityTuple._1
+
+  val result = majorityElement match {
+    case ERROR => ERROR
+    case _ => CLEAN
+  }
+
+  println(s"majority vote is: $result")
+
+  val totalSum: Int = classifiers.sum
+  val result2: Int = if (totalSum > 0) ERROR else CLEAN
+
+  println(s"2 majority vote is: $result2")
+
 }
 
 object RepairPlayground extends App {
@@ -421,6 +448,124 @@ object BreezePlayground extends App {
 
 
 }
+
+object NGramsPlayground {
+
+  import org.apache.spark.ml.feature.NGram
+
+  def main(args: Array[String]): Unit = {
+    SparkLOAN.withSparkSession("n-grams") {
+      session => {
+
+        val wordDataFrame = session.createDataFrame(Seq(
+          (0, Array("H", "i", "I", "h", "e", "a", "r", "d", "about", "Spark")),
+          (1, Array("I", "wish", "Java", "could", "use", "case", "classes")),
+          (2, Array("Logistic", "regression", "models", "are", "neat")),
+          (3, Array("ngrams"))
+        )).toDF("id", "words")
+
+        val ngram = new NGram().setN(2).setInputCol("words").setOutputCol("ngrams")
+
+        val ngramDataFrame = ngram.transform(wordDataFrame)
+        ngramDataFrame.select("ngrams").show(false)
+      }
+    }
+  }
+}
+
+object HashFeaturesPlayground {
+  def main(args: Array[String]): Unit = {
+    SparkLOAN.withSparkSession("hashing") {
+      session => {
+        import org.apache.spark.ml.feature.MinHashLSH
+        import org.apache.spark.ml.linalg.Vectors
+        import org.apache.spark.sql.functions.col
+
+        val dfA = session.createDataFrame(Seq(
+          (0, Vectors.sparse(6, Seq((0, 1.0), (1, 1.0), (2, 1.0)))),
+          (1, Vectors.sparse(6, Seq((2, 1.0), (3, 1.0), (4, 1.0)))),
+          (2, Vectors.sparse(6, Seq((0, 1.0), (2, 1.0), (4, 1.0))))
+        )).toDF("id", "features")
+
+        val dfB = session.createDataFrame(Seq(
+          (3, Vectors.sparse(6, Seq((1, 1.0), (3, 1.0), (5, 1.0)))),
+          (4, Vectors.sparse(6, Seq((2, 1.0), (3, 1.0), (5, 1.0)))),
+          (5, Vectors.sparse(6, Seq((1, 1.0), (2, 1.0), (4, 1.0))))
+        )).toDF("id", "features")
+
+        val key = Vectors.sparse(6, Seq((1, 1.0), (3, 1.0)))
+
+        val mh = new MinHashLSH()
+          .setNumHashTables(5)
+          .setInputCol("features")
+          .setOutputCol("hashes")
+
+        val model = mh.fit(dfA)
+
+        // Feature Transformation
+        println("The hashed dataset where hashed values are stored in the column 'hashes':")
+        model.transform(dfA).show()
+
+        // Compute the locality sensitive hashes for the input rows, then perform approximate
+        // similarity join.
+        // We could avoid computing hashes by passing in the already-transformed dataset, e.g.
+        // `model.approxSimilarityJoin(transformedA, transformedB, 0.6)`
+        println("Approximately joining dfA and dfB on Jaccard distance smaller than 0.6:")
+        model.approxSimilarityJoin(dfA, dfB, 0.6, "JaccardDistance")
+          .select(col("datasetA.id").alias("idA"),
+            col("datasetB.id").alias("idB"),
+            col("JaccardDistance")).show()
+
+        // Compute the locality sensitive hashes for the input rows, then perform approximate nearest
+        // neighbor search.
+        // We could avoid computing hashes by passing in the already-transformed dataset, e.g.
+        // `model.approxNearestNeighbors(transformedA, key, 2)`
+        // It may return less than 2 rows when not enough approximate near-neighbor candidates are
+        // found.
+        println("Approximately searching dfA for 2 nearest neighbors of the key:")
+        model.approxNearestNeighbors(dfA, key, 2).show()
+
+        import org.apache.spark.ml.feature.FeatureHasher
+
+        val dataset = session.createDataFrame(Seq(
+          (2.2, true, "1", "foo bla"),
+          (3.3, false, "2", "bar"),
+          (4.4, false, "3", "baz"),
+          (4.4, false, "4", "baz"),
+          (5.5, false, "5", "bla foo")
+        )).toDF("real", "bool", "stringNum", "string")
+
+        val hasher = new FeatureHasher()
+          .setInputCols(/*"real", "bool", "stringNum","string"*/ "string")
+          .setOutputCol("features")
+
+        val featurized = hasher.transform(dataset)
+        featurized.show(false)
+        featurized.printSchema()
+
+        /**
+          * +----+-----+---------+-------+-----------------------+
+          * |real|bool |stringNum|string |features               |
+          * +----+-----+---------+-------+-----------------------+
+          * |2.2 |true |1        |foo bla|(262144,[147222],[1.0])|
+          * |3.3 |false|2        |bar    |(262144,[173866],[1.0])|
+          * |4.4 |false|3        |baz    |(262144,[187923],[1.0])|
+          * |4.4 |false|4        |baz    |(262144,[187923],[1.0])|
+          * |5.5 |false|5        |bla foo|(262144,[156000],[1.0])|
+          * +----+-----+---------+-------+-----------------------+
+          *
+          * root
+          * |-- real: double (nullable = false)
+          * |-- bool: boolean (nullable = false)
+          * |-- stringNum: string (nullable = true)
+          * |-- string: string (nullable = true)
+          * |-- features: vector (nullable = true)
+          */
+      }
+    }
+  }
+}
+
 
 
 

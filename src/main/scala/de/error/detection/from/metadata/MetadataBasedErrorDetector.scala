@@ -68,7 +68,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
     SparkLOAN.withSparkSession("metadata reader") {
       session => {
 
-        Seq("museum", "beers", "flights", "blackoak").foreach(dataset => {
+        Seq(/*"museum", "beers", "flights" ,*/ "blackoak").foreach(dataset => {
           println(s"processing $dataset.....")
 
           val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
@@ -81,6 +81,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           val flatWithLabelDF: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
 
           val flatWithMetadataDF: DataFrame = flatWithLabelDF.join(fullMetadataDF, Seq("attrName"))
+
 
           //Error Classifier #1: missing values -> object UDF
 
@@ -293,6 +294,10 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             * 1.80
             */
 
+          //Laurikkala et al. suggest a heuristic of 1.5*inter-quartile range
+          //Reference: Laurikkala, J., Juhola, M. & Kentala, E. (2000). Informal Identification of Outliers in
+          //Medical Data. Fifth International Workshop on Intelligent Data Analysis in Medicine
+          //and Pharmacology IDAMAP-2000 Berlin, 22 August.
 
           def is_value_len_within_common_sizes = udf {
             (value: String, lowQuartile: Double, upQuartile: Double) => {
@@ -305,6 +310,84 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             }
           }
 
+          // Error classifier: Hampel x84 outliers detection (see Hellerstein survey paper)
+
+          def is_value_outlier_Hampelx84 = udf {
+            (value: String, mad: Double, median: Double) => {
+              var result = DOES_NOT_APPLY
+              if (value != null && value.nonEmpty) {
+                val len: Int = value.length
+                val lowerBound: Double = median - (mad * 1.4826)
+                val upperBound: Double = median + (mad * 1.4826)
+                if (len < lowerBound || len > upperBound) result = ERROR
+              }
+              result
+            }
+          }
+
+
+          //Error classifier: extreme value theory (EVT) which uses a
+          //Gaussian mixture model to represent the data distribution for outlier
+          //detection as outliers (extreme values) occur in the tails of the distributions
+          //P(extreme-val)=exp(-exp((-1)*((val - mean)/deviation))
+          //from: A Survey of Outlier Detection Methodologies
+          //VICTORIA J. HODGE & JIM AUSTIN
+          // https://link.springer.com/content/pdf/10.1023/B:AIRE.0000045502.10941.a9.pdf
+
+
+          def is_value_len_extreme_evt = udf {
+            (value: String, mean: Double, std_dev: Double) => {
+              var result = DOES_NOT_APPLY
+              val isValidValue: Boolean = value != null && value.nonEmpty
+              val stdDevIsValid: Boolean = std_dev != 0.0
+              if (isValidValue && stdDevIsValid) {
+                val len: Int = value.length
+                // EVT (extreme value theory)
+                val reduced_variate: Double = (len - mean) / std_dev
+                val innerEVT: Double = math.exp((-1) * reduced_variate)
+                val evt: Double = math.exp((-1) * innerEVT)
+                val threshold = 0.9 //0.95
+                if (evt > threshold) result = ERROR
+              }
+              result
+            }
+          }
+
+          //Error classifier: 1.5 IQR
+          // Laurikkala et al. suggest a heuristic of 1.5*inter-quartile range
+          //Reference: Laurikkala, J., Juhola, M. & Kentala, E. (2000). Informal Identification of Outliers in
+          //Medical Data. Fifth International Workshop on Intelligent Data Analysis in Medicine
+          //and Pharmacology IDAMAP-2000 Berlin, 22 August.
+
+          def is_value_len_within_1_5_iqr = udf {
+            (value: String, lowQuartile: Double, upQuartile: Double) => {
+              var result = DOES_NOT_APPLY
+              if (value != null && value.nonEmpty) {
+                val len: Int = value.length
+                if (len < 1.5 * lowQuartile || len > 1.5 * upQuartile) result = ERROR
+              }
+              result
+            }
+          }
+
+          //Error classifier: Z-value test: if z>=3 then error
+
+          def is_value_len_z_test = udf {
+            (value: String, mean: Double, std_dev: Double) => {
+              var result = DOES_NOT_APPLY
+              val isValidValue: Boolean = value != null && value.nonEmpty
+              val stdDevIsValid: Boolean = std_dev != 0.0
+              if (isValidValue && stdDevIsValid) {
+                val len: Int = value.length
+                // todo: implement z-value test
+
+                val z_value: Double = math.abs(len - mean) / std_dev
+                result = if (z_value >= 3) ERROR else DOES_NOT_APPLY
+
+              }
+              result
+            }
+          }
 
 
 
@@ -351,6 +434,10 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           val ec_valid_data_type = "ec-valid-data-type"
           val ec_unused_column = "ec-unused-column"
           val ec_value_len_within_common_sizes = "ec-value-len"
+          val ec_value_len_Hampelx84 = "ec-value-len-Hampelx84"
+          val ec_value_len_evt = "ec-value-len-evt"
+          val ec_value_len_1_5_IQR = "ec-value-len-1-5-IQR"
+          val ec_value_len_z_test = "ec-value-len-z-test"
 
           //          val metadataClassifiersNames = Seq(
           //            ec_missing_value,
@@ -386,6 +473,10 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             .withColumn(ec_valid_data_type, is_valid_data_type(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
             .withColumn(ec_unused_column, is_column_unused(flatWithMetadataDF("distinct-vals-count")))
             .withColumn(ec_value_len_within_common_sizes, is_value_len_within_common_sizes(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("lower-quartile-pattern-length"), flatWithMetadataDF("upper-quartile-pattern-length")))
+            .withColumn(ec_value_len_Hampelx84, is_value_outlier_Hampelx84(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("mad-of-length-distr"), flatWithMetadataDF("median-length-distr")))
+            .withColumn(ec_value_len_evt, is_value_len_extreme_evt(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("mean-pattern-length"), flatWithMetadataDF("std-dev-pattern-length")))
+            .withColumn(ec_value_len_1_5_IQR, is_value_len_within_1_5_iqr(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("lower-quartile-pattern-length"), flatWithMetadataDF("upper-quartile-pattern-length")))
+            .withColumn(ec_value_len_z_test, is_value_len_z_test(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("mean-pattern-length"), flatWithMetadataDF("std-dev-pattern-length")))
 
           /*End: Final matrix*/
 
@@ -399,7 +490,11 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             ec_pattern_length_within_trimmed_dist,
             ec_valid_data_type,
             ec_unused_column,
-            ec_value_len_within_common_sizes)
+            ec_value_len_within_common_sizes,
+            ec_value_len_Hampelx84,
+            ec_value_len_evt,
+            ec_value_len_1_5_IQR,
+            ec_value_len_z_test)
 
 
           /* Analysing the performance of each classifier.*/
@@ -408,7 +503,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           // val countsByValues: collection.Map[Row, Long] = matrixWithClassifiersResult.rdd.countByValue()
           //          countsByValues.foreach(println)
 
-          cols.foreach(column => {
+          Seq(ec_value_len_z_test).foreach(column => {
             val singleECPerformnaceDF: DataFrame = FormatUtil
               .getPredictionAndLabelOnIntegersForSingleClassifier(matrixWithECsFromMetadataDF, column)
             val evalEC: Eval = F1.evalPredictionAndLabels_TMP(singleECPerformnaceDF)

@@ -13,6 +13,8 @@ import scala.collection.mutable
 
 /**
   * Created by visenger on 23/03/17.
+  *
+  * Derives metadata features of the input columns to use as input to error detection routines.
   */
 class MetadataCreator {
 
@@ -284,16 +286,23 @@ class MetadataCreator {
         val lowerQuartile: Double = computeQuartile(valsAsDouble, 0.25)
         val upperQuartile: Double = computeQuartile(valsAsDouble, 0.75)
 
+        val sequenceMean: Double = mv.mean
+
+        //todo: compute MAD median absolute deviation for robust dispersion -> for Hampel x84 outliers detection
+        val valsDiffMean: mutable.Seq[Int] = valuesLength.map(v => math.abs(v - medianPatternLengths))
+        val mad: Double = computeMedian(valsDiffMean)
+
         Map(
           "median" -> medianPatternLengths.toDouble,
           "min-length" -> minPatternLenght.toDouble,
           "max-length" -> maxPatternLength.toDouble,
-          "mean" -> mv.mean,
+          "mean" -> sequenceMean,
           "var" -> mv.variance,
           "stddev" -> mv.stdDev,
           "most-freq-pattern-length" -> mostFrequentPatternLength,
           "lower-quartile" -> lowerQuartile,
-          "upper-quartile" -> upperQuartile)
+          "upper-quartile" -> upperQuartile,
+          "mad" -> mad)
       }
     }
 
@@ -308,6 +317,8 @@ class MetadataCreator {
       .withColumn("most-freq-pattern-lenght", col(statCol).getItem("most-freq-pattern-length"))
       .withColumn("lower-quartile-pattern-length", col(statCol).getItem("lower-quartile"))
       .withColumn("upper-quartile-pattern-length", col(statCol).getItem("upper-quartile"))
+      .withColumn("mad-of-length-distr", col(statCol).getItem("mad"))
+      .withColumn("median-length-distr",col(statCol).getItem("median"))
       .drop(statCol)
 
     statisticsAboutPatternLenght

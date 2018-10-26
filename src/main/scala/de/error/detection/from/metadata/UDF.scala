@@ -75,6 +75,21 @@ object UDF {
 
   def majority_vote = udf {
     classifiers: mutable.WrappedArray[Int] => {
+
+      //      val identifierToAmount: Map[Int, Int] = classifiers.groupBy(v => v).map(t => {
+      //        val value: Int = t._1
+      //        val amount: Int = t._2.size
+      //        (value, amount)
+      //      })
+      //
+      //      val majorityTuple: (Int, Int) = identifierToAmount.maxBy(t => t._2)
+      //      val majorityElement: Int = majorityTuple._1
+      //
+      //      val result = majorityElement match {
+      //        case ERROR => ERROR
+      //        case _ => CLEAN
+      //      }
+
       val totalSum: Int = classifiers.sum
       val result: Int = if (totalSum > 0) ERROR else CLEAN
       result
