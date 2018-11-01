@@ -166,7 +166,8 @@ class MetadataCreator {
 
     def compute_pattern_length = udf {
       columnValues: mutable.Seq[String] => {
-        columnValues.map(value => value.length)
+        val lengths: mutable.Seq[Int] = columnValues.map(value => value.length).sorted
+        lengths
       }
     }
 
@@ -193,10 +194,75 @@ class MetadataCreator {
       }
     }
 
+    def compute_length_trimmed_distr = udf {
+      (valuesLength: mutable.Seq[Int], fraction: Double) => {
+
+        var result = valuesLength
+
+        if (valuesLength.nonEmpty) {
+          val distrSize: Int = valuesLength.size
+          val toRemovePercentage: Double = fraction * 100
+
+          val elementsToRemove: Double = distrSize * toRemovePercentage / 100
+          val roundedHalfUpElementsToRemove: Double = NumbersUtil.round(elementsToRemove, scale = 0)
+          if (roundedHalfUpElementsToRemove < distrSize) {
+            val toRemoveFromEachSide: Double = roundedHalfUpElementsToRemove / 2
+            val roundedHalfUpRemoveFromEachSide: Int = NumbersUtil.round(toRemoveFromEachSide, scale = 0).toInt
+            val sortedLenghts: mutable.Seq[Int] = valuesLength.sorted
+            val trimmedLengthDistr: mutable.Seq[Int] = sortedLenghts.drop(roundedHalfUpRemoveFromEachSide).dropRight(roundedHalfUpRemoveFromEachSide)
+            result = trimmedLengthDistr
+          }
+        }
+
+        result
+
+      }
+    }
+
+    def compute_length_winsorized = udf {
+      (valuesLength: mutable.Seq[Int], fraction: Double) => {
+
+        var result = valuesLength
+
+        if (valuesLength.nonEmpty) {
+          val distrSize: Int = valuesLength.size
+          val toRemovePercentage: Double = fraction * 100
+
+          val elementsToRemove: Double = distrSize * toRemovePercentage / 100
+          val roundedHalfUpElementsToRemove: Double = NumbersUtil.round(elementsToRemove, scale = 0)
+          if (roundedHalfUpElementsToRemove < distrSize) {
+            val toRemoveFromEachSide: Double = roundedHalfUpElementsToRemove / 2
+            val roundedHalfUpRemoveFromEachSide: Int = NumbersUtil.round(toRemoveFromEachSide, scale = 0).toInt
+            val sortedLenghts: mutable.Seq[Int] = valuesLength.sorted
+            val trimmedLengthDistr: mutable.Seq[Int] = sortedLenghts
+              .drop(roundedHalfUpRemoveFromEachSide)
+              .dropRight(roundedHalfUpRemoveFromEachSide)
+            val maxRightElement: Int = trimmedLengthDistr.max
+            val minLeftElement: Int = trimmedLengthDistr.min
+            val rightWinsorized: mutable.Seq[Int] = mutable.Seq.fill(roundedHalfUpRemoveFromEachSide)(maxRightElement)
+            val leftWinsorized: mutable.Seq[Int] = mutable.Seq.fill(roundedHalfUpRemoveFromEachSide)(minLeftElement)
+
+            val winsorizedLenghts: mutable.Seq[Int] = leftWinsorized ++ trimmedLengthDistr ++ rightWinsorized
+            result = winsorizedLenghts.sorted
+
+          }
+        }
+
+        result
+
+      }
+    }
+
+
     val patternStatisticsDF: DataFrame = aggrDirtyDF
       .withColumn("pattern-length", compute_pattern_length(aggrDirtyDF("column-values")))
       .withColumn("pattern-length-dist-full", compute_length_distribution(col("pattern-length")))
       .withColumn("pattern-length-dist-10", compute_length_distribution_threshold(col("pattern-length-dist-full")))
+      //todo: compute trimmed distribution
+      .withColumn("pattern-length-trimmed", compute_length_trimmed_distr(col("pattern-length"), lit(0.2)))
+      //todo: compute winsorized distribution
+      .withColumn("pattern-length-winsorized", compute_length_winsorized(col("pattern-length"), lit(0.2)))
+
       .drop("column-values")
 
 
@@ -288,7 +354,7 @@ class MetadataCreator {
 
         val sequenceMean: Double = mv.mean
 
-        //todo: compute MAD median absolute deviation for robust dispersion -> for Hampel x84 outliers detection
+        //compute MAD median absolute deviation for robust dispersion -> for Hampel x84 outliers detection
         val valsDiffMean: mutable.Seq[Int] = valuesLength.map(v => math.abs(v - medianPatternLengths))
         val mad: Double = computeMedian(valsDiffMean)
 
@@ -306,7 +372,31 @@ class MetadataCreator {
       }
     }
 
+    def descriptive_statistics_trimmed_pattern_length = udf {
+      trimmedValuesLength: mutable.Seq[Int] => {
+
+        val valsAsDouble: mutable.Seq[Double] = trimmedValuesLength.map(_.toDouble)
+        val values: DenseVector[Double] = DenseVector[Double](valsAsDouble: _*)
+        val mv = meanAndVariance(values)
+        Map("trimmed-mean" -> mv.mean,
+          "trimmed-std-dev" -> mv.stdDev)
+      }
+    }
+
+    def descriptive_statistics_winsorized_pattern_length = udf {
+      winsorizedValuesLength: mutable.Seq[Int] => {
+
+        val valsAsDouble: mutable.Seq[Double] = winsorizedValuesLength.map(_.toDouble)
+        val values: DenseVector[Double] = DenseVector[Double](valsAsDouble: _*)
+        val mv = meanAndVariance(values)
+        Map("winsorized-mean" -> mv.mean,
+          "winsorized-std-dev" -> mv.stdDev)
+      }
+    }
+
     val statCol = "all-statistics"
+    val trimmedStatCol = "trimmed-statistics"
+    val winsorizedStatCol = "winsorized-statistics"
     val statisticsAboutPatternLenght: DataFrame = newFeaturesWithPatternStatsDF
       .withColumn(statCol, descriptive_statistics_pattern_length(col("pattern-length")))
       .withColumn("pattern-length-min", col(statCol).getItem("min-length"))
@@ -318,8 +408,16 @@ class MetadataCreator {
       .withColumn("lower-quartile-pattern-length", col(statCol).getItem("lower-quartile"))
       .withColumn("upper-quartile-pattern-length", col(statCol).getItem("upper-quartile"))
       .withColumn("mad-of-length-distr", col(statCol).getItem("mad"))
-      .withColumn("median-length-distr",col(statCol).getItem("median"))
+      .withColumn("median-length-distr", col(statCol).getItem("median"))
+      .withColumn(trimmedStatCol, descriptive_statistics_trimmed_pattern_length(col("pattern-length-trimmed")))
+      .withColumn("trimmed-mean-pattern-length", col(trimmedStatCol).getItem("trimmed-mean"))
+      .withColumn("trimmed-std-dev-pattern-length", col(trimmedStatCol).getItem("trimmed-std-dev"))
+      .withColumn(winsorizedStatCol, descriptive_statistics_winsorized_pattern_length(col("pattern-length-winsorized")))
+      .withColumn("winsorized-mean-pattern-length", col(winsorizedStatCol).getItem("winsorized-mean"))
+      .withColumn("winsorized-std-dev-pattern-length", col(winsorizedStatCol).getItem("winsorized-std-dev"))
       .drop(statCol)
+      .drop(trimmedStatCol)
+      .drop(winsorizedStatCol)
 
     statisticsAboutPatternLenght
   }

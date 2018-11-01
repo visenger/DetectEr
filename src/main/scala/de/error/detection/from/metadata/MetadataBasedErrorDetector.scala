@@ -65,10 +65,10 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
   }
 
   def main(args: Array[String]): Unit = {
-    SparkLOAN.withSparkSession("metadata reader") {
+    SparkLOAN.withSparkSession("metadata-based heuristics") {
       session => {
 
-        Seq(/*"museum", "beers", "flights" ,*/ "blackoak").foreach(dataset => {
+        Seq("museum", "beers", "flights" /*, "blackoak"*/).foreach(dataset => {
           println(s"processing $dataset.....")
 
           val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
@@ -379,10 +379,29 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
               val stdDevIsValid: Boolean = std_dev != 0.0
               if (isValidValue && stdDevIsValid) {
                 val len: Int = value.length
-                // todo: implement z-value test
-
+                //  z-value test
                 val z_value: Double = math.abs(len - mean) / std_dev
                 result = if (z_value >= 3) ERROR else DOES_NOT_APPLY
+
+              }
+              result
+            }
+          }
+
+          // Error classifier: Value is within trimmed or winsorized range [mean-2*stdDev; mean+2*stdDev]
+
+          def is_value_len_within_range = udf {
+            (value: String, mean: Double, std_dev: Double, factor: Double) => {
+              var result = DOES_NOT_APPLY
+              val isValidValue: Boolean = value != null && value.nonEmpty
+              val stdDevIsValid: Boolean = std_dev != 0.0
+              if (isValidValue && stdDevIsValid) {
+                val len: Int = value.length
+                // todo: implement trimmed range
+                val lowerBound: Double = mean - factor * std_dev
+                val upperBound: Double = mean + factor * std_dev
+
+                result = if (len < lowerBound || len > upperBound) ERROR else DOES_NOT_APPLY
 
               }
               result
@@ -438,19 +457,8 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           val ec_value_len_evt = "ec-value-len-evt"
           val ec_value_len_1_5_IQR = "ec-value-len-1-5-IQR"
           val ec_value_len_z_test = "ec-value-len-z-test"
-
-          //          val metadataClassifiersNames = Seq(
-          //            ec_missing_value,
-          //            ec_default_value,
-          //            ec_top_value,
-          //            ec_valid_number,
-          //            ec_cardinality_vio,
-          //            ec_lookup /*,
-          //            ec_low_counts*/
-          //            , ec_pattern_length_within_trimmed_dist
-          //            , ec_valid_data_type
-          //          )
-          //val allMetadataBasedClassifiers: Seq[Column] = metadataClassifiersNames.map(colName => col(colName))
+          val ec_value_len_within_trimmed_range = "ec-value-len-trimmed-range"
+          val ec_value_len_within_winsorized_range = "ec-value-len-winsorized-range"
 
 
           val matrixWithECsFromMetadataDF: DataFrame = flatWithMetadataDF
@@ -477,7 +485,8 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             .withColumn(ec_value_len_evt, is_value_len_extreme_evt(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("mean-pattern-length"), flatWithMetadataDF("std-dev-pattern-length")))
             .withColumn(ec_value_len_1_5_IQR, is_value_len_within_1_5_iqr(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("lower-quartile-pattern-length"), flatWithMetadataDF("upper-quartile-pattern-length")))
             .withColumn(ec_value_len_z_test, is_value_len_z_test(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("mean-pattern-length"), flatWithMetadataDF("std-dev-pattern-length")))
-
+            .withColumn(ec_value_len_within_trimmed_range, is_value_len_within_range(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("trimmed-mean-pattern-length"), flatWithMetadataDF("trimmed-std-dev-pattern-length"), lit(3.0)))
+            .withColumn(ec_value_len_within_winsorized_range, is_value_len_within_range(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("winsorized-mean-pattern-length"), flatWithMetadataDF("winsorized-std-dev-pattern-length"), lit(3.0)))
           /*End: Final matrix*/
 
           val cols = Seq(
@@ -494,7 +503,9 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             ec_value_len_Hampelx84,
             ec_value_len_evt,
             ec_value_len_1_5_IQR,
-            ec_value_len_z_test)
+            ec_value_len_z_test,
+            ec_value_len_within_trimmed_range,
+            ec_value_len_within_winsorized_range)
 
 
           /* Analysing the performance of each classifier.*/
@@ -503,13 +514,15 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           // val countsByValues: collection.Map[Row, Long] = matrixWithClassifiersResult.rdd.countByValue()
           //          countsByValues.foreach(println)
 
-          Seq(ec_value_len_z_test).foreach(column => {
+          Seq(ec_value_len_within_trimmed_range, ec_value_len_within_winsorized_range).foreach(column => {
             val singleECPerformnaceDF: DataFrame = FormatUtil
               .getPredictionAndLabelOnIntegersForSingleClassifier(matrixWithECsFromMetadataDF, column)
             val evalEC: Eval = F1.evalPredictionAndLabels_TMP(singleECPerformnaceDF)
             evalEC.printResult(s"evaluation $column")
-
+            //evalEC.printLatexString(s"$column")
           })
+
+
           //                    val homeDir: String = applicationConfig.getString(s"home.dir.$dataset")
           //
           //
@@ -574,15 +587,15 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
           /* Aggregation strategies */
 
-          val unionAllEval: Eval = UnionAllAggregator()
-            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
-            .evaluate()
-          unionAllEval.printResult(s"union all for $dataset: ")
-
-          val majorityVoteEval: Eval = MajorityVotingAggregator()
-            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
-            .evaluate()
-          majorityVoteEval.printResult(s"majority vote for $dataset")
+          //          val unionAllEval: Eval = UnionAllAggregator()
+          //            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
+          //            .evaluate()
+          //          unionAllEval.printResult(s"union all for $dataset: ")
+          //
+          //          val majorityVoteEval: Eval = MajorityVotingAggregator()
+          //            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
+          //            .evaluate()
+          //          majorityVoteEval.printResult(s"majority vote for $dataset")
           /* end: Aggregation strategies */
 
         })

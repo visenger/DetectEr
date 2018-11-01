@@ -21,7 +21,7 @@ import org.apache.spark.ml.{Pipeline, PipelineModel, Transformer}
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import scopt.OptionParser
 
 import scala.collection.Map
@@ -260,6 +260,8 @@ object Word2VecExample {
       "Logistic regression models are neat great excellent".split(" ")
     ).map(Tuple1.apply)).toDF("text")
 
+    documentDF.show(false)
+
     // Learn a mapping from words to Vectors.
     val word2Vec = new Word2Vec()
       .setInputCol("text")
@@ -273,8 +275,8 @@ object Word2VecExample {
       println(s"Text: [${text.mkString(", ")}] => \nVector: $features\n")
     }
 
-    val synonyms: DataFrame = model.findSynonyms("neat", 2)
-    synonyms.show(2)
+    val synonyms: DataFrame = model.findSynonyms("Logistic",3)
+    synonyms.show()
 
     val testDF = sparkSession.createDataFrame(Seq(
       "Hi I heard about Spark and try it out".split(" "),
@@ -282,6 +284,8 @@ object Word2VecExample {
     ).map(Tuple1.apply)).toDF("text")
 
     val predicting = model.transform(testDF)
+
+    predicting.show()
 
     val fields: Seq[String] = predicting.schema.fieldNames.toSeq
     predicting

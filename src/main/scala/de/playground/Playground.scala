@@ -567,6 +567,13 @@ object HashFeaturesPlayground {
 }
 
 
+object NumbersRoundPlayground extends App {
+  val number: Double = 3.56
+  val rounded: Double = NumbersUtil.round(number, 0)
+  println(rounded)
+}
+
+
 
 
 
