@@ -68,7 +68,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
     SparkLOAN.withSparkSession("metadata-based heuristics") {
       session => {
 
-        Seq("museum", "beers", "flights" /*, "blackoak"*/).foreach(dataset => {
+        Seq(/*"museum", "beers", "flights" ,*/ "blackoak").foreach(dataset => {
           println(s"processing $dataset.....")
 
           val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
@@ -76,7 +76,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
           val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
           val fullMetadataDF: DataFrame = creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
-          fullMetadataDF.show(50)
+         // fullMetadataDF.show(50)
 
           val flatWithLabelDF: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
 

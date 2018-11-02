@@ -13,12 +13,13 @@ import de.evaluation.f1.FullResult
 import de.evaluation.util.{DataSetCreator, SparkLOAN, SparkSessionCreator}
 import de.model.util.AbstractParams
 import org.apache.spark.ml.classification.{BinaryLogisticRegressionSummary, LogisticRegression}
-import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
+import org.apache.spark.ml.feature.{HashingTF, Tokenizer, Word2VecModel}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.{GeneralizedLinearRegression, LinearRegression}
 import org.apache.spark.ml.{Pipeline, PipelineModel, Transformer}
 import org.apache.spark.mllib.evaluation.RegressionMetrics
+import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
@@ -260,7 +261,6 @@ object Word2VecExample {
       "Logistic regression models are neat great excellent".split(" ")
     ).map(Tuple1.apply)).toDF("text")
 
-    documentDF.show(false)
 
     // Learn a mapping from words to Vectors.
     val word2Vec = new Word2Vec()
@@ -275,23 +275,57 @@ object Word2VecExample {
       println(s"Text: [${text.mkString(", ")}] => \nVector: $features\n")
     }
 
-    val synonyms: DataFrame = model.findSynonyms("Logistic",3)
+    val synonyms: DataFrame = model.findSynonyms("Logistic", 3)
     synonyms.show()
 
-    val testDF = sparkSession.createDataFrame(Seq(
-      "Hi I heard about Spark and try it out".split(" "),
-      "Logistic regression models are cool".split(" ")
-    ).map(Tuple1.apply)).toDF("text")
 
-    val predicting = model.transform(testDF)
 
-    predicting.show()
 
-    val fields: Seq[String] = predicting.schema.fieldNames.toSeq
-    predicting
-      .select(fields.head, fields.tail: _*)
-      .collect()
-      .foreach(row => println(row.mkString(", ")))
+    import sparkSession.implicits._
+    val path = "/Users/visenger/research/unsupervised-error-detection/readings/Column Analysis.txt"
+    val inputDF: DataFrame = sparkSession
+      .read
+      .textFile(path)
+      .map(line => line.split(" ").toSeq)
+      .map(Tuple1.apply)
+      .toDF("text-line")
+
+    val word2vecModel: Word2Vec = new Word2Vec()
+      .setInputCol("text-line")
+      .setOutputCol("result")
+      .setMinCount(1)
+    val newModel: Word2VecModel = word2vecModel.fit(inputDF)
+
+    val transformedDF: DataFrame = newModel.transform(inputDF)
+    transformedDF.printSchema()
+    transformedDF.show()
+
+    import org.apache.spark.sql.functions._
+
+    val withIdxDF: DataFrame = transformedDF
+      .withColumn("idx", monotonically_increasing_id())
+    withIdxDF.show(5)
+
+    val docVectorsDF: DataFrame = withIdxDF
+      .select("idx", "result")
+
+    val indexedRowsRDD: RDD[IndexedRow] = docVectorsDF
+      .rdd
+      .map {
+        case (Row(idx: Long, features: Vector)) => IndexedRow(idx, org.apache.spark.mllib.linalg.Vectors.dense(features.toArray))
+      }
+
+    val matrix = new IndexedRowMatrix(indexedRowsRDD)
+    matrix.toBlockMatrix().transpose.toIndexedRowMatrix().columnSimilarities().entries.toDF().show()
+
+
+    val synoDF: DataFrame = newModel.findSynonyms("values", 10)
+    synoDF.show()
+
+
+    val wordVectors: DataFrame = newModel.getVectors
+    wordVectors.show(false)
+
 
     sparkSession.stop()
   }
