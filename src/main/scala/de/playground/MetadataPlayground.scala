@@ -3,6 +3,7 @@ package de.playground
 import de.evaluation.data.metadata.MetadataCreator
 import de.evaluation.util.SparkLOAN
 import de.experiments.ExperimentsCommonConfig
+import de.model.util.NumbersUtil
 import de.util.DatasetFlattener
 import org.apache.spark.sql.DataFrame
 
@@ -44,22 +45,32 @@ object AddressPlayground extends ExperimentsCommonConfig {
   def main(args: Array[String]): Unit = {
     SparkLOAN.withSparkSession("plgrd") {
       session => {
-        val dataset = "blackoak"
-        println(s"playground data: $dataset.....")
+        val datasets = Seq("museum", "beers")
+        datasets.foreach(dataset => {
+          println(s"playground data: $dataset.....")
 
-        val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
-        val creator = MetadataCreator()
+          val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
+          val creator = MetadataCreator()
 
-        val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
-        val fullMetadataDF: DataFrame = creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
-        fullMetadataDF.show()
+          val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
+          val fullMetadataDF: DataFrame = creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
+          fullMetadataDF.show(50)
 
-        val flatWithLabelDF: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
+          val flatWithLabelDF: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
+          //flatWithLabelDF.show()
 
-        val flatWithMetadataDF: DataFrame = flatWithLabelDF.join(fullMetadataDF, Seq("attrName"))
+          val totalCount: Long = flatWithLabelDF.count()
 
-        flatWithMetadataDF.show()
+          val errorsCount: Long = flatWithLabelDF.where(flatWithLabelDF("label") === "1").count()
 
+          val errPercentage: Double = errorsCount * 100 / totalCount.toDouble
+
+          println(s" dataset: $dataset -> error rate: ${NumbersUtil.round(errPercentage)}")
+
+          //        val flatWithMetadataDF: DataFrame = flatWithLabelDF.join(fullMetadataDF, Seq("attrName"))
+          //
+          //flatWithMetadataDF.printSchema()
+        })
       }
     }
   }

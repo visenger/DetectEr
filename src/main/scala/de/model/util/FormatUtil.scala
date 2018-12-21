@@ -27,7 +27,7 @@ object FormatUtil {
     val convertedDF: DataFrame = dataDF.select(FullResult.label, column)
       .withColumn("label-tmp", dataDF(FullResult.label).cast(DoubleType))
       .withColumn(s"$column-tmp",
-        when(dataDF(column) === -1, lit(0.0).cast(DoubleType)).otherwise(lit(1.0).cast(DoubleType)))
+        when(dataDF(column) === ErrorNotation.CLEAN, lit(0.0).cast(DoubleType)).otherwise(lit(1.0).cast(DoubleType)))
       .drop(dataDF(FullResult.label))
       .drop(dataDF(column))
       .withColumnRenamed("label-tmp", FullResult.label)
@@ -48,7 +48,7 @@ object FormatUtil {
       .where(dataDF(column) =!= ErrorNotation.DOES_NOT_APPLY)
       .withColumn("label-tmp", dataDF(FullResult.label).cast(DoubleType))
       .withColumn(s"$column-tmp",
-        when(dataDF(column) === -1, lit(0.0).cast(DoubleType)).otherwise(dataDF(column).cast(DoubleType)))
+        when(dataDF(column) === ErrorNotation.CLEAN, lit(0.0).cast(DoubleType)).otherwise(dataDF(column).cast(DoubleType)))
       .drop(dataDF(FullResult.label))
       .drop(dataDF(column))
       .withColumnRenamed("label-tmp", FullResult.label)

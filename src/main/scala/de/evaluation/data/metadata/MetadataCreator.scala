@@ -258,9 +258,7 @@ class MetadataCreator {
       .withColumn("pattern-length", compute_pattern_length(aggrDirtyDF("column-values")))
       .withColumn("pattern-length-dist-full", compute_length_distribution(col("pattern-length")))
       .withColumn("pattern-length-dist-10", compute_length_distribution_threshold(col("pattern-length-dist-full")))
-      //todo: compute trimmed distribution
       .withColumn("pattern-length-trimmed", compute_length_trimmed_distr(col("pattern-length"), lit(0.2)))
-      //todo: compute winsorized distribution
       .withColumn("pattern-length-winsorized", compute_length_winsorized(col("pattern-length"), lit(0.2)))
 
       .drop("column-values")

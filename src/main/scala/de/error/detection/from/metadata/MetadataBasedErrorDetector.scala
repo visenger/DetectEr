@@ -7,7 +7,7 @@ import de.evaluation.data.schema.{BeersSchema, FlightsSchema, Schema}
 import de.evaluation.f1.{Eval, F1}
 import de.evaluation.util.SparkLOAN
 import de.experiments.ExperimentsCommonConfig
-import de.model.util.FormatUtil
+import de.model.util.{FormatUtil, NumbersUtil}
 import de.util.DatasetFlattener
 import de.util.ErrorNotation._
 import org.apache.spark.sql.DataFrame
@@ -64,11 +64,22 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
     }
   }
 
+  def getCoverageForRule(dataDF: DataFrame, column: String): Double = {
+
+    val ruleImpactCount: Long = dataDF.where(col(column) =!= DOES_NOT_APPLY).count()
+    val total: Long = dataDF.count()
+
+    val coveragePercent: Double = ruleImpactCount.toDouble * 100 / total.toDouble
+    val coveragePercentRounded: Double = NumbersUtil.round(coveragePercent, scale = 4)
+
+    coveragePercentRounded
+  }
+
   def main(args: Array[String]): Unit = {
     SparkLOAN.withSparkSession("metadata-based heuristics") {
       session => {
 
-        Seq(/*"museum", "beers", "flights" ,*/ "blackoak").foreach(dataset => {
+        Seq("museum", "beers", "flights", "blackoak").foreach(dataset => {
           println(s"processing $dataset.....")
 
           val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
@@ -76,7 +87,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
           val dirtyDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDirtyData(session)
           val fullMetadataDF: DataFrame = creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
-         // fullMetadataDF.show(50)
+          // fullMetadataDF.show(50)
 
           val flatWithLabelDF: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
 
@@ -166,7 +177,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             .forFullMetadataDF(fullMetadataDF)
             .getTuplesViolatedCardinality()
 
-          println(s"the number of tuples violating cardinality constraint: ${allTuplesViolatingCardinality.size}")
+          // println(s"the number of tuples violating cardinality constraint: ${allTuplesViolatingCardinality.size}")
 
           //Error Classifier #6: The column, related to the lookup source, its value is absent in the source -> error, else clean.
           //for unrelated columns -> 0
@@ -462,24 +473,24 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
 
           val matrixWithECsFromMetadataDF: DataFrame = flatWithMetadataDF
-            .withColumn(ec_missing_value, UDF.identify_missing(flatWithMetadataDF("dirty-value").isNull))
-            .withColumn(ec_default_value,
-              identify_default_values(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
-            .withColumn(ec_top_value, is_top_value(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("attrName"), flatWithMetadataDF("top10")))
-            .withColumn(ec_valid_number, is_valid_number(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
-            .withColumn(ec_cardinality_vio,
-              when(flatWithMetadataDF(schema.getRecID).isin(allTuplesViolatingCardinality: _*), lit(ERROR))
-                .otherwise(lit(DOES_NOT_APPLY)))
-            .withColumn(ec_lookup, is_valid_by_lookup(flatWithMetadataDF("attrName"), flatWithMetadataDF(schema.getRecID)))
-            /*.withColumn(ec_low_counts,
-              is_value_with_low_counts(flatWithMetadataDF("number of tuples"),
-                flatWithMetadataDF("distinct-vals-count"),
-                flatWithMetadataDF("dirty-value"),
-                flatWithMetadataDF("values-with-counts")))*/
+                        .withColumn(ec_missing_value, UDF.identify_missing(flatWithMetadataDF("dirty-value").isNull))
+                        .withColumn(ec_default_value,
+                          identify_default_values(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
+                        .withColumn(ec_top_value, is_top_value(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("attrName"), flatWithMetadataDF("top10")))
+                        .withColumn(ec_valid_number, is_valid_number(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
+                        .withColumn(ec_cardinality_vio,
+                          when(flatWithMetadataDF(schema.getRecID).isin(allTuplesViolatingCardinality: _*), lit(ERROR))
+                            .otherwise(lit(DOES_NOT_APPLY)))
+                        .withColumn(ec_lookup, is_valid_by_lookup(flatWithMetadataDF("attrName"), flatWithMetadataDF(schema.getRecID)))
+                        /*.withColumn(ec_low_counts,
+                          is_value_with_low_counts(flatWithMetadataDF("number of tuples"),
+                            flatWithMetadataDF("distinct-vals-count"),
+                            flatWithMetadataDF("dirty-value"),
+                            flatWithMetadataDF("values-with-counts")))*/
+                        .withColumn(ec_valid_data_type, is_valid_data_type(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
+                        .withColumn(ec_unused_column, is_column_unused(flatWithMetadataDF("distinct-vals-count")))
             .withColumn(ec_pattern_length_within_trimmed_dist,
             is_value_pattern_length_within_trimmed_distr(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("pattern-length-dist-10")))
-            .withColumn(ec_valid_data_type, is_valid_data_type(flatWithMetadataDF("attrName"), flatWithMetadataDF("dirty-value")))
-            .withColumn(ec_unused_column, is_column_unused(flatWithMetadataDF("distinct-vals-count")))
             .withColumn(ec_value_len_within_common_sizes, is_value_len_within_common_sizes(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("lower-quartile-pattern-length"), flatWithMetadataDF("upper-quartile-pattern-length")))
             .withColumn(ec_value_len_Hampelx84, is_value_outlier_Hampelx84(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("mad-of-length-distr"), flatWithMetadataDF("median-length-distr")))
             .withColumn(ec_value_len_evt, is_value_len_extreme_evt(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("mean-pattern-length"), flatWithMetadataDF("std-dev-pattern-length")))
@@ -490,15 +501,15 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           /*End: Final matrix*/
 
           val cols = Seq(
-            ec_missing_value,
-            ec_default_value,
-            ec_top_value,
-            ec_valid_number,
-            ec_cardinality_vio,
-            ec_lookup,
+                        ec_missing_value,
+                        ec_default_value,
+                        ec_top_value,
+                        ec_valid_number,
+                        ec_cardinality_vio,
+                        ec_lookup,
+                        ec_valid_data_type,
+                        ec_unused_column,
             ec_pattern_length_within_trimmed_dist,
-            ec_valid_data_type,
-            ec_unused_column,
             ec_value_len_within_common_sizes,
             ec_value_len_Hampelx84,
             ec_value_len_evt,
@@ -514,13 +525,19 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           // val countsByValues: collection.Map[Row, Long] = matrixWithClassifiersResult.rdd.countByValue()
           //          countsByValues.foreach(println)
 
-          Seq(ec_value_len_within_trimmed_range, ec_value_len_within_winsorized_range).foreach(column => {
-            val singleECPerformnaceDF: DataFrame = FormatUtil
-              .getPredictionAndLabelOnIntegersForSingleClassifier(matrixWithECsFromMetadataDF, column)
-            val evalEC: Eval = F1.evalPredictionAndLabels_TMP(singleECPerformnaceDF)
-            evalEC.printResult(s"evaluation $column")
-            //evalEC.printLatexString(s"$column")
-          })
+          //          cols.foreach(column => {
+          //            val singleECPerformnaceDF: DataFrame = FormatUtil
+          //              .getPredictionAndLabelOnIntegersForSingleClassifier(matrixWithECsFromMetadataDF, column)
+          //
+          //            val evalEC: Eval = F1.evalPredictionAndLabels_TMP(singleECPerformnaceDF)
+          //            evalEC.printResult(s"evaluation $column")
+          //            //evalEC.printLatexString(s"$column")
+          //          })
+
+          //          cols.foreach(column => {
+          //            val coverage: Double = getCoverageForRule(matrixWithECsFromMetadataDF, column)
+          //            println(s"rule: $column, coverage: $coverage")
+          //          })
 
 
           //                    val homeDir: String = applicationConfig.getString(s"home.dir.$dataset")
@@ -586,16 +603,18 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
 
           /* Aggregation strategies */
+          println(s"aggregated columns: ${cols.mkString(",")}")
+//          val unionAllEval: Eval = UnionAllAggregator()
+//            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
+//            .evaluate()
+//          //                    unionAllEval.printResult(s"union all for $dataset: ")
+//          unionAllEval.printLatexString(s"union all for $dataset: ")
 
-          //          val unionAllEval: Eval = UnionAllAggregator()
-          //            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
-          //            .evaluate()
-          //          unionAllEval.printResult(s"union all for $dataset: ")
-          //
-          //          val majorityVoteEval: Eval = MajorityVotingAggregator()
-          //            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
-          //            .evaluate()
-          //          majorityVoteEval.printResult(s"majority vote for $dataset")
+          val majorityVoteEval: Eval = MajorityVotingAggregator()
+            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
+            .evaluate()
+          //                    majorityVoteEval.printResult(s"majority vote for $dataset")
+          majorityVoteEval.printLatexString(s"majority vote for $dataset")
           /* end: Aggregation strategies */
 
         })
