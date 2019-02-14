@@ -75,3 +75,29 @@ object AddressPlayground extends ExperimentsCommonConfig {
     }
   }
 }
+
+object DatasetPlayground extends ExperimentsCommonConfig {
+  def main(args: Array[String]): Unit = {
+    SparkLOAN.withSparkSession("plgrd") {
+      session => {
+        val datasets = Seq("museum")
+        datasets.foreach(dataset => {
+          println(s"playground data: $dataset.....")
+
+          val flatDF: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
+
+          flatDF.where(flatDF("label") === 1)
+            .where(flatDF("clean-value") === "#LV_DEFAULT_VALUES#").show()
+
+          val distinctErrors: Array[String] = flatDF.where(flatDF("label") === 1)
+            .where(flatDF("clean-value")
+              .startsWith("#"))
+            .select(flatDF("clean-value")).distinct().collect().map(row => row.getString(0))
+          distinctErrors.foreach(println)
+
+
+        })
+      }
+    }
+  }
+}

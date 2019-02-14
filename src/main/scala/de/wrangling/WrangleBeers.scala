@@ -59,7 +59,7 @@ object BeersDirtyMaker {
 
         val cleanBeersBreweriesDF: DataFrame = DataSetCreator
           .createFrame(session, beersAndBreweriesPath, beersSchema: _*)
-
+        /*MISFIELDED*/
         val Array(city_to_dirty, remains_clean_1) = cleanBeersBreweriesDF.randomSplit(Array(0.05, 0.95), 123L)
         val tmpCol = "tmp-city-location"
         val dirtyCityDF: DataFrame = city_to_dirty.withColumn(tmpCol, concat_ws(" ", col(city), col(state)))
@@ -73,6 +73,7 @@ object BeersDirtyMaker {
           .toDF(beersSchema: _*)
         dirty1DF.show(345)
 
+        /*WRONG DATA TYPE*/
         val Array(abv_to_dirty, remains_clean_2) = dirty1DF.randomSplit(Array(0.3, 0.7), 456L)
         val dirtyAbvDF: DataFrame = abv_to_dirty
           .withColumn("tmp-abv", concat(col("abv"), lit("%")))
@@ -84,6 +85,8 @@ object BeersDirtyMaker {
           .toDF(beersSchema: _*)
         dirty2DF.show(567)
 
+        /*DEFAULT_VALUE*/
+        /*MISSING*/
         val Array(dirty2aDF, clean2aDF) = dirty2DF.randomSplit(Array(0.2, 0.8), seed = 56L)
         val dirty3DF: DataFrame = dirty2aDF
           .na.fill("N/A", Seq("ibu"))
@@ -92,6 +95,8 @@ object BeersDirtyMaker {
           .toDF(beersSchema: _*)
         dirty3DF.show(45)
 
+
+        /*ILLEGAL VALUES*/
         /**
           * adding size measures into the ounces column
           * oz.

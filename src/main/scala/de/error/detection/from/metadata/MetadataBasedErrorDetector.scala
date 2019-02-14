@@ -79,7 +79,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
     SparkLOAN.withSparkSession("metadata-based heuristics") {
       session => {
 
-        Seq("museum", "beers", "flights", "blackoak").foreach(dataset => {
+        Seq(/*"museum" , */ "beers" /*, "flights" , "blackoak"*/).foreach(dataset => {
           println(s"processing $dataset.....")
 
           val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
@@ -419,8 +419,6 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             }
           }
 
-
-
           //Error classifier: Pattern value regex: https://cloud.trifacta.com/data/7259/22536
           // see https://docs.trifacta.com/display/SS/Text+Matching to create patterns
           // create patterns histogram and analyse for errors
@@ -438,11 +436,12 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
           //Error Classifier # Spell checker for the text attributes
 
-          //Error Classifier # For inter-column dependencies
+          //Error Classifier # For inter-column dependencies; see Fan book for the SQL-based solution for error detection
           /**
             * Deepdive format
             * #FD1: zip -> state
-            * error_candidate(t1, 6, s1, 1):- initvalue(t1, 7, z1),
+            * error_candidate(t1, 6, s1, 1):-
+            * initvalue(t1, 7, z1),
             * initvalue(t2, 7, z2),
             * initvalue(t1, 6, s1),
             * initvalue(t2, 6, s2),
@@ -500,6 +499,9 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             .withColumn(ec_value_len_within_winsorized_range, is_value_len_within_range(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("winsorized-mean-pattern-length"), flatWithMetadataDF("winsorized-std-dev-pattern-length"), lit(3.0)))
           /*End: Final matrix*/
 
+          // matrixWithECsFromMetadataDF.printSchema()
+
+
           val cols = Seq(
             ec_missing_value,
             ec_default_value,
@@ -509,7 +511,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             ec_lookup,
             ec_valid_data_type,
             ec_unused_column,
-            ec_pattern_length_within_trimmed_dist,
+            //ec_pattern_length_within_trimmed_dist,
             ec_value_len_within_common_sizes,
             ec_value_len_Hampelx84,
             ec_value_len_evt,
@@ -518,6 +520,16 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             ec_value_len_within_trimmed_range,
             ec_value_len_within_winsorized_range)
 
+
+          //coverageForMUSEUM(matrixWithECsFromMetadataDF, cols)
+
+          //coverage for BEERS
+          //coverageForBEERS(matrixWithECsFromMetadataDF, cols)
+
+          //end: coveragae for BEERS
+
+
+          /*End: Errors coverage by heuristics*/
 
           /* Analysing the performance of each classifier.*/
           //          val matrixWithClassifiersResult: DataFrame = matrixWithECsFromMetadataDF
@@ -611,17 +623,17 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
 
           /* Aggregation strategies */
-          // println(s"aggregated columns: ${cols.mkString(",")}")
-          //          val unionAllEval: Eval = UnionAllAggregator()
+          //          println(s"aggregated columns: ${cols.mkString(",")}")
+          //          val unionAllAggregator: UnionAllAggregator = UnionAllAggregator()
           //            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
-          //            .evaluate()
-          //          //                    unionAllEval.printResult(s"union all for $dataset: ")
+          //          val unionAllEval: Eval = unionAllAggregator.evaluate()
+          //          unionAllEval.printResult(s"union all for $dataset: ")
           //          unionAllEval.printLatexString(s"union all for $dataset: ")
-
-          //          val majorityVoteEval: Eval = MajorityVotingAggregator()
+          //
+          //          val majorityVotingAggregator: MajorityVotingAggregator = MajorityVotingAggregator()
           //            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
-          //            .evaluate()
-          //                    majorityVoteEval.printResult(s"majority vote for $dataset")
+          //          val majorityVoteEval: Eval = majorityVotingAggregator.evaluate()
+          //          majorityVoteEval.printResult(s"majority vote for $dataset")
           //          majorityVoteEval.printLatexString(s"majority vote for $dataset")
           /* end: Aggregation strategies */
 
@@ -630,6 +642,103 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
       }
     }
+  }
+
+  private def coverageForBEERS(matrixWithECsFromMetadataDF: DataFrame, cols: Seq[String]): Unit = {
+    println("MISFIELDED, WRONG DATA TYPE, MISSING, ILLEGAL VALUES")
+    cols.foreach(ec => {
+
+      /*MISFIELDED*/
+      //col(city), col(state)
+      val city = "city"
+      val state = "state"
+      val missfieldedDF: DataFrame = matrixWithECsFromMetadataDF
+        .where(col("attrName") === city or col("attrName") === state)
+        .where(col("label") === 1).toDF()
+      val totalMisfielded: Long = missfieldedDF.count()
+
+      val coverageByECMisf: Long = missfieldedDF.where(col(ec) === 1).count()
+
+      val misfielded: Double = NumbersUtil.percentageFound(totalMisfielded.toDouble, coverageByECMisf.toDouble)
+
+      //println(s" heuristic $ec coverage of misfielded values = $misfielded")
+
+      /*WRONG DATA TYPE*/
+      val abv = "abv"
+
+      val wrongDataTypeDF: DataFrame = matrixWithECsFromMetadataDF.where(col("attrName") === abv)
+        .where(col("label") === 1).toDF()
+
+      val totalWrongDtype: Long = wrongDataTypeDF.count()
+      val coverageByECWDT: Long = wrongDataTypeDF.where(col(ec) === 1).count()
+      val wrongDataType: Double = NumbersUtil.percentageFound(totalWrongDtype.toDouble, coverageByECWDT.toDouble)
+
+      /*DEFAULT_VALUE*/
+      /*MISSING*/
+      val ibu = "ibu"
+
+      val missingDefaultDF: DataFrame = matrixWithECsFromMetadataDF.where(col("attrName") === ibu)
+        .where(col("label") === 1).toDF()
+      val totalMissingDefault: Long = missingDefaultDF.count()
+
+      val coverageByECMD: Long = missingDefaultDF.where(col(ec) === 1).count()
+      val missingDefault: Double = NumbersUtil.percentageFound(totalMissingDefault.toDouble, coverageByECMD.toDouble)
+
+
+      /*ILLEGAL VALUES*/
+      val ounces = "ounces"
+      val illegalValsDF: DataFrame = matrixWithECsFromMetadataDF.where(col("attrName") === ounces)
+        .where(col("label") === 1).toDF()
+
+      val totalIllegalVals: Long = illegalValsDF.count()
+
+      val coverageByECIV: Long = illegalValsDF.where(col(ec) === 1).count()
+      val illegal: Double = NumbersUtil.percentageFound(totalIllegalVals.toDouble, coverageByECIV.toDouble)
+
+      println(s"heuristic $ec & $misfielded & $wrongDataType & $missingDefault & $illegal")
+
+
+    })
+  }
+
+  private def coverageForMUSEUM(matrixWithECsFromMetadataDF: DataFrame, cols: Seq[String]): Unit = {
+    /**
+      * Errors coverage by heuristics for MUSEUM
+      **/
+
+    val errorTypesMuseum = Seq(
+      "#LV_AMBIGUOUS_DATA#",
+      "#LV_MISFIELDED#",
+      "#LV_UNUSED#",
+      "#LV_MISSING#",
+      "#LV_EXTRANEOUS_DATA#",
+      "#LV_DEFAULT_VALUE#",
+      "#LV_DIFFERENT_WORD_ORDERING#")
+
+
+    cols.foreach(ec => {
+
+      var jointCoverage: mutable.Seq[Double] = mutable.Seq()
+
+      errorTypesMuseum.foreach(errorType => {
+
+        val errorsCount: Long = matrixWithECsFromMetadataDF
+          .where(col("clean-value") === errorType)
+          .count()
+
+        val coverageByEC: Long = matrixWithECsFromMetadataDF
+          .where(col(ec) === 1 and col("clean-value") === errorType)
+          .count()
+
+        jointCoverage = jointCoverage :+ NumbersUtil
+          .percentageFound(errorsCount.toDouble, coverageByEC.toDouble)
+
+        println(s"heuristic name: $ec, coverage of the $errorType = $coverageByEC")
+      })
+
+
+      println(s"heuristic $ec & ${jointCoverage.mkString(" & ")}")
+    })
   }
 }
 

@@ -27,8 +27,8 @@ object NumbersUtil {
     BigDecimal(number).setScale(scale, RoundingMode.HALF_UP).toDouble
   }
 
-  def percentageFound(total: Double, found: Double, msg: String): Double = {
-    val percent: Double = round(((found * 100) / total), 4)
+  def percentageFound(total: Double, found: Double, msg: String = ""): Double = {
+    val percent: Double = round(((found * 100) / total), 2)
     percent
   }
 
