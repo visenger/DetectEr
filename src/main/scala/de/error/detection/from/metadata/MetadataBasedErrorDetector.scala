@@ -448,8 +448,14 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             * [t1!=t2, z1=z2, s1!=s2].
             */
 
-          /**
-            * ################ Final Matrix ##################
+
+          //todo:
+          // Error classifier: M−3⁎MAD < x< M+3⁎MAD, where M is median and MAD is median absolute deviation
+          //source: Leys, C., et al., "Detecting outliers: Do not use standard deviation around the mean,
+          // use absolute deviation around the median",
+          // Journal of Experimental Social Psychology (2013)
+          //
+          /**  * ################ Final Matrix ##################
             */
           //gathering matrix with all error classifier results
           val ec_missing_value = "ec-missing-value"
