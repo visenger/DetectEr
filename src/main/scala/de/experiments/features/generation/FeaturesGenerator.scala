@@ -17,6 +17,7 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
 
   private var datasetName = ""
   private var dirtyData = ""
+  private var cleanData = ""
   private var mainSchema: Schema = null
   private var schema: Seq[String] = Seq()
   private var metadataPath = ""
@@ -40,6 +41,7 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
   def onDatasetName(name: String): this.type = {
     datasetName = name
     dirtyData = allRawData.getOrElse(datasetName, "unknown")
+    cleanData = allCleanData.getOrElse(datasetName, "clean data unknown")
     mainSchema = allSchemasByName.getOrElse(datasetName, HospSchema)
     schema = mainSchema.getSchema
 
@@ -56,6 +58,11 @@ class FeaturesGenerator extends Serializable with ExperimentsCommonConfig {
     val dirtyDF = DataSetCreator
       .createFrame(session, dirtyData, schema: _*).cache()
     dirtyDF
+  }
+
+  def getCleanData(session: SparkSession): DataFrame = {
+    val cleanDF: DataFrame = DataSetCreator.createFrame(session, cleanData, schema: _*).cache()
+    cleanDF
   }
 
   def generateContentBasedMetadata(session: SparkSession, dirtyDF: DataFrame): DataFrame = {

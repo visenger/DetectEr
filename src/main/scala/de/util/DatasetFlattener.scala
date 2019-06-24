@@ -44,10 +44,20 @@ class DatasetFlattener extends ExperimentsCommonConfig {
   def makeFlattenedDiff(session: SparkSession): DataFrame = {
 
     val flatCleanDF: DataFrame = flattenCleanData(session)
-    //    flatCleanDF.show(50, false)
     val flatDirtyDF: DataFrame = flattenDirtyData(session)
-    //    flatDirtyDF.show(50, false)
 
+    val diffDF: DataFrame = makeInternalDiff(flatCleanDF, flatDirtyDF)
+    diffDF
+  }
+
+  def makeFlattenedDiff(flatCleanDF: DataFrame, flatDirtyDF: DataFrame): DataFrame = {
+
+    val diffDF: DataFrame = makeInternalDiff(flatCleanDF, flatDirtyDF)
+    diffDF
+  }
+
+
+  private def makeInternalDiff(flatCleanDF: DataFrame, flatDirtyDF: DataFrame): DataFrame = {
     val create_label = udf {
       (are_vals_equal: Boolean) => {
         are_vals_equal match {
@@ -64,7 +74,6 @@ class DatasetFlattener extends ExperimentsCommonConfig {
       .select(col(schema.getRecID), col(attrName), flatDirtyDF(value).as("dirty-value"), flatCleanDF(value).as("clean-value"), col(label))
     diffDF
   }
-
 
   private def flattenData(session: SparkSession, dataPath: String): DataFrame = {
     import org.apache.spark.sql._
@@ -105,11 +114,11 @@ class DatasetFlattener extends ExperimentsCommonConfig {
   }
 
   def getDirtyPath: String = {
-    allRawData.getOrElse(datasetName, "incorrect dataset name")
+    allRawData.getOrElse(datasetName, "incorrect dataset name for dirty path")
   }
 
   def getCleanPath: String = {
-    allCleanData.getOrElse(datasetName, "incorrect dataset name")
+    allCleanData.getOrElse(datasetName, "incorrect dataset name for clean path")
   }
 
   def getSchema: Schema = {

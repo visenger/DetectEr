@@ -1,9 +1,11 @@
 package de.error.detection.from.metadata
 
+import de.evaluation.f1.{Eval, F1}
 import de.evaluation.util.SparkLOAN
 import de.experiments.ExperimentsCommonConfig
 import de.experiments.features.generation.FeaturesGenerator
 import de.experiments.metadata.FD
+import de.model.util.FormatUtil
 import de.util.DatasetFlattener
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Column, DataFrame}
@@ -16,10 +18,11 @@ object SchemaMetadataErrDetector extends ExperimentsCommonConfig with ConfigBase
   def main(args: Array[String]): Unit = {
     SparkLOAN.withSparkSession("FD based error detection") {
       session => {
-        val datasets = Seq("beers", "hosp", "flights", "museum")
+        val datasets = Seq("beers", "blackoak", "flights", "museum")
         //val datasets = Seq("hosp")
 
         datasets.foreach(dataset => {
+          println(s"processing $dataset")
 
           val generator: FeaturesGenerator = FeaturesGenerator().onDatasetName(dataset)
           val allFDs: List[FD] = generator.allFDs
@@ -35,7 +38,8 @@ object SchemaMetadataErrDetector extends ExperimentsCommonConfig with ConfigBase
             * +----+------------+---+--------------------+
             **/
 
-          val dirtyDataFlattenedDF: DataFrame = DatasetFlattener().onDataset(dataset).flattenDataFrame(dirtyFrame)
+          val datasetFlattener: DatasetFlattener = DatasetFlattener().onDataset(dataset)
+          val dirtyDataFlattenedDF: DataFrame = datasetFlattener.flattenDataFrame(dirtyFrame)
           dirtyDataFlattenedDF.show(5)
 
           val flatDirtyColumns: Array[Column] = dirtyDataFlattenedDF.schema.fields.map(f => col(f.name))
@@ -95,7 +99,17 @@ object SchemaMetadataErrDetector extends ExperimentsCommonConfig with ConfigBase
 
           //union to get all values into one DF
           val fullFDComplianceDF: DataFrame = allFDViolationsDF.union(noFDViolationDF).toDF()
-          fullFDComplianceDF.show(23)
+          fullFDComplianceDF.printSchema()
+
+          val labelsDF: DataFrame = datasetFlattener.makeFlattenedDiff(session)
+
+          val fdComplianceWithLabelsDF: DataFrame = fullFDComplianceDF.join(labelsDF, Seq(recID, "attrName"), "inner")
+
+          val errDetectionByFDsDF: DataFrame = FormatUtil
+            .getPredictionAndLabelOnIntegersForSingleClassifier(fdComplianceWithLabelsDF, "fd-compilation")
+          val eval: Eval = F1.evalPredictionAndLabels_TMP(errDetectionByFDsDF)
+          eval.printResult(s"fd compliance for $dataset: ")
+
 
         })
       }
