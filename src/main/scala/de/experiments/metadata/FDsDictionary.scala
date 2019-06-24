@@ -1,6 +1,6 @@
 package de.experiments.metadata
 
-trait FDsDictionary extends Serializable{
+trait FDsDictionary extends Serializable {
   val allFDs: List[FD]
 }
 
@@ -24,13 +24,14 @@ object HospFDsDictionary extends FDsDictionary {
     * prno, mc -> stateavg
     * */
 
-  val fd1 = FD(List(zip), List(city, state))
+  val fd1 = FD(List(zip), List(city))
+  val fd12 = FD(List(zip), List(state))
   val fd2 = FD(List(zip, address), List(phone))
   val fd3 = FD(List(city, address), List(phone))
   val fd4 = FD(List(state, address), List(phone))
   val fd5 = FD(List(prno, mc), List(stateavg))
 
-  val allFDs: List[FD] = List(fd1, fd2, fd3, fd4, fd5)
+  val allFDs: List[FD] = List(fd1,fd12, fd2, fd3, fd4, fd5)
 
 
 }
@@ -83,6 +84,88 @@ object FlightsFDsDictionary extends FDsDictionary {
 
   val allFDs: List[FD] = List(fd1, fd2, fd3, fd4)
 
+}
+
+object BeersFDsDictionary extends FDsDictionary {
+
+  /**
+    * brewery id -> brewery name,
+    * brewery id -> city,
+    * brewery id -> state,
+    * city -> state
+    **/
+  private val recId = "tid"
+  private val id = "id"
+  private val beer_name = "beer-name"
+  private val style = "style"
+  private val ounces = "ounces"
+  private val abv = "abv"
+  private val ibu = "ibu"
+  private val brewery_id = "brewery_id"
+  private val brewery_name = "brewery-name"
+  val city = "city"
+  val state = "state"
+
+  val fd1 = FD(List(brewery_id), List(brewery_name))
+  val fd2 = FD(List(brewery_id), List(city))
+  val fd3 = FD(List(brewery_id), List(state))
+  val fd4 = FD(List(city), List(state))
+
+  override val allFDs: List[FD] = List(fd1, fd2, fd3, fd4)
+
+}
+
+object MuseumFDsDictionary extends FDsDictionary {
+
+  val objectNumber = "Object Number"
+  val isHighlight = "Is Highlight"
+  val isPublicDomain = "Is Public Domain"
+  val objectID = "Object ID"
+  val department = "Department"
+  val objectName = "Object Name"
+  val title = "Title"
+  val culture = "Culture"
+  val period = "Period"
+  val dynasty = "Dynasty"
+  val reign = "Reign"
+  val portfolio = "Portfolio"
+  val artistRole = "Artist Role"
+  val artistPrefix = "Artist Prefix"
+  val artistDisplayName = "Artist Display Name"
+  val artistDisplayBio = "Artist Display Bio"
+  val artistSuffix = "Artist Suffix"
+  val artistAlphaSort = "Artist Alpha Sort"
+  val artistNationality = "Artist Nationality"
+  val artistBeginDate = "Artist Begin Date"
+  val artistEndDate = "Artist End Date"
+  val objectDate = "Object Date"
+  val objectBeginDate = "Object Begin Date"
+  val objectEndDate = "Object End Date"
+  val medium = "Medium"
+  val dimensions = "Dimensions"
+  val creditLine = "Credit Line"
+  val geographyType = "Geography Type"
+  val city = "City"
+  val state = "State"
+  val county = "County"
+  val country = "Country"
+  val region = "Region"
+  val subregion = "Subregion"
+  val locale = "Locale"
+  val locus = "Locus"
+  val excavation = "Excavation"
+  val river = "River"
+  val classification = "Classification"
+  val rightsAndReproduction = "Rights and Reproduction"
+  val linkResource = "Link Resource"
+  val metadataDate = "Metadata Date"
+  val repository = "Repository"
+
+  val fd1 = FD(List(city), List(country))
+  val fd2 = FD(List(artistDisplayName), List(artistBeginDate))
+  val fd3 = FD(List(artistDisplayName), List(artistEndDate))
+
+  override val allFDs: List[FD] = List(fd1, fd2, fd3)
 }
 
 object BlackOakFDsDictionary extends FDsDictionary {

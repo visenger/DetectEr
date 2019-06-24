@@ -26,6 +26,11 @@ class DatasetFlattener extends ExperimentsCommonConfig {
     this
   }
 
+  def flattenDataFrame(dirtyDF: DataFrame): DataFrame = {
+    val flattenedDF: DataFrame = internalFlattener(dirtyDF)
+    flattenedDF
+  }
+
   def flattenDirtyData(session: SparkSession): DataFrame = {
     val flattenedDF: DataFrame = flattenData(session, dirtyDataPath)
     flattenedDF
@@ -39,9 +44,9 @@ class DatasetFlattener extends ExperimentsCommonConfig {
   def makeFlattenedDiff(session: SparkSession): DataFrame = {
 
     val flatCleanDF: DataFrame = flattenCleanData(session)
-//    flatCleanDF.show(50, false)
+    //    flatCleanDF.show(50, false)
     val flatDirtyDF: DataFrame = flattenDirtyData(session)
-//    flatDirtyDF.show(50, false)
+    //    flatDirtyDF.show(50, false)
 
     val create_label = udf {
       (are_vals_equal: Boolean) => {
@@ -66,6 +71,12 @@ class DatasetFlattener extends ExperimentsCommonConfig {
 
     val dirtyDF: DataFrame = DataSetCreator.createFrame(session, dataPath, schema.getSchema: _*)
 
+    val flattenedDF: DataFrame = internalFlattener(dirtyDF)
+    flattenedDF
+  }
+
+
+  private def internalFlattener(dirtyDF: DataFrame): DataFrame = {
     val recID: String = schema.getRecID
 
     val nonIdAttrs: Seq[String] = schema.getSchema.diff(Seq(recID))
@@ -93,16 +104,15 @@ class DatasetFlattener extends ExperimentsCommonConfig {
     flattenedDF
   }
 
-
-  private def getDirtyPath: String = {
+  def getDirtyPath: String = {
     allRawData.getOrElse(datasetName, "incorrect dataset name")
   }
 
-  private def getCleanPath: String = {
+  def getCleanPath: String = {
     allCleanData.getOrElse(datasetName, "incorrect dataset name")
   }
 
-  private def getSchema: Schema = {
+  def getSchema: Schema = {
     allSchemasByName.getOrElse(datasetName, DefaultSchema)
   }
 }

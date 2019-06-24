@@ -455,7 +455,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           // use absolute deviation around the median",
           // Journal of Experimental Social Psychology (2013)
           //
-          /**  * ################ Final Matrix ##################
+          /** * ################ Final Matrix ##################
             */
           //gathering matrix with all error classifier results
           val ec_missing_value = "ec-missing-value"
@@ -629,13 +629,13 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
 
           /* Aggregation strategies */
-          //          println(s"aggregated columns: ${cols.mkString(",")}")
-          //          val unionAllAggregator: UnionAllAggregator = UnionAllAggregator()
-          //            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
-          //          val unionAllEval: Eval = unionAllAggregator.evaluate()
-          //          unionAllEval.printResult(s"union all for $dataset: ")
-          //          unionAllEval.printLatexString(s"union all for $dataset: ")
-          //
+          println(s"aggregated columns: ${cols.mkString(",")}")
+          val unionAllAggregator: UnionAllAggregator = UnionAllAggregator()
+            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
+          val unionAllEval: Eval = unionAllAggregator.evaluate()
+          unionAllEval.printResult(s"union all for $dataset: ")
+          unionAllEval.printLatexString(s"union all for $dataset: ")
+
           //          val majorityVotingAggregator: MajorityVotingAggregator = MajorityVotingAggregator()
           //            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
           //          val majorityVoteEval: Eval = majorityVotingAggregator.evaluate()

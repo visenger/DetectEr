@@ -52,7 +52,9 @@ trait ExperimentsCommonConfig extends Serializable {
     "blackoak" -> BlackOakFDsDictionary,
     "hosp" -> HospFDsDictionary,
     "salaries" -> SalariesFDsDictionary,
-    "flights" -> FlightsFDsDictionary
+    "flights" -> FlightsFDsDictionary,
+    "beers" -> BeersFDsDictionary,
+    "museum" -> MuseumFDsDictionary
   )
 
   val allSchemasByName: Map[String, Schema] = Map(
