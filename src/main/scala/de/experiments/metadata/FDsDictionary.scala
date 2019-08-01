@@ -91,8 +91,7 @@ object BeersFDsDictionary extends FDsDictionary {
   /**
     * brewery id -> brewery name,
     * brewery id -> city,
-    * brewery id -> state,
-    * city -> state
+    * brewery id -> state
     **/
   private val recId = "tid"
   private val id = "id"

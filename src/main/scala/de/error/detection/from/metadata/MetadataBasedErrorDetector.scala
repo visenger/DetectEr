@@ -79,7 +79,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
     SparkLOAN.withSparkSession("metadata-based heuristics") {
       session => {
 
-        Seq(/*"museum" , */ "beers" /*, "flights" , "blackoak"*/).foreach(dataset => {
+        Seq("museum", "beers", "flights", "blackoak").foreach(dataset => {
           println(s"processing $dataset.....")
 
           val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
@@ -92,6 +92,14 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           val flatWithLabelDF: DataFrame = DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
 
           val flatWithMetadataDF: DataFrame = flatWithLabelDF.join(fullMetadataDF, Seq("attrName"))
+
+          //          Timer.measureRuntime {
+          //            () => {
+          //              println(s"computing metadata for $dataset")
+          //              creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
+          //              DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
+          //            }
+          //          }
 
 
           //Error Classifier #1: missing values -> object UDF
@@ -399,7 +407,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             }
           }
 
-          // Error classifier: Value is within trimmed or winsorized range [mean-2*stdDev; mean+2*stdDev]
+          // Error classifier: Value length is within trimmed or winsorized range [mean-2*stdDev; mean+2*stdDev]
 
           def is_value_len_within_range = udf {
             (value: String, mean: Double, std_dev: Double, factor: Double) => {
@@ -408,7 +416,6 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
               val stdDevIsValid: Boolean = std_dev != 0.0
               if (isValidValue && stdDevIsValid) {
                 val len: Int = value.length
-                // todo: implement trimmed range
                 val lowerBound: Double = mean - factor * std_dev
                 val upperBound: Double = mean + factor * std_dev
 
@@ -504,6 +511,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             .withColumn(ec_value_len_within_trimmed_range, is_value_len_within_range(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("trimmed-mean-pattern-length"), flatWithMetadataDF("trimmed-std-dev-pattern-length"), lit(3.0)))
             .withColumn(ec_value_len_within_winsorized_range, is_value_len_within_range(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("winsorized-mean-pattern-length"), flatWithMetadataDF("winsorized-std-dev-pattern-length"), lit(3.0)))
           /*End: Final matrix*/
+
 
           // matrixWithECsFromMetadataDF.printSchema()
 
@@ -629,12 +637,12 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
 
           /* Aggregation strategies */
-          println(s"aggregated columns: ${cols.mkString(",")}")
-          val unionAllAggregator: UnionAllAggregator = UnionAllAggregator()
-            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
-          val unionAllEval: Eval = unionAllAggregator.evaluate()
-          unionAllEval.printResult(s"union all for $dataset: ")
-          unionAllEval.printLatexString(s"union all for $dataset: ")
+          //          println(s"aggregated columns: ${cols.mkString(",")}")
+          //          val unionAllAggregator: UnionAllAggregator = UnionAllAggregator()
+          //            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
+          //          val unionAllEval: Eval = unionAllAggregator.evaluate()
+          //          unionAllEval.printResult(s"union all for $dataset: ")
+          //          unionAllEval.printLatexString(s"union all for $dataset: ")
 
           //          val majorityVotingAggregator: MajorityVotingAggregator = MajorityVotingAggregator()
           //            .onDataFrame(matrixWithECsFromMetadataDF).forColumns(cols)
