@@ -5,7 +5,7 @@ import de.aggregation.{MajorityVotingAggregator, UnionAllAggregator}
 import de.evaluation.data.metadata.MetadataCreator
 import de.evaluation.data.schema.{BeersSchema, FlightsSchema, Schema}
 import de.evaluation.f1.{Eval, F1}
-import de.evaluation.util.SparkLOAN
+import de.evaluation.util.{MemoryEstimator, SparkLOAN}
 import de.experiments.ExperimentsCommonConfig
 import de.model.util.{FormatUtil, NumbersUtil}
 import de.util.DatasetFlattener
@@ -79,8 +79,9 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
     SparkLOAN.withSparkSession("metadata-based heuristics") {
       session => {
 
-        Seq("museum", "beers", "flights", "blackoak").foreach(dataset => {
+        Seq("museum", "beers", "flights" , "blackoak").foreach(dataset => {
           println(s"processing $dataset.....")
+
 
           val metadataPath: String = allMetadataByName.getOrElse(dataset, "unknown")
           val creator = MetadataCreator()
@@ -93,13 +94,13 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
 
           val flatWithMetadataDF: DataFrame = flatWithLabelDF.join(fullMetadataDF, Seq("attrName"))
 
-          //          Timer.measureRuntime {
-          //            () => {
-          //              println(s"computing metadata for $dataset")
-          //              creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
-          //              DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
-          //            }
-          //          }
+          //                    Timer.measureRuntime {
+          //                      () => {
+          //                        println(s"computing metadata for $dataset")
+          //                        creator.getMetadataWithCounts(session, metadataPath, dirtyDF)
+          //                        DatasetFlattener().onDataset(dataset).makeFlattenedDiff(session)
+          //                      }
+          //                    }
 
 
           //Error Classifier #1: missing values -> object UDF
@@ -513,7 +514,6 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
           /*End: Final matrix*/
 
 
-          // matrixWithECsFromMetadataDF.printSchema()
 
 
           val cols = Seq(
