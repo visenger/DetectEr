@@ -79,7 +79,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
     SparkLOAN.withSparkSession("metadata-based heuristics") {
       session => {
 
-        Seq("museum", "beers", "flights" , "blackoak").foreach(dataset => {
+        Seq("museum"/*, "beers", "flights" , "blackoak"*/).foreach(dataset => {
           println(s"processing $dataset.....")
 
 
@@ -513,6 +513,7 @@ object MetadataBasedErrorDetector extends ExperimentsCommonConfig with ConfigBas
             .withColumn(ec_value_len_within_winsorized_range, is_value_len_within_range(flatWithMetadataDF("dirty-value"), flatWithMetadataDF("winsorized-mean-pattern-length"), flatWithMetadataDF("winsorized-std-dev-pattern-length"), lit(3.0)))
           /*End: Final matrix*/
 
+          matrixWithECsFromMetadataDF.show(5)
 
 
 
