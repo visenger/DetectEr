@@ -44,9 +44,9 @@ class CardinalityEstimator {
       .where(fullMetadataDF("attrName").isin(uniqueColumns: _*) && fullMetadataDF("percentage of distinct vals") =!= 100)
       .collect().map(r => r.getString(0)).toList
 
-    println(s" this attr violates cardinality: ${listOfAttsViolatesCardinality.mkString(",")}")
+    //    println(s" this attr violates cardinality: ${listOfAttsViolatesCardinality.mkString(",")}")
 
-    //todo: we identify all tuples of unique attributes which violates cadinality
+    // we identify all tuples of unique attributes which violates cadinality
     val allTuplesViolatingCardinality: List[String] = listOfAttsViolatesCardinality.flatMap(attr => {
 
       dirtyDF.where(dirtyDF("attrName") === attr)
